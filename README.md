@@ -1,6 +1,16 @@
-# LeadClaw
+<p align="center">
+  <img src="logo.png" alt="LeadClaw" width="200">
+</p>
 
-OpenClaw plugin that connects AI agents to [Leadbay](https://leadbay.ai) for lead discovery, qualification, and contact enrichment.
+<h1 align="center">LeadClaw</h1>
+
+<p align="center">
+  OpenClaw plugin that connects AI agents to <a href="https://leadbay.ai">Leadbay</a> for lead discovery, qualification, and contact enrichment.
+</p>
+
+---
+
+> **New to Leadbay?** [Create your account here](https://wow.leadbay.ai/?register=true) before installing the plugin.
 
 ## Install
 
@@ -76,4 +86,4 @@ leadbay_discover_leads → leadbay_qualify_lead (for unscored leads) → (wait ~
 ## Requirements
 
 - Node.js 22+
-- A Leadbay account with at least one lens configured
+- A [Leadbay account](https://wow.leadbay.ai/?register=true)
