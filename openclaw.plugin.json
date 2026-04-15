@@ -1,0 +1,50 @@
+{
+  "id": "leadclaw",
+  "name": "LeadClaw",
+  "description": "Leadbay lead discovery, qualification, and contact enrichment",
+  "contracts": {
+    "tools": [
+      "leadbay_list_lenses",
+      "leadbay_discover_leads",
+      "leadbay_get_lead_profile",
+      "leadbay_get_contacts",
+      "leadbay_get_quota",
+      "leadbay_qualify_lead",
+      "leadbay_enrich_contacts",
+      "leadbay_add_note"
+    ]
+  },
+  "uiHints": {
+    "region": {
+      "label": "Leadbay Region",
+      "help": "Your Leadbay account region (us or fr)",
+      "placeholder": "us"
+    },
+    "token": {
+      "label": "Leadbay Token",
+      "help": "API token (auto-set after login)",
+      "sensitive": true
+    },
+    "baseUrl": {
+      "label": "API Base URL",
+      "help": "Override API URL (for staging/dev)",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "region": {
+        "type": "string",
+        "enum": ["us", "fr"]
+      },
+      "token": {
+        "type": "string"
+      },
+      "baseUrl": {
+        "type": "string"
+      }
+    }
+  }
+}

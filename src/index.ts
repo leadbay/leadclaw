@@ -14,54 +14,37 @@ const REGIONS: Record<string, string> = {
 };
 
 // OpenClaw plugin entry point
-// The definePluginEntry import depends on the OpenClaw SDK version.
-// If the SDK provides a different entry mechanism, adapt accordingly.
+// api.pluginConfig is a plain object validated against configSchema in openclaw.plugin.json
 
 export async function register(api: any) {
-  const region = await api.config.get("leadbay.region");
-  const baseUrl =
-    (await api.config.get("leadbay.baseUrl")) ?? REGIONS[region];
+  const cfg = api.pluginConfig ?? {};
+
+  const region = cfg.region;
+  const baseUrl = cfg.baseUrl ?? REGIONS[region];
 
   if (!baseUrl) {
-    throw new Error(
-      'Missing leadbay.region config. Set it to "us" or "fr" in your OpenClaw plugin settings.'
+    api.logger?.warn?.(
+      'LeadClaw: Missing region config. Set it via: openclaw config set plugins.entries.leadclaw.region "us"'
     );
+    return;
   }
 
-  let token = await api.config.get("leadbay.token");
+  const token = cfg.token;
 
   if (!token) {
-    // Login-once flow: prompt for credentials, authenticate, store only the token
-    const email = await api.config.prompt(
-      "leadbay.email",
-      "Leadbay email address:"
+    api.logger?.warn?.(
+      "LeadClaw: No token configured. Authenticate first:\n" +
+        '  1. openclaw config set plugins.entries.leadclaw.region "us"   (or "fr")\n' +
+        "  2. openclaw config set plugins.entries.leadclaw.token YOUR_TOKEN"
     );
-    const password = await api.config.prompt(
-      "leadbay.password",
-      "Leadbay password:",
-      { secret: true }
-    );
-
-    const res = await fetch(`${baseUrl}/1.5/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Login failed. Check your email and password.");
-    }
-
-    const data = await res.json();
-    token = data.token;
-    await api.config.set("leadbay.token", token);
-    // Credentials are not stored
+    return;
   }
 
   if (typeof token !== "string" || !token.startsWith("u.")) {
-    throw new Error(
-      "Invalid token format. Expected a Leadbay user token (u.xxx). Clear leadbay.token and re-authenticate."
+    api.logger?.warn?.(
+      "LeadClaw: Invalid token format. Expected a Leadbay user token (u.xxx)."
     );
+    return;
   }
 
   const client = new LeadbayClient(baseUrl, token);

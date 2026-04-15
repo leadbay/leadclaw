@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "openclaw": {
-    "type": "plugin"
+    "type": "plugin",
+    "extensions": ["./dist/index.js"]
   },
   "scripts": {
     "build": "tsc",
