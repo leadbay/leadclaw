@@ -3,9 +3,10 @@
 </p>
 
 <h1 align="center">LeadClaw</h1>
-
-<p align="center">
-  OpenClaw plugin that connects AI agents to <a href="https://leadbay.ai">Leadbay</a> for lead discovery, qualification, and contact enrichment.
+<p align="center">OpenClaw plugin that gives your B2B outreach agent superpowers. LeadClaw lets your agent tap into Leadbay’s rich knowledge base of companies, turning outreach activity from senseless spamming into meaningful connections.</p>
+<p align="center">Ask your agent for new leads, and it will pull highly qualified companies that score well against your target profile and meet your qualification criteria.</p>
+<p align="center">Everything is personalized—nothing to configure. Leadbay runs advanced AI agents on your website and leverages deep B2B sales expertise to optimize how leads are sourced for you.</p>
+<p align="center">Tell your agent which leads you want it to prospect, connect your communication channels, and it will source contacts from Leadbay and handle outreach on your behalf. Enjoy the outreach you no longer have to do.
 </p>
 
 ---
