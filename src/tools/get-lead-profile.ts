@@ -26,7 +26,7 @@ export function registerGetLeadProfile(api: any, client: LeadbayClient) {
       },
       required: ["leadId"],
     },
-    execute: async (params: { leadId: string; lensId?: number }) => {
+    execute: async (_id: string, params: { leadId: string; lensId?: number }) => {
       const lensId = params.lensId ?? (await client.resolveDefaultLens());
 
       const [leadResult, qualResult, contactsResult, paidContactsResult, webFetchResult] =

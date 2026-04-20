@@ -16,7 +16,7 @@ export function registerGetContacts(api: any, client: LeadbayClient) {
       },
       required: ["leadId"],
     },
-    execute: async (params: { leadId: string }) => {
+    execute: async (_id: string, params: { leadId: string }) => {
       const [orgResult, paidResult] = await Promise.allSettled([
         client.request<ContactPayload[]>(
           "GET",

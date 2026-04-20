@@ -23,7 +23,7 @@ export function registerDiscoverLeads(api: any, client: LeadbayClient) {
         },
       },
     },
-    execute: async (params: {
+    execute: async (_id: string, params: {
       lensId?: number;
       page?: number;
       count?: number;

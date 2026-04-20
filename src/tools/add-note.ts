@@ -21,7 +21,7 @@ export function registerAddNote(api: any, client: LeadbayClient) {
       },
       required: ["leadId", "note"],
     },
-    execute: async (params: { leadId: string; note: string }) => {
+    execute: async (_id: string, params: { leadId: string; note: string }) => {
       if (!params.note || params.note.trim().length === 0) {
         throw client.makeError(
           "INVALID_PARAMS",

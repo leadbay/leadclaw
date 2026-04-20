@@ -20,7 +20,7 @@ export function registerGetLeadActivities(api: any, client: LeadbayClient) {
       },
       required: ["leadId"],
     },
-    execute: async (params: { leadId: string; count?: number }) => {
+    execute: async (_id: string, params: { leadId: string; count?: number }) => {
       const count = Math.min(params.count ?? 50, 100);
 
       const res = await client.request<PaginatedActivities>(

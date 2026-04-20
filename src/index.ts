@@ -18,10 +18,11 @@ const REGIONS: Record<string, string> = {
 
 // OpenClaw plugin entry point
 
-export async function register(api: any) {
+export function register(api: any) {
   const cfg = api.pluginConfig ?? {};
 
-  const region = cfg.region;
+  // Default to US region if not explicitly set
+  const region = cfg.region ?? "us";
   const baseUrl = cfg.baseUrl ?? REGIONS[region];
 
   if (!baseUrl) {
@@ -32,6 +33,11 @@ export async function register(api: any) {
   }
 
   const client = new LeadbayClient(baseUrl);
+  // If a token is provided via config, use it to pre-authenticate
+  if (cfg.token) {
+    client.setToken(cfg.token);
+    api.logger?.info?.("LeadClaw: Using preconfigured auth token");
+  }
 
   // Login tool — must be called before any other tool
   registerLogin(api, client);

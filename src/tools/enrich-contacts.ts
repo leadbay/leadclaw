@@ -29,7 +29,7 @@ export function registerEnrichContacts(api: any, client: LeadbayClient) {
       },
       required: ["leadId", "contactId"],
     },
-    execute: async (params: {
+    execute: async (_id: string, params: {
       leadId: string;
       contactId: string;
       email?: boolean;

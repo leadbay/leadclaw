@@ -21,7 +21,7 @@ export function registerQualifyLead(api: any, client: LeadbayClient) {
       },
       required: ["leadId"],
     },
-    execute: async (params: { leadId: string; forceFetch?: boolean }) => {
+    execute: async (_id: string, params: { leadId: string; forceFetch?: boolean }) => {
       const force = params.forceFetch ?? false;
       await client.requestVoid(
         "POST",

@@ -1,4 +1,36 @@
+import https from "node:https";
 import type { LeadbayClient } from "../client.js";
+
+function httpsPost(url: string, body: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        port: 443,
+        path: parsed.pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 export function registerLogin(api: any, client: LeadbayClient) {
   api.registerTool({
@@ -19,22 +51,37 @@ export function registerLogin(api: any, client: LeadbayClient) {
       },
       required: ["email", "password"],
     },
-    execute: async (params: { email: string; password: string }) => {
-      const res = await fetch(`${client.baseUrl}/1.5/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: params.email,
-          password: params.password,
-        }),
+    execute: async (_id: string, params: { email: string; password: string }) => {
+      // Some LLMs backslash-escape special characters in tool call JSON
+      // (e.g. "Password1\!" instead of "Password1!"). Strip spurious escapes.
+      const cleanPassword = params.password.replace(/\\(.)/g, "$1");
+      const payload = JSON.stringify({
+        email: params.email,
+        password: cleanPassword,
       });
+      api.logger?.info?.(`LeadClaw login: email=${params.email} baseUrl=${client.baseUrl}`);
 
-      if (!res.ok) {
-        const text = await res.text();
+      let result: { status: number; body: string };
+      try {
+        result = await httpsPost(`${client.baseUrl}/1.5/auth/login`, payload);
+      } catch (err: any) {
+        api.logger?.error?.(`LeadClaw login: request error: ${err?.message}`);
+        return {
+          error: true,
+          code: "NETWORK_ERROR",
+          message: `Network error: ${err?.message}`,
+          hint: "Check your internet connection",
+        };
+      }
+
+      api.logger?.info?.(`LeadClaw login: status=${result.status}`);
+
+      if (result.status < 200 || result.status >= 300) {
+        api.logger?.error?.(`LeadClaw login: error: ${result.body}`);
         let msg = "Login failed";
         try {
-          const parsed = JSON.parse(text);
-          msg = parsed.message || parsed.error || msg;
+          const parsed = JSON.parse(result.body);
+          msg = parsed.message || parsed.error?.message || parsed.error || msg;
         } catch {}
         return {
           error: true,
@@ -44,7 +91,7 @@ export function registerLogin(api: any, client: LeadbayClient) {
         };
       }
 
-      const data = await res.json();
+      const data = JSON.parse(result.body);
       client.setToken(data.token);
 
       // Prefetch org data now that we're authenticated
