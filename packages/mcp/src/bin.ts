@@ -15,11 +15,14 @@ leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
 
 USAGE
   leadbay-mcp            Run the MCP stdio server (for Claude Desktop, Cursor, etc.)
-  leadbay-mcp login      Exchange email + password for a bearer token; prints a
-                         ready-to-paste MCP client config. Use this when you don't
-                         have an API token yet (e.g. when the app's API-tokens
-                         page isn't available). Reads --email from argv; prompts
-                         for password (or reads $LEADBAY_PASSWORD from env).
+  leadbay-mcp install    One-shot setup: mint a token AND register the MCP server with
+                         your installed MCP clients (Claude Code / Claude Desktop /
+                         Cursor). Auto-detects which clients are installed; you confirm
+                         before each write. Token never lands in terminal scrollback.
+                         Run this first if you're getting started.
+  leadbay-mcp login      Lower-level: just mint a bearer token (no auto-install).
+                         Use when you want to copy the token into a config file
+                         yourself.
   leadbay-mcp doctor     Validate your token, probe your region, print account + quota.
   leadbay-mcp --version  Print version
   leadbay-mcp --help     Print this help
@@ -390,6 +393,354 @@ async function loginAt(baseUrl: string, email: string, password: string): Promis
   });
 }
 
+// ─── install: one-shot mint + register ────────────────────────────────────
+
+interface DetectedClient {
+  id: "claude-code" | "claude-desktop" | "cursor";
+  label: string;
+  // Where it'll be installed (path or "(claude CLI)" for shell-out targets).
+  detail: string;
+}
+
+async function detectClients(): Promise<DetectedClient[]> {
+  const out: DetectedClient[] = [];
+  const { existsSync } = await import("node:fs");
+  const os = await import("node:os");
+
+  // Claude Code: `which claude` (or LOCALAPPDATA on Windows).
+  const claudeBin = await new Promise<string | null>((resolve) => {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const child = require_("node:child_process").spawn(cmd, ["claude"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let buf = "";
+    child.stdout.on("data", (c: Buffer) => (buf += c.toString()));
+    child.on("close", (code: number) =>
+      resolve(code === 0 ? buf.split(/\r?\n/)[0] : null)
+    );
+  });
+  if (claudeBin) {
+    out.push({ id: "claude-code", label: "Claude Code", detail: `${claudeBin} mcp add ...` });
+  }
+
+  // Claude Desktop config file.
+  const home = os.homedir();
+  const cdPath =
+    process.platform === "win32"
+      ? `${process.env.APPDATA ?? `${home}\\AppData\\Roaming`}\\Claude\\claude_desktop_config.json`
+      : process.platform === "darwin"
+      ? `${home}/Library/Application Support/Claude/claude_desktop_config.json`
+      : `${home}/.config/Claude/claude_desktop_config.json`;
+  if (existsSync(cdPath)) {
+    out.push({ id: "claude-desktop", label: "Claude Desktop", detail: cdPath });
+  }
+
+  // Cursor config — Cursor stores MCP config in ~/.cursor/mcp.json.
+  const cursorPath =
+    process.platform === "win32"
+      ? `${home}\\.cursor\\mcp.json`
+      : `${home}/.cursor/mcp.json`;
+  if (existsSync(cursorPath)) {
+    out.push({ id: "cursor", label: "Cursor", detail: cursorPath });
+  } else {
+    // Cursor without a config file is still a candidate — just check the dir.
+    const cursorDir =
+      process.platform === "win32"
+        ? `${home}\\.cursor`
+        : `${home}/.cursor`;
+    if (existsSync(cursorDir)) {
+      out.push({
+        id: "cursor",
+        label: "Cursor",
+        detail: cursorPath + " (will be created)",
+      });
+    }
+  }
+
+  return out;
+}
+
+// CommonJS-style require shim — keeps `node:child_process` import path local
+// (avoids top-level require / dynamic import cost).
+function require_(mod: string): any {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  return (createRequire(import.meta.url) as any)(mod);
+}
+import { createRequire } from "node:module";
+
+async function readChoice(prompt: string, def = true): Promise<boolean> {
+  const isTTY = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  if (!isTTY) return def; // non-interactive: take default
+  process.stderr.write(`${prompt} ${def ? "[Y/n]" : "[y/N]"} `);
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+  return await new Promise<boolean>((resolve) => {
+    const onData = (k: string) => {
+      // Enter → take default
+      if (k === "\r" || k === "\n") {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener("data", onData);
+        process.stderr.write(def ? "y\n" : "n\n");
+        return resolve(def);
+      }
+      if (k === "\u0003" || k === "\u0004") {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stderr.write("\n");
+        process.exit(130);
+      }
+      const lower = k.toLowerCase();
+      if (lower === "y" || lower === "n") {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener("data", onData);
+        process.stderr.write(`${lower}\n`);
+        return resolve(lower === "y");
+      }
+    };
+    process.stdin.on("data", onData);
+  });
+}
+
+async function installInClaudeCode(
+  token: string,
+  region: "us" | "fr",
+  includeWrite: boolean
+): Promise<{ ok: boolean; message: string }> {
+  const cp = await import("node:child_process");
+  const args = [
+    "mcp",
+    "add",
+    "leadbay",
+    "--env",
+    `LEADBAY_TOKEN=${token}`,
+    "--env",
+    `LEADBAY_REGION=${region}`,
+  ];
+  if (includeWrite) args.push("--env", `LEADBAY_MCP_WRITE=1`);
+  args.push("--", "npx", "-y", "@leadbay/mcp@0.2");
+  return await new Promise((resolve) => {
+    const child = cp.spawn("claude", args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (c) => (stderr += c.toString()));
+    child.on("close", (code) =>
+      resolve({
+        ok: code === 0,
+        message: code === 0 ? "registered" : `claude mcp add exited ${code}: ${stderr.trim().slice(0, 200)}`,
+      })
+    );
+    child.on("error", (err) =>
+      resolve({ ok: false, message: `failed to spawn claude: ${err.message}` })
+    );
+  });
+}
+
+interface MCPConfigShape {
+  mcpServers?: Record<string, {
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>;
+  // Cursor uses the same shape under "mcpServers" too.
+}
+
+async function installInJsonConfig(
+  configPath: string,
+  token: string,
+  region: "us" | "fr",
+  includeWrite: boolean
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+
+    let parsed: MCPConfigShape = {};
+    let preserved: any = {};
+    if (existsSync(configPath)) {
+      const raw = readFileSync(configPath, "utf8");
+      try {
+        preserved = JSON.parse(raw);
+        parsed = preserved;
+      } catch {
+        return { ok: false, message: `existing ${configPath} is not valid JSON; refusing to overwrite` };
+      }
+    } else {
+      mkdirSync(dirname(configPath), { recursive: true });
+    }
+
+    parsed.mcpServers = parsed.mcpServers ?? {};
+    const env: Record<string, string> = {
+      LEADBAY_TOKEN: token,
+      LEADBAY_REGION: region,
+    };
+    if (includeWrite) env.LEADBAY_MCP_WRITE = "1";
+
+    parsed.mcpServers.leadbay = {
+      command: "npx",
+      args: ["-y", "@leadbay/mcp@0.2"],
+      env,
+    };
+
+    // Atomic-ish write: write to .tmp then rename, restore mode if pre-existed.
+    const tmp = configPath + ".tmp";
+    writeFileSync(tmp, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+    const { renameSync, chmodSync } = await import("node:fs");
+    renameSync(tmp, configPath);
+    // Tighten perms: existing config may already be 0644; leave it. But for
+    // newly-created configs (didn't exist before), enforce 0600.
+    try {
+      const st = statSync(configPath);
+      if ((st.mode & 0o777) > 0o600 && Object.keys(preserved).length === 0) {
+        chmodSync(configPath, 0o600);
+      }
+    } catch { /* best-effort */ }
+
+    return { ok: true, message: "registered" };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? String(err) };
+  }
+}
+
+async function runInstall(args: string[]): Promise<number> {
+  const email = parseFlag(args, "email");
+  if (!email) {
+    process.stderr.write(
+      "Usage: leadbay-mcp install --email you@example.com [--region us|fr]\n" +
+        "                          [--allow-region-fallback] [--include-write]\n" +
+        "                          [--target claude-code,claude-desktop,cursor] [--yes]\n" +
+        "  Mints a token AND registers the MCP server with your installed clients.\n" +
+        "  --target            Comma-separated subset; default = all detected.\n" +
+        "  --include-write     Enable LEADBAY_MCP_WRITE=1 (composite write tools — refine_prompt,\n" +
+        "                      report_outreach, adjust_audience). Off by default; off means the\n" +
+        "                      agent can read your Leadbay account but not mutate it.\n" +
+        "  --yes               Don't ask before installing into each detected client.\n"
+    );
+    return 2;
+  }
+
+  // Region pin (same rule as login — refuse to auto-detect without consent).
+  const regionArg = parseFlag(args, "region");
+  const regionEnv = process.env.LEADBAY_REGION;
+  const allowFallback = hasFlag(args, "allow-region-fallback");
+  let pinnedRegion: "us" | "fr" | null = null;
+  if (regionArg === "us" || regionArg === "fr") pinnedRegion = regionArg;
+  else if (!regionArg && (regionEnv === "us" || regionEnv === "fr")) pinnedRegion = regionEnv;
+  else if (regionArg) {
+    process.stderr.write(`leadbay-mcp install: invalid --region '${regionArg}' (use us or fr)\n`);
+    return 2;
+  }
+  if (!pinnedRegion && !allowFallback) {
+    process.stderr.write(
+      "leadbay-mcp install: --region us|fr (or $LEADBAY_REGION) is required by default.\n" +
+        "  This avoids sending your password to a Leadbay backend you don't use.\n" +
+        "  Pass --allow-region-fallback to opt in to auto-detect (your password will hit BOTH backends if the first 401s).\n"
+    );
+    return 2;
+  }
+
+  // Detect clients.
+  const detected = await detectClients();
+  const targetArg = parseFlag(args, "target");
+  let chosen = detected;
+  if (targetArg) {
+    const want = new Set(targetArg.split(",").map((s) => s.trim()));
+    chosen = detected.filter((c) => want.has(c.id));
+    const missing = [...want].filter((id) => !detected.some((c) => c.id === id));
+    if (missing.length) {
+      process.stderr.write(
+        `leadbay-mcp install: --target requested [${[...want].join(", ")}] but these were not detected on this machine: ${missing.join(", ")}\n`
+      );
+      // Don't bail — proceed with what we have.
+    }
+  }
+  if (chosen.length === 0) {
+    process.stderr.write(
+      "leadbay-mcp install: no MCP clients detected on this machine.\n" +
+        "  Install Claude Code (https://docs.claude.com/claude-code), Claude Desktop, or Cursor first,\n" +
+        "  or use `leadbay-mcp login --write-config /path/to/config.json` to mint a token without auto-install.\n"
+    );
+    return 1;
+  }
+
+  process.stderr.write(
+    `\nleadbay-mcp install — detected MCP clients on this machine:\n`
+  );
+  for (const c of chosen) process.stderr.write(`  • ${c.label.padEnd(16)} ${c.detail}\n`);
+  process.stderr.write("\n");
+
+  // Prompt for password BEFORE asking confirmations — so users who change their
+  // mind after typing the password don't have to redo it.
+  const password = await readPassword();
+  if (!password) {
+    process.stderr.write("leadbay-mcp install: empty password\n");
+    return 2;
+  }
+
+  // Mint token.
+  let token: string;
+  let region: "us" | "fr";
+  try {
+    if (pinnedRegion && !allowFallback) {
+      const { REGIONS } = await import("@leadbay/core");
+      const baseUrl = REGIONS[pinnedRegion];
+      token = await loginAt(baseUrl, email, password);
+      region = pinnedRegion;
+    } else {
+      const result = await resolveRegion(email, password, pinnedRegion ?? undefined);
+      token = result.token;
+      region = result.region;
+    }
+  } catch (err: any) {
+    process.stderr.write(`leadbay-mcp install: ${err?.message ?? String(err)}\n`);
+    return 1;
+  }
+  process.stderr.write(`Logged in to ${region.toUpperCase()} backend.\n\n`);
+
+  const includeWrite = hasFlag(args, "include-write");
+  if (!includeWrite) {
+    process.stderr.write(
+      "Note: write tools (refine_prompt, report_outreach, adjust_audience, etc.) are NOT enabled.\n" +
+        "      Re-run with --include-write to enable them.\n\n"
+    );
+  }
+
+  const skipPrompts = hasFlag(args, "yes");
+
+  const results: Array<{ id: string; label: string; ok: boolean; message: string }> = [];
+  for (const c of chosen) {
+    const ok = skipPrompts || (await readChoice(`Install into ${c.label} (${c.detail})?`, true));
+    if (!ok) {
+      results.push({ id: c.id, label: c.label, ok: false, message: "skipped by user" });
+      continue;
+    }
+    let res: { ok: boolean; message: string };
+    if (c.id === "claude-code") {
+      res = await installInClaudeCode(token, region, includeWrite);
+    } else {
+      // claude-desktop and cursor both use the same JSON shape.
+      const path = c.detail.split(" ")[0];
+      res = await installInJsonConfig(path, token, region, includeWrite);
+    }
+    results.push({ id: c.id, label: c.label, ...res });
+  }
+
+  process.stderr.write("\n=== install summary ===\n");
+  let anyOk = false;
+  for (const r of results) {
+    process.stderr.write(`  ${r.ok ? "✓" : "✗"} ${r.label.padEnd(16)} ${r.message}\n`);
+    if (r.ok) anyOk = true;
+  }
+  process.stderr.write(
+    `\nThe token was written into client config files but never printed to your terminal.\n` +
+      `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.2 doctor\n` +
+      `Restart your MCP client(s) to pick up the new server.\n` +
+      `If you ever leak the token, log in to app.leadbay.ai again to invalidate the prior session.\n`
+  );
+  return anyOk ? 0 : 1;
+}
+
 async function runDoctor(): Promise<number> {
   const token = process.env.LEADBAY_TOKEN;
   if (!token) {
@@ -464,6 +815,9 @@ async function main(): Promise<void> {
   if (arg === "--help" || arg === "-h" || arg === "help") {
     process.stdout.write(`${HELP}\n`);
     return;
+  }
+  if (arg === "install") {
+    process.exit(await runInstall(process.argv.slice(3)));
   }
   if (arg === "login") {
     process.exit(await runLogin(process.argv.slice(3)));
