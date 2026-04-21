@@ -9,7 +9,11 @@ interface QualifyLeadParams {
 export const qualifyLead: Tool<QualifyLeadParams> = {
   name: "leadbay_qualify_lead",
   description:
-    "Trigger AI qualification for a lead. This fetches the lead's website and runs AI scoring and web insights generation. The operation is asynchronous — use leadbay_get_lead_profile after about 60 seconds to check qualification results and web insights.",
+    "Trigger AI qualification for a single lead (web fetch + AI rescore). The operation is asynchronous — " +
+    "results take ~60s. " +
+    "When to use: low-level. " +
+    "When NOT to use: as the agent's bulk-qualify path — use leadbay_bulk_qualify_leads, which paginates past " +
+    "already-qualified leads, fan-outs, polls, and bails out cleanly on 429.",
   optional: true,
   inputSchema: {
     type: "object",

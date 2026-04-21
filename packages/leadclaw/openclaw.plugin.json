@@ -1,11 +1,23 @@
 {
   "id": "leadclaw",
   "name": "LeadClaw",
-  "description": "Leadbay lead discovery, qualification, and contact enrichment",
-  "version": "0.1.0",
+  "description": "Leadbay lead discovery, qualification, and contact enrichment for AI agents",
+  "version": "0.2.0",
   "contracts": {
     "tools": [
       "leadbay_login",
+      "leadbay_account_status",
+      "leadbay_pull_leads",
+      "leadbay_research_lead",
+      "leadbay_recall_ordered_titles",
+      "leadbay_research_company",
+      "leadbay_prepare_outreach",
+      "leadbay_bulk_qualify_leads",
+      "leadbay_enrich_titles",
+      "leadbay_adjust_audience",
+      "leadbay_refine_prompt",
+      "leadbay_answer_clarification",
+      "leadbay_report_outreach",
       "leadbay_list_lenses",
       "leadbay_discover_leads",
       "leadbay_get_lead_profile",
@@ -13,15 +25,43 @@
       "leadbay_get_taste_profile",
       "leadbay_get_contacts",
       "leadbay_get_quota",
+      "leadbay_get_lens_filter",
+      "leadbay_get_lens_scoring",
+      "leadbay_list_sectors",
+      "leadbay_get_user_prompt",
+      "leadbay_get_clarification",
+      "leadbay_get_lead_notes",
+      "leadbay_get_epilogue_responses",
+      "leadbay_get_prospecting_actions",
+      "leadbay_get_web_fetch",
+      "leadbay_get_selection_ids",
+      "leadbay_get_enrichment_job_titles",
       "leadbay_qualify_lead",
       "leadbay_enrich_contacts",
-      "leadbay_add_note"
+      "leadbay_add_note",
+      "leadbay_select_leads",
+      "leadbay_deselect_leads",
+      "leadbay_clear_selection",
+      "leadbay_set_active_lens",
+      "leadbay_create_lens",
+      "leadbay_update_lens",
+      "leadbay_update_lens_filter",
+      "leadbay_create_lens_draft",
+      "leadbay_promote_lens",
+      "leadbay_set_user_prompt",
+      "leadbay_clear_user_prompt",
+      "leadbay_pick_clarification",
+      "leadbay_dismiss_clarification",
+      "leadbay_set_epilogue_status",
+      "leadbay_remove_epilogue",
+      "leadbay_preview_bulk_enrichment",
+      "leadbay_launch_bulk_enrichment"
     ]
   },
   "uiHints": {
     "region": {
       "label": "Leadbay Region",
-      "help": "Your Leadbay account region (us or fr)",
+      "help": "Your Leadbay account region (us or fr). Login auto-detects regardless.",
       "placeholder": "us"
     },
     "baseUrl": {
@@ -33,6 +73,16 @@
       "label": "API Token",
       "help": "Pre-set bearer token to skip the login step",
       "sensitive": true
+    },
+    "exposeGranular": {
+      "label": "Expose granular API tools",
+      "help": "Default false: only the composite agent-facing tools are visible. Set true to also expose the lower-level 1:1-with-API tools (more surface area, more chance the agent picks the wrong one).",
+      "advanced": true
+    },
+    "exposeWrite": {
+      "label": "Expose write tools",
+      "help": "Default false: write tools (set_user_prompt, set_epilogue_status, update_lens_filter, report_outreach, etc.) are hidden. Enable only when you want the agent to modify Leadbay state.",
+      "advanced": true
     }
   },
   "configSchema": {
@@ -49,6 +99,14 @@
       },
       "baseUrl": {
         "type": "string"
+      },
+      "exposeGranular": {
+        "type": "boolean",
+        "description": "Expose granular 1:1-with-API tools (default false)"
+      },
+      "exposeWrite": {
+        "type": "boolean",
+        "description": "Expose write/mutation tools (default false)"
       }
     }
   }

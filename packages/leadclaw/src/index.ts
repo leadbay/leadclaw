@@ -1,9 +1,24 @@
-import { createClient, granularTools } from "@leadbay/core";
+import {
+  createClient,
+  login,
+  compositeReadTools,
+  compositeWriteTools,
+  granularReadTools,
+  granularWriteTools,
+} from "@leadbay/core";
+import type { Tool } from "@leadbay/core";
 
 // OpenClaw plugin entry point.
 //
-// The OpenClaw adapter exposes the 11 granular tools (matching the published
-// plugin manifest). Composite workflow tools live in @leadbay/mcp only.
+// Tool exposure is gated by plugin config:
+//   - composite read tools: ALWAYS exposed (the agent's default surface)
+//   - composite write tools: ALWAYS exposed (OpenClaw runs in user context;
+//     the agent has explicit consent. Write composites enforce their own
+//     verification — e.g. report_outreach requires verification={source, ref}.)
+//   - granular read tools: exposed only when exposeGranular=true
+//   - granular write tools: exposed only when both exposeGranular=true
+//     AND exposeWrite=true
+//   - login: always exposed (this is the bootstrap path)
 
 export function register(api: any) {
   const cfg = api.pluginConfig ?? {};
@@ -27,14 +42,38 @@ export function register(api: any) {
     api.logger?.info?.("LeadClaw: Using preconfigured auth token");
   }
 
-  for (const tool of granularTools) {
+  const exposeGranular = cfg.exposeGranular === true;
+  const exposeWrite = cfg.exposeWrite === true;
+
+  const exposed: Tool[] = [];
+  exposed.push(login);
+  exposed.push(...compositeReadTools);
+  if (exposeWrite) {
+    exposed.push(...compositeWriteTools);
+  }
+  if (exposeGranular) {
+    exposed.push(...granularReadTools);
+    if (exposeWrite) {
+      exposed.push(...granularWriteTools);
+    }
+  }
+
+  // Dedup by name (some tools live in multiple lists; e.g. existing composites).
+  const seen = new Set<string>();
+  for (const tool of exposed) {
+    if (seen.has(tool.name)) continue;
+    seen.add(tool.name);
     api.registerTool({
       name: tool.name,
       description: tool.description,
       parameters: tool.inputSchema,
-      ...(tool.optional ? { optional: true } : {}),
+      ...(tool.optional || tool.write ? { optional: true } : {}),
       execute: async (_id: string, params: unknown) =>
         tool.execute(client, params as any, { logger: api.logger }),
     });
   }
+
+  api.logger?.info?.(
+    `LeadClaw v0.2.0 registered: ${seen.size} tools (exposeGranular=${exposeGranular}, exposeWrite=${exposeWrite})`
+  );
 }

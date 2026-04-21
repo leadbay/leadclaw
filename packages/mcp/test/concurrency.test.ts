@@ -27,15 +27,24 @@ beforeEach(() => {
 describe("MCP server — concurrency", () => {
   it("10 concurrent tools/call resolve and leave the semaphore at zero", async () => {
     // Each find_prospects call makes at minimum: GET /lenses + GET wishlist.
-    // Pre-script 20 responses (2 × 10) so the mock can serve them all.
-    const scripts = [];
+    // pull_leads needs /me + wishlist per call. /me has a 60s cache, BUT
+    // concurrent callers can race past the cache check before the first
+    // response populates it. Pre-script enough /me responses for the worst
+    // case (one per concurrent caller).
+    const scripts: any[] = [];
     for (let i = 0; i < 10; i++) {
       scripts.push({
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.5/users/me",
         status: 200,
-        body: [{ id: 42, name: "X", is_last_active: true }],
+        body: {
+          id: "u",
+          organization: { id: "org-1", name: "X" },
+          last_requested_lens: 42,
+        },
       });
+    }
+    for (let i = 0; i < 10; i++) {
       scripts.push({
         method: "GET",
         path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
@@ -43,6 +52,8 @@ describe("MCP server — concurrency", () => {
         body: {
           items: [],
           pagination: { page: 0, pages: 0, total: 0 },
+          computing_wishlist: false,
+          computing_scores: false,
         },
       });
     }
@@ -62,7 +73,7 @@ describe("MCP server — concurrency", () => {
     for (let i = 0; i < 10; i++) {
       promises.push(
         mcpClient.callTool({
-          name: "leadbay_find_prospects",
+          name: "leadbay_pull_leads",
           arguments: { count: 5 },
         })
       );
@@ -72,6 +83,11 @@ describe("MCP server — concurrency", () => {
     // All resolved (even if client-level the cache means only 1 /lenses went out;
     // the server-level plumbing should still handle 10 concurrent calls).
     expect(results).toHaveLength(10);
+    const errors = results.filter((r: any) => r.isError);
+    if (errors.length) {
+      const firstErrorContent = (errors[0] as any).content?.[0]?.text;
+      console.error("CONCURRENCY ERROR:", firstErrorContent);
+    }
     for (const r of results) {
       expect(r.isError).toBeFalsy();
     }

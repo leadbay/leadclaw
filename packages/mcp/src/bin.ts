@@ -2,7 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createClient, LeadbayClient, type CreateClientConfig, type ToolLogger } from "@leadbay/core";
 import { buildServer } from "./server.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 const HELP = `
 leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
@@ -17,10 +17,18 @@ ENV VARS
   LEADBAY_TOKEN          (required) Bearer token from https://app.leadbay.ai/settings/api-tokens
   LEADBAY_REGION         (optional) "us" or "fr". Auto-detected from /users/me if unset.
   LEADBAY_BASE_URL       (optional) Override API base URL (for staging/dev).
-  LEADBAY_MCP_ADVANCED   (optional) Set to "1" to expose 10 granular tools alongside
-                         the 3 composite workflow tools. Most users don't need this.
+  LEADBAY_MCP_ADVANCED   (optional) Set to "1" to expose granular API tools alongside
+                         the composite workflow tools. Most users don't need this.
+  LEADBAY_MCP_WRITE      (optional) Set to "1" to expose write composites (refine_prompt,
+                         report_outreach, adjust_audience, etc.) and write granulars.
+                         Defaults off — read composites are exposed by default; mutations
+                         require explicit opt-in.
+  LEADBAY_MOCK           (optional) Set to "1" to serve all responses from on-disk fixtures
+                         (no network, no real auth). Useful for agent-author dry-running.
+                         GETs are matched against fixture JSON files; POSTs/DELETEs are
+                         journaled in-process and return {mocked: true, would_call: {...}}.
+  LEADBAY_MOCK_DIR       (optional) Fixture directory. Default: ./.context/leadbay-live-shapes/
   LEADBAY_LOG_LEVEL      (optional) "debug" | "info" | "error" (default "error"). Logs to stderr.
-  LEADBAY_TIMEOUT_MS     (optional) Per-request timeout override (not yet plumbed).
 
 EXAMPLE Claude Desktop config (~/Library/Application Support/Claude/claude_desktop_config.json)
   {
@@ -208,11 +216,12 @@ async function main(): Promise<void> {
   const logger = makeStderrLogger(parseLogLevel(process.env.LEADBAY_LOG_LEVEL));
   const client = await resolveClientFromEnv(logger);
   const includeAdvanced = process.env.LEADBAY_MCP_ADVANCED === "1";
+  const includeWrite = process.env.LEADBAY_MCP_WRITE === "1";
 
-  const server = buildServer(client, { includeAdvanced, logger });
+  const server = buildServer(client, { includeAdvanced, includeWrite, logger });
   const transport = new StdioServerTransport();
   logger.info?.(
-    `Starting MCP server (advanced=${includeAdvanced}, baseUrl=${client.baseUrl})`
+    `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl})`
   );
   await server.connect(transport);
 }

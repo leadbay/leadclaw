@@ -12,7 +12,10 @@ interface ResearchCompanyParams {
 export const researchCompany: Tool<ResearchCompanyParams> = {
   name: "leadbay_research_company",
   description:
-    "Deep-dive research on a specific company: full profile with AI qualification scores, web insights, contacts, and recent prospecting activity. Pass leadId if you already have it (from leadbay_find_prospects), or companyName to search for a match first.",
+    "Deep-dive research on a specific company by NAME (fuzzy match against the active lens's wishlist). " +
+    "When to use: when the user references a company by name and you don't yet have its lead_id. " +
+    "When NOT to use: when you already have the lead_id — use leadbay_research_lead directly (it bundles " +
+    "richer signals + better top-down ordering for the agent).",
   inputSchema: {
     type: "object",
     properties: {
@@ -37,7 +40,7 @@ export const researchCompany: Tool<ResearchCompanyParams> = {
       throw client.makeError(
         "INVALID_PARAMS",
         "Pass either leadId or companyName",
-        "Use leadbay_find_prospects first to get a lead's ID, then call this with leadId."
+        "Call leadbay_pull_leads first to surface candidate leads with their IDs, then call this with leadId."
       );
     }
 
@@ -58,7 +61,7 @@ export const researchCompany: Tool<ResearchCompanyParams> = {
         throw client.makeError(
           "LEAD_NOT_FOUND",
           `No lead matching "${params.companyName}" in the current lens`,
-          "Try leadbay_find_prospects with a broader lens, or search by leadId instead."
+          "Call leadbay_pull_leads (optionally with a broader lensId) to see what's available, then call this with leadId."
         );
       }
       leadId = match.id;

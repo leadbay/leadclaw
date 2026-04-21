@@ -22,6 +22,9 @@ export interface RequestScript {
   status: number;
   body?: string | object;
   error?: Error;
+  // Optional HTTP response headers — useful for testing Retry-After parsing,
+  // region tagging on errors, etc. Defaults to empty object.
+  responseHeaders?: Record<string, string>;
 }
 
 export interface CapturedRequest {
@@ -104,6 +107,10 @@ function fakeHttpsRequest(options: any, callback?: (res: any) => void): any {
 
     const res = new EventEmitter() as any;
     res.statusCode = entry.script.status;
+    // Provide an empty headers object by default so client code that reads
+    // res.headers (Retry-After, etc.) works. Individual scripts may override
+    // via script.responseHeaders.
+    res.headers = (entry.script as any).responseHeaders ?? {};
     setImmediate(() => {
       if (callback) callback(res);
       const bodyStr =

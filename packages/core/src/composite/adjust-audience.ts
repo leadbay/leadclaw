@@ -1,0 +1,375 @@
+import type { LeadbayClient } from "../client.js";
+import type {
+  Tool,
+  ToolContext,
+  FilterPayload,
+  LensPayload,
+  SectorPayload,
+  FilterCriterion,
+} from "../types.js";
+
+interface AdjustAudienceParams {
+  sectors?: string[];           // free text or sector ids
+  sector_ids?: string[];        // explicit ids if known
+  exclude_sectors?: string[];   // free text or ids
+  sizes?: Array<{ min?: number; max?: number }>;
+  // (Locations resolution is a separate beast; not modelled here yet.)
+  lensId?: number;
+  save_for_org?: boolean;        // admin only — propagate to org-level lens
+  newLensName?: string;          // when default lens forces clone
+}
+
+interface SectorAmbiguity {
+  sector_text: string;
+  matches: Array<{ id: string; name: string; score: number }>;
+}
+
+function tokens(s: string): string[] {
+  return s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+function bestMatches(
+  text: string,
+  taxonomy: SectorPayload[]
+): Array<{ id: string; name: string; score: number }> {
+  const want = new Set(tokens(text));
+  if (want.size === 0) return [];
+  const ranked = taxonomy
+    .map((s) => {
+      const have = new Set(tokens(s.name));
+      let overlap = 0;
+      for (const t of want) if (have.has(t)) overlap += 1;
+      const score = overlap / Math.max(want.size, 1);
+      return { id: s.id, name: s.name, score };
+    })
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return ranked.slice(0, 5);
+}
+
+async function resolveSectors(
+  client: LeadbayClient,
+  texts: string[]
+): Promise<{ resolved: string[]; ambiguities: SectorAmbiguity[] }> {
+  const looksLikeId = (s: string) => /^\d+$/.test(s);
+  const direct = texts.filter(looksLikeId);
+  const free = texts.filter((s) => !looksLikeId(s));
+  if (free.length === 0) return { resolved: direct, ambiguities: [] };
+
+  const me = await client.resolveMe().catch(() => null);
+  const lang = me?.language ?? "en";
+  const taxonomy = await client.request<SectorPayload[]>(
+    "GET",
+    `/sectors/all?lang=${encodeURIComponent(lang)}&includeInvisible=false`
+  );
+
+  const resolved = [...direct];
+  const ambiguities: SectorAmbiguity[] = [];
+  for (const text of free) {
+    const matches = bestMatches(text, taxonomy);
+    // Confident match: exactly one with score > 0.66 (most tokens match) AND
+    // no close runner-up.
+    if (
+      matches.length === 1 ||
+      (matches.length >= 2 && matches[0].score >= 0.66 && matches[0].score - matches[1].score >= 0.34)
+    ) {
+      resolved.push(matches[0].id);
+    } else {
+      ambiguities.push({ sector_text: text, matches });
+    }
+  }
+  return { resolved, ambiguities };
+}
+
+function mergeFilter(
+  current: FilterPayload,
+  toAddSectors: string[],
+  toExcludeSectors: string[],
+  sizes: Array<{ min?: number; max?: number }> | undefined
+): FilterPayload {
+  const items = current?.lens_filter?.items ?? [];
+  const item = items[0] ?? { criteria: [] };
+  const criteria: FilterCriterion[] = item.criteria ? [...item.criteria] : [];
+
+  // sector_ids (include) — merge into existing or add.
+  if (toAddSectors.length > 0) {
+    const idx = criteria.findIndex(
+      (c) => c.type === "sector_ids" && !c.is_excluded
+    );
+    if (idx >= 0) {
+      const cur = criteria[idx] as Extract<FilterCriterion, { type: "sector_ids" }>;
+      const merged = Array.from(new Set([...(cur.sectors ?? []), ...toAddSectors]));
+      criteria[idx] = { ...cur, sectors: merged };
+    } else {
+      criteria.push({
+        type: "sector_ids",
+        is_excluded: false,
+        sectors: toAddSectors,
+      });
+    }
+  }
+
+  // sector_ids (exclude)
+  if (toExcludeSectors.length > 0) {
+    const idx = criteria.findIndex(
+      (c) => c.type === "sector_ids" && c.is_excluded
+    );
+    if (idx >= 0) {
+      const cur = criteria[idx] as Extract<FilterCriterion, { type: "sector_ids" }>;
+      const merged = Array.from(new Set([...(cur.sectors ?? []), ...toExcludeSectors]));
+      criteria[idx] = { ...cur, sectors: merged };
+    } else {
+      criteria.push({
+        type: "sector_ids",
+        is_excluded: true,
+        sectors: toExcludeSectors,
+      });
+    }
+  }
+
+  // size — replace if provided (single canonical size criterion).
+  if (sizes && sizes.length > 0) {
+    const idx = criteria.findIndex((c) => c.type === "size");
+    if (idx >= 0) {
+      criteria[idx] = { type: "size", is_excluded: false, sizes };
+    } else {
+      criteria.push({ type: "size", is_excluded: false, sizes });
+    }
+  }
+
+  return {
+    lens_filter: { items: [{ criteria }] },
+    locations: current.locations ?? { results: [], parents: [] },
+  };
+}
+
+export const adjustAudience: Tool<AdjustAudienceParams> = {
+  name: "leadbay_adjust_audience",
+  description:
+    "Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against " +
+    "the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. " +
+    "Permission routing is hidden: the default lens auto-clones to a new user lens; an org-level lens defaults " +
+    "to a per-user draft (admins can override with save_for_org:true). Filter MERGES with existing criteria " +
+    "(unrelated criteria are not dropped). " +
+    "When to use: when the user wants to see different kinds of leads (sector / size / etc.). " +
+    "When NOT to use: to refine BEYOND firmographics — that's leadbay_refine_prompt.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      sectors: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Sector free-text (e.g. ['Healthcare', 'Engineering']) or ids — auto-resolved",
+      },
+      sector_ids: {
+        type: "array",
+        items: { type: "string" },
+        description: "Explicit sector ids (skips taxonomy lookup)",
+      },
+      exclude_sectors: {
+        type: "array",
+        items: { type: "string" },
+        description: "Sectors to exclude (free text or ids)",
+      },
+      sizes: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { min: { type: "number" }, max: { type: "number" } },
+        },
+        description: "Company size buckets, e.g. [{min:30,max:300}]",
+      },
+      lensId: { type: "number", description: "Lens id (escape hatch)" },
+      save_for_org: {
+        type: "boolean",
+        description:
+          "Admin only — propagate the change to the org-level lens for everyone (default false: per-user draft)",
+      },
+      newLensName: {
+        type: "string",
+        description:
+          "Name to use when this composite has to clone the default lens (otherwise auto-named)",
+      },
+    },
+  },
+  execute: async (
+    client: LeadbayClient,
+    params: AdjustAudienceParams,
+    ctx?: ToolContext
+  ) => {
+    const me = await client.resolveMe();
+    const isAdmin = me.admin === true;
+    const startingLensId =
+      params.lensId ?? me.last_requested_lens ?? (await client.resolveDefaultLens());
+
+    // Resolve free-text sectors (taxonomy lookup with fuzzy matching).
+    const includeTexts = [
+      ...(params.sectors ?? []),
+      ...(params.sector_ids ?? []),
+    ];
+    const excludeTexts = params.exclude_sectors ?? [];
+
+    const includeRes = await resolveSectors(client, includeTexts);
+    const excludeRes = await resolveSectors(client, excludeTexts);
+    const ambiguities = [
+      ...includeRes.ambiguities,
+      ...excludeRes.ambiguities,
+    ];
+
+    if (ambiguities.length > 0) {
+      return {
+        status: "ambiguous_sectors",
+        sector_ambiguities: ambiguities,
+        message:
+          "One or more sector names matched multiple sectors. Pick from the matches and re-call with sector_ids=...",
+      };
+    }
+
+    // Read the current lens (kind detection) + current filter.
+    const lens = await client.request<LensPayload>(
+      "GET",
+      `/lenses/${startingLensId}`
+    );
+    const currentFilter = await client.request<FilterPayload>(
+      "GET",
+      `/lenses/${startingLensId}/filter`
+    );
+    const merged = mergeFilter(
+      currentFilter,
+      includeRes.resolved,
+      excludeRes.resolved,
+      params.sizes
+    );
+
+    const isDefault = lens.is_default || lens.default;
+    const isUserLevel = lens.user_id != null;
+    const isOrgLevel = !isUserLevel && !isDefault;
+
+    let targetLensId = startingLensId;
+    let wasDraft = false;
+    let wasNew = false;
+
+    if (isDefault) {
+      // Cannot edit default. Clone via POST /lenses {base, name}.
+      const name = params.newLensName ?? `Custom audience — ${new Date().toISOString().slice(0, 10)}`;
+      const newLens = await client.request<LensPayload>("POST", "/lenses", {
+        base: startingLensId,
+        name,
+      });
+      targetLensId = newLens.id;
+      wasNew = true;
+      // Apply filter to the new lens.
+      await client.requestVoid(
+        "POST",
+        `/lenses/${targetLensId}/filter`,
+        merged
+      );
+      // Set as active.
+      await client.requestVoid(
+        "POST",
+        `/lenses/${targetLensId}/update_last_requested`
+      );
+    } else if (isUserLevel) {
+      try {
+        await client.requestVoid(
+          "POST",
+          `/lenses/${startingLensId}/filter`,
+          merged
+        );
+      } catch (err: any) {
+        if (err?.code === "FORBIDDEN") {
+          // Edge: user-level but somehow forbidden — fall through to draft path.
+          wasDraft = true;
+          const draft = await client.request<LensPayload>(
+            "POST",
+            `/lenses/${startingLensId}/draft`
+          );
+          targetLensId = draft.id;
+          await client.requestVoid(
+            "POST",
+            `/lenses/${targetLensId}/filter`,
+            merged
+          );
+          await client.requestVoid(
+            "POST",
+            `/lenses/${targetLensId}/update_last_requested`
+          );
+        } else {
+          throw err;
+        }
+      }
+    } else if (isOrgLevel) {
+      const goDraft = !isAdmin || !params.save_for_org;
+      if (goDraft) {
+        wasDraft = true;
+        const draft = await client.request<LensPayload>(
+          "POST",
+          `/lenses/${startingLensId}/draft`
+        );
+        targetLensId = draft.id;
+        try {
+          await client.requestVoid(
+            "POST",
+            `/lenses/${targetLensId}/filter`,
+            merged
+          );
+        } catch (err: any) {
+          // Orphan-draft handling: try DELETE; if not supported, surface for manual cleanup.
+          ctx?.logger?.warn?.(
+            `adjust_audience: filter on draft ${targetLensId} failed: ${err?.message}`
+          );
+          try {
+            await client.requestVoid("DELETE", `/lenses/${targetLensId}`);
+          } catch {
+            return {
+              error: true,
+              code: "ORPHAN_DRAFT",
+              message: `Draft ${targetLensId} created but filter update failed; draft cleanup also failed`,
+              hint: `Manually delete draft lens ${targetLensId} via the Leadbay UI`,
+              orphan_draft_id: targetLensId,
+            };
+          }
+          throw err;
+        }
+        await client.requestVoid(
+          "POST",
+          `/lenses/${targetLensId}/update_last_requested`
+        );
+      } else {
+        // Admin + save_for_org=true → direct mutation.
+        try {
+          await client.requestVoid(
+            "POST",
+            `/lenses/${startingLensId}/filter`,
+            merged
+          );
+        } catch (err: any) {
+          throw err;
+        }
+      }
+    }
+
+    // Cache invalidation — the active lens may have changed.
+    client.invalidateMe();
+    client.invalidateDefaultLens();
+
+    return {
+      status: "applied",
+      lens_used: {
+        id: targetLensId,
+        name: lens.name,
+        was_draft: wasDraft,
+        was_new: wasNew,
+        save_for_org: params.save_for_org === true && isAdmin && isOrgLevel,
+      },
+      filter_applied: merged,
+      message: wasDraft
+        ? "Applied to your personal draft of the org lens (your view only)."
+        : wasNew
+        ? `Created a new user-level lens "${lens.name}" with the filter (you can rename via leadbay_update_lens).`
+        : "Applied directly to the lens.",
+      _meta: { region: client.region },
+    };
+  },
+};

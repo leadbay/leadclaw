@@ -11,7 +11,9 @@ interface DiscoverLeadsParams {
 export const discoverLeads: Tool<DiscoverLeadsParams> = {
   name: "leadbay_discover_leads",
   description:
-    "Get AI-recommended leads from Leadbay. Returns paginated lead summaries with scores, AI summaries, tags, and recommended contacts. After discovering leads, call leadbay_get_lead_profile on promising ones for full qualification data, web insights, and all contacts. If lensId is omitted, uses the active lens automatically.",
+    "Get AI-recommended leads from Leadbay. Returns paginated lead summaries with scores, AI summaries, tags, and recommended contacts. " +
+    "When to use: low-level when you need raw paginated wishlist access without the qualification_summary attached by leadbay_pull_leads. " +
+    "When NOT to use: as the agent's default lead-discovery entry point — use leadbay_pull_leads, which adds a one-line qualification summary per lead.",
   inputSchema: {
     type: "object",
     properties: {

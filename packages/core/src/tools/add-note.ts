@@ -10,7 +10,10 @@ interface AddNoteParams {
 export const addNote: Tool<AddNoteParams> = {
   name: "leadbay_add_note",
   description:
-    "Add a note to a lead. Notes are visible to the whole organization in Leadbay.",
+    "Add a note to a lead. Notes are visible to the whole organization in Leadbay. " +
+    "When to use: low-level — for free-form notes not tied to outreach actions. " +
+    "When NOT to use: to log an outreach action — use leadbay_report_outreach, which requires verification " +
+    "(gmail/calendar/user_confirmed) to prevent hallucinated outreach poisoning the SDR pipeline.",
   optional: true,
   inputSchema: {
     type: "object",
