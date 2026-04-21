@@ -8,7 +8,11 @@ import {
 } from "@leadbay/core";
 import { buildServer } from "./server.js";
 
-const VERSION = "0.2.0";
+// __LEADBAY_MCP_VERSION__ is replaced at build time by tsup with the string
+// literal from packages/mcp/package.json#version. Single source of truth —
+// bump package.json and both the tarball and --version output track it.
+declare const __LEADBAY_MCP_VERSION__: string;
+const VERSION = __LEADBAY_MCP_VERSION__;
 
 const HELP = `
 leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
@@ -167,7 +171,9 @@ async function readPassword(): Promise<string> {
     // Piped: read stdin to EOF.
     return await new Promise<string>((resolve) => {
       const chunks: Buffer[] = [];
-      process.stdin.on("data", (c) => chunks.push(c));
+      process.stdin.on("data", (c: string | Buffer) => {
+        chunks.push(typeof c === "string" ? Buffer.from(c, "utf8") : c);
+      });
       process.stdin.on("end", () =>
         resolve(Buffer.concat(chunks).toString("utf8").replace(/\r?\n$/, ""))
       );

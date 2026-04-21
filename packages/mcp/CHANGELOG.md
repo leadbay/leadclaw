@@ -1,0 +1,15 @@
+# Changelog — @leadbay/mcp
+
+## 0.2.0 — 2026-04-20
+
+First public npm release.
+
+- Agent-optimized composite tool surface (pull_leads, research_lead, bulk_qualify_leads, enrich_titles, adjust_audience, refine_prompt, recall_ordered_titles, account_status, report_outreach).
+- `leadbay-mcp install` one-shot setup: mints a token and registers the server with Claude Code, Claude Desktop, and Cursor.
+- `leadbay-mcp login` lower-level token mint (`--write-config` drops a 0600 JSON).
+- `leadbay-mcp doctor` validates token + region + quota.
+- Gating: `LEADBAY_MCP_WRITE=1` for mutations, `LEADBAY_MCP_ADVANCED=1` for the granular API surface (both off by default).
+- `report_outreach` requires a verification field (`gmail_message_id | calendar_event_id | user_confirmed`) to prevent pipeline poisoning.
+- Mock mode via `LEADBAY_MOCK=1` for agent-author dry-running against `.context/leadbay-live-shapes/` fixtures.
+- Tag-driven CI publish via `.github/workflows/release.yml` (push `mcp-v<version>` or `v<version>`).
+- `--version` output now sourced from `package.json` at build time — no more drift between the tarball version and the binary's self-reported version.

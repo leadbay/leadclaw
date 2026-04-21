@@ -1,76 +1,105 @@
-name: release-mcp
+name: release
 
-# Publishes @leadbay/mcp to npm when a tag matching v* is pushed
-# (e.g. `git tag v0.2.0 && git push --tags`).
+# Tag-driven publishing for @leadbay/mcp (npm) and @leadbay/leadclaw (npm + ClawHub).
 #
-# One-time setup before the first run:
-#   1. Generate an npm automation token (https://www.npmjs.com/settings/<user>/tokens
-#      → Generate New Token → Automation).
-#   2. Add it as the GitHub Actions secret NPM_TOKEN
-#      (Settings → Secrets and variables → Actions → New repository secret).
+# Tag scheme:
+#   - mcp-v<ver>       → publishes @leadbay/mcp only
+#   - leadclaw-v<ver>  → publishes @leadbay/leadclaw to npm, then ClawHub
+#   - v<ver>           → legacy alias for mcp-v<ver> (from the original release-mcp workflow)
 #
-# What this workflow does NOT do:
-#   - Auto-bump versions. Bump packages/mcp/package.json (and core/leadclaw if needed)
-#     in a regular PR, then tag the commit on main once merged.
-#   - Publish @leadbay/leadclaw or @leadbay/core. Add jobs for those if you decide
-#     to ship them on npm too (currently leadclaw distributes through ClawHub
-#     and core is bundled into mcp via tsup).
+# One-time setup (done in repo settings):
+#   - NPM_TOKEN       → npm automation token, scope-owner on @leadbay
+#   - CLAWHUB_TOKEN   → ClawHub publish token with rights to @leadbay/leadclaw
+#
+# No auto-version-bump, no auto-changelog. Bump `package.json` (and
+# `openclaw.plugin.json` for leadclaw) in a normal PR, then tag the merge commit:
+#
+#   git tag mcp-v0.3.0      && git push origin mcp-v0.3.0
+#   git tag leadclaw-v0.3.0 && git push origin leadclaw-v0.3.0
 
 on:
   push:
     tags:
+      - "mcp-v*.*.*"
+      - "leadclaw-v*.*.*"
       - "v*.*.*"
   workflow_dispatch:
-    # Lets a maintainer trigger a release manually from the Actions UI
-    # (e.g. for a re-publish without re-tagging).
     inputs:
+      package:
+        description: "Which package to publish (mcp | leadclaw)"
+        required: true
+        default: "mcp"
+        type: choice
+        options: [mcp, leadclaw]
       dry_run:
-        description: "If true, run npm publish --dry-run (no actual publish)"
+        description: "If true, npm half uses --dry-run (ClawHub has no dry-run; skipped on dry runs)"
         required: false
         default: "false"
 
 jobs:
-  publish-mcp:
-    name: Publish @leadbay/mcp to npm
+  preflight-npm:
+    name: Preflight — verify npm auth + @leadbay scope
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # for npm provenance (optional but recommended)
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
-          # Tells npm to send the auth token only to the npm registry.
           always-auth: true
+      - name: whoami + scope probe
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Logged in as: $(npm whoami --registry=https://registry.npmjs.org)"
+          # Scope-empty on first publish is OK; fall through. Fatal errors (401/403)
+          # come from npm whoami above.
+          npm access list packages @leadbay 2>&1 || echo "scope empty or no packages yet — first publish will create"
 
-      - name: Install dependencies
+  publish-mcp:
+    name: Publish @leadbay/mcp to npm
+    needs: preflight-npm
+    if: |
+      startsWith(github.ref, 'refs/tags/mcp-v') ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.package == 'mcp')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          always-auth: true
+      - name: Install
         run: pnpm install --frozen-lockfile
-
-      - name: Build all packages
+      - name: Build
         run: pnpm -r build
-
-      - name: Run unit tests
+      - name: Test
         run: pnpm -r test
 
-      - name: Verify tag matches package version
+      - name: Verify tag matches packages/mcp/package.json version
         if: github.event_name == 'push'
         run: |
-          TAG="${GITHUB_REF#refs/tags/v}"
+          set -euo pipefail
+          REF="${GITHUB_REF#refs/tags/}"
+          # Strip either "mcp-v" or plain "v" prefix.
+          TAG="${REF#mcp-v}"
+          TAG="${TAG#v}"
           PKG_VERSION=$(node -p "require('./packages/mcp/package.json').version")
           if [ "$TAG" != "$PKG_VERSION" ]; then
-            echo "Tag v$TAG does not match packages/mcp/package.json version $PKG_VERSION"
+            echo "Tag $REF → version $TAG does not match packages/mcp/package.json $PKG_VERSION"
             exit 1
           fi
-          echo "Tag matches: v$TAG = $PKG_VERSION"
+          echo "Aligned: $REF = $PKG_VERSION"
 
-      - name: Publish @leadbay/mcp
+      - name: Publish
         working-directory: packages/mcp
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
@@ -80,3 +109,77 @@ jobs:
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-leadclaw:
+    name: Publish @leadbay/leadclaw to npm + ClawHub
+    needs: preflight-npm
+    if: |
+      startsWith(github.ref, 'refs/tags/leadclaw-v') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.package == 'leadclaw')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          always-auth: true
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm -r build
+      - name: Test
+        run: pnpm -r test
+
+      - name: Verify tag ↔ package.json ↔ openclaw.plugin.json version agreement
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/leadclaw-v}"
+          PKG=$(node -p "require('./packages/leadclaw/package.json').version")
+          MAN=$(node -p "require('./packages/leadclaw/openclaw.plugin.json').version")
+          if [ "$TAG" != "$PKG" ] || [ "$PKG" != "$MAN" ]; then
+            echo "Version drift: tag=$TAG pkg=$PKG manifest=$MAN — bump all three to match"
+            exit 1
+          fi
+          echo "Aligned: $TAG = $PKG = $MAN"
+
+      - name: Publish to npm
+        working-directory: packages/leadclaw
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            npm publish --access public --provenance --dry-run
+          else
+            npm publish --access public --provenance
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install ClawHub CLI
+        if: github.event.inputs.dry_run != 'true'
+        run: npm i -g clawhub@^0.9
+
+      - name: Authenticate ClawHub
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          CLAWHUB_TOKEN: ${{ secrets.CLAWHUB_TOKEN }}
+        run: clawhub login --token "$CLAWHUB_TOKEN" --no-browser
+
+      - name: Publish to ClawHub
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./packages/leadclaw/package.json').version")
+          clawhub package publish packages/leadclaw \
+            --version "$VERSION" \
+            --source-repo "$GITHUB_REPOSITORY" \
+            --source-commit "$GITHUB_SHA" \
+            --source-ref "${GITHUB_REF_NAME}" \
+            --source-path packages/leadclaw \
+            --tags latest

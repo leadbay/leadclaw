@@ -10,6 +10,7 @@
     "dist/",
     "README.md",
     "MIGRATION.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "publishConfig": {
@@ -20,7 +21,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0"
@@ -41,5 +42,15 @@
     "claude-desktop",
     "cursor"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leadbay/leadclaw.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/leadbay/leadclaw/issues"
+  },
+  "homepage": "https://github.com/leadbay/leadclaw/tree/main/packages/mcp#readme",
+  "author": "Leadbay",
   "license": "MIT"
 }
