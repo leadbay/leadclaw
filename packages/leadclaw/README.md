@@ -78,8 +78,8 @@ The canonical tool list + schemas live in [`openclaw.plugin.json`](./openclaw.pl
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | Plugin loads but agent sees no Leadbay tools | `token` missing and no login step taken | Have the agent call `leadbay_login`, or pre-set `token` in the plugin config |
-| `Authentication token expired or invalid` | Token revoked or wrong region | Mint a new token at [app.leadbay.ai](https://app.leadbay.ai); verify `region` matches your account |
-| `No enrichment credits remaining` | Out of quota | Buy credits at [app.leadbay.ai](https://app.leadbay.ai) |
+| `Authentication token expired or invalid` | Token revoked or wrong region | Have the agent call `leadbay_login` to mint a fresh token; verify `region` matches your account |
+| `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Agent keeps picking granular tools over composites | `exposeGranular: true` set | Flip to `false`; the composites are usually what you want |
 | Write tool "not found" | `exposeWrite: false` (default) | Set `exposeWrite: true` after explicitly opting in |
 

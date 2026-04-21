@@ -352,7 +352,7 @@ export class LeadbayClient {
       throw this.makeError(
         "NOT_AUTHENTICATED",
         "Not logged in to Leadbay",
-        "Set LEADBAY_TOKEN env var (obtain token at https://app.leadbay.ai/settings/api-tokens), or use the OpenClaw leadbay_login tool",
+        "Set LEADBAY_TOKEN in your MCP client config, or run: npx -y @leadbay/mcp install --email <you> --region <us|fr>",
         path
       );
     }
@@ -403,7 +403,7 @@ export class LeadbayClient {
       throw this.makeError(
         "NOT_AUTHENTICATED",
         "Not logged in to Leadbay",
-        "Set LEADBAY_TOKEN env var (obtain token at https://app.leadbay.ai/settings/api-tokens), or use the OpenClaw leadbay_login tool",
+        "Set LEADBAY_TOKEN in your MCP client config, or run: npx -y @leadbay/mcp install --email <you> --region <us|fr>",
         path
       );
     }
@@ -487,7 +487,7 @@ export class LeadbayClient {
       return this.makeError(
         "AUTH_EXPIRED",
         "Authentication token expired or invalid",
-        "Your LEADBAY_TOKEN is no longer valid. Regenerate at https://app.leadbay.ai/settings/api-tokens and restart.",
+        "Your LEADBAY_TOKEN is no longer valid. Regenerate it: npx -y @leadbay/mcp login --email <you> --region <us|fr>, then restart your MCP client.",
         endpoint
       );
     }
@@ -519,14 +519,14 @@ export class LeadbayClient {
         return this.makeError(
           "BILLING_SUSPENDED",
           "Account billing is suspended",
-          "Your Leadbay account billing is suspended. Update at https://app.leadbay.ai",
+          "Your Leadbay account billing is suspended. Contact Leadbay support.",
           endpoint
         );
       }
       return this.makeError(
         "FORBIDDEN",
         "Insufficient permissions",
-        "Your token does not have access to this resource. Check account permissions at https://app.leadbay.ai",
+        "Your token does not have access to this resource. Contact Leadbay support to verify account permissions.",
         endpoint
       );
     }

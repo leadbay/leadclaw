@@ -1,5 +1,15 @@
 # Changelog — @leadbay/mcp
 
+## 0.2.2 — 2026-04-21
+
+Bug fix + contract correction release.
+
+- **Fix [product#3504](https://github.com/leadbay/product/issues/3504)**: `npx -y @leadbay/mcp` no longer exits silently on Node 25. The `isEntrypoint` check now resolves both sides through `realpathSync`, so the npx shim symlink path matches the real `dist/bin.js`. Previously `main()` never ran under npx and the MCP host saw a dead connection with no diagnostic.
+- Replaced stale `app.leadbay.ai` URLs in error strings (NOT_AUTHENTICATED, AUTH_INVALID, BILLING_SUSPENDED, PERMISSION_DENIED) and CLI help text with runnable commands (`leadbay-mcp install`, `leadbay-mcp login`) or "contact support".
+- Renamed misleading `avg_score_0_to_10` field on `pull_leads` / `bulk_qualify_leads` qualification summaries to `avg_qualification_boost`. Per-question AI agent scores are discrete boosts (-10/0/10/20), not 0-10 averages — interface JSDoc now reflects the real contract.
+- New regression test `test/smoke/npx-entrypoint.test.ts` guards the symlink invocation path.
+- Live smoke harness extended with composite-level checks + (optional) thinking-model judge that writes a redacted report to `.context/`.
+
 ## 0.2.1 — 2026-04-21
 
 Docs-only release.

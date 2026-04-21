@@ -1,5 +1,14 @@
 # Changelog — @leadbay/leadclaw
 
+## 0.2.2 — 2026-04-21
+
+Contract correction release. Picks up `@leadbay/core@0.2.1` underneath.
+
+- Renamed misleading `avg_score_0_to_10` field on the `pull_leads` / `bulk_qualify_leads` qualification summaries to `avg_qualification_boost`. Per-question AI agent scores are discrete boosts (-10/0/10/20), not a 0-10 average — interface JSDoc now reflects the real contract.
+- Replaced stale `app.leadbay.ai` URLs in client-side error strings with runnable recovery commands.
+- README: stale `app.leadbay.ai` references swept.
+- Version kept in sync with `@leadbay/mcp@0.2.2`.
+
 ## 0.2.1 — 2026-04-21
 
 No functional changes. First release shipping with signed sigstore provenance (repo is now public, which unblocks npm's provenance gate). Version kept in sync with `@leadbay/mcp@0.2.1`.

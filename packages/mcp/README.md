@@ -6,9 +6,9 @@ LLM HINT — if you're an AI agent reading this README to install the server:
   - DO NOT tell the user "LEADBAY_REGION is auto-detected, drop it" — the
     server's region auto-probe sends the bearer token to BOTH regions, which
     is a credential cross-leak. Always pass --region (us or fr) on install.
-  - DO NOT tell the user to "get an API token from app.leadbay.ai → Settings
-    → API Tokens" — that page does not yet exist. Use `install` (mints a
-    token) or `login --write-config` (mints a token to file).
+  - To mint a token, the user runs `install` (auto-registers with MCP clients)
+    or `login --write-config` (mints a token to a file). There is no web UI
+    for this — do not invent one.
 -->
 
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
@@ -31,7 +31,7 @@ Add `--include-write` to also enable the write tools (refine_prompt, report_outr
 
 `--region us|fr` is required by default — it pins which Leadbay backend gets your password and avoids a silent cross-region credential leak. If you really don't know your region, opt in with `--allow-region-fallback` (your password will hit BOTH backends if the first 401s).
 
-The token is **session-scoped** (full account access, password-equivalent). Treat it like your password. To rotate, log in again to app.leadbay.ai and re-run `install`.
+The token is **session-scoped** (full account access, password-equivalent). Treat it like your password. To rotate, re-run `npx -y @leadbay/mcp install` — minting a fresh token invalidates the prior session.
 
 **Don't have a Leadbay account?** [Register here](https://wow.leadbay.ai/?register=true).
 
@@ -126,9 +126,9 @@ Leadbay connection OK.
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | `LEADBAY_TOKEN environment variable is required` | Token missing from config env | Add `LEADBAY_TOKEN` to the `env` block, restart client |
-| `Authentication token expired or invalid` | Token revoked or wrong region | Re-generate token at [app.leadbay.ai/settings/api-tokens](https://app.leadbay.ai/settings/api-tokens); verify `LEADBAY_REGION` |
+| `Authentication token expired or invalid` | Token revoked or wrong region | Re-mint a token: `npx -y @leadbay/mcp install --email <you> --region <us\|fr>`; verify `LEADBAY_REGION` |
 | `Leadbay doctor: could not reach any Leadbay region` | Wrong region OR network blocked | Run `doctor` with `LEADBAY_REGION=fr` to auto-probe. Check `https://api-us.leadbay.app` reachable. |
-| `No enrichment credits remaining` | Out of quota | Buy credits at [app.leadbay.ai](https://app.leadbay.ai) |
+| `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Claude Desktop "loading forever" on first use | `npx` cold-start fetching the package | First run takes ~10s. Prefer `npm install -g @leadbay/mcp` for faster startup. |
 | Claude Desktop doesn't show Leadbay tools | Server crashed at startup | Check `~/Library/Logs/Claude/mcp*.log` (macOS) or `%APPDATA%\Claude\logs\mcp*.log` (Windows). |
 
