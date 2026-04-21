@@ -103,9 +103,9 @@ jobs:
         working-directory: packages/mcp
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            npm publish --access public --provenance --dry-run
+            npm publish --access public --dry-run
           else
-            npm publish --access public --provenance
+            npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -154,9 +154,9 @@ jobs:
         working-directory: packages/leadclaw
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            npm publish --access public --provenance --dry-run
+            npm publish --access public --dry-run
           else
-            npm publish --access public --provenance
+            npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
