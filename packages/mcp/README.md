@@ -1,5 +1,13 @@
 # @leadbay/mcp — Leadbay MCP server
 
+<!-- PRE-RELEASE-BANNER: remove this block after the first npm publish lands -->
+> ⚠️ **Pre-release notice**: this package is not yet on npm. Until the first
+> publish lands, the `npx -y @leadbay/mcp@0.2 …` commands below will 404.
+> Maintainer: see [§7 — For maintainers — publishing](#7-for-maintainers--publishing)
+> or just push a `v0.2.0` git tag (the `release-mcp` GitHub Action will publish).
+> Remove this banner after the first publish succeeds.
+<!-- /PRE-RELEASE-BANNER -->
+
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
 
 ## 1. Install (one command)
@@ -179,7 +187,28 @@ Contact data fetched through this server stays local to your MCP client session.
 
 ## 7. For maintainers — publishing
 
-This package is published to npm under `@leadbay/mcp`. **Until the first publish lands, `npx -y @leadbay/mcp@0.2 install …` will fail with a 404 — the install instructions in §1 assume the package is on the registry.** To cut a release:
+This package is published to npm under `@leadbay/mcp`. **Until the first publish lands, `npx -y @leadbay/mcp@0.2 install …` will fail with a 404 — the install instructions in §1 assume the package is on the registry.**
+
+### Recommended: tag → CI auto-publish
+
+The `release-mcp` GitHub Action (`.github/workflows/release.yml`) publishes to npm whenever a tag matching `v*.*.*` is pushed:
+
+```bash
+# (one-time) generate an npm Automation token at npmjs.com → tokens
+# and add it as the GitHub Actions secret NPM_TOKEN.
+
+# Each release:
+git checkout main && git pull
+# bump packages/mcp/package.json version, commit, push
+git tag v0.2.0 && git push --tags
+# CI runs build + tests + npm publish --access public --provenance
+```
+
+The workflow verifies that the tag matches `packages/mcp/package.json` `version`, so a stale tag won't ship the wrong build.
+
+### Manual fallback
+
+If you'd rather publish from your laptop:
 
 ```bash
 cd packages/mcp
@@ -188,7 +217,7 @@ pnpm build                      # tsup bundles @leadbay/core into dist/bin.js
 npm publish --access public     # @leadbay/* is a scoped package
 ```
 
-`prepublishOnly` re-runs `tsup` automatically so the published tarball always matches `src/`. The first publish must use `--access public` (already pinned in `publishConfig`).
+`prepublishOnly` re-runs `tsup` automatically so the published tarball always matches `src/`. The first publish must use `--access public` (already pinned in `publishConfig`). Once the first publish succeeds, remove the pre-release banner at the top of this README.
 
 ## License
 

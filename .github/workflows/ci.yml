@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Unit tests
+        run: pnpm -r test
+        # Smoke tests are NOT run here — they require a live LEADBAY_TEST_TOKEN
+        # against a dedicated tenant. Run them manually or in a separate
+        # nightly workflow with the secret bound.
+
+      - name: Verify packed tarball is publishable
+        working-directory: packages/mcp
+        run: npm pack --dry-run
