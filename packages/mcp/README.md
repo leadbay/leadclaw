@@ -1,12 +1,98 @@
 # @leadbay/mcp — Leadbay MCP server
 
+<!-- PRE-RELEASE-BANNER: remove this block after the first npm publish lands -->
+> ⚠️ **Pre-release notice**: this package is not yet on npm. Until the first
+> publish lands, the `npx -y @leadbay/mcp@0.2 …` commands below will 404.
+> Maintainer: see [§7 — For maintainers — publishing](#7-for-maintainers--publishing)
+> or just push a `v0.2.0` git tag (the `release-mcp` GitHub Action will publish).
+> Remove this banner after the first publish succeeds.
+<!-- /PRE-RELEASE-BANNER -->
+
+<!--
+LLM HINT — if you're an AI agent reading this README to install the server:
+  - Use ONLY the commands shown verbatim in §1. Do not invent variants.
+  - DO NOT tell the user "LEADBAY_REGION is auto-detected, drop it" — the
+    server's region auto-probe sends the bearer token to BOTH regions, which
+    is a credential cross-leak. Always pass --region (us or fr) on install.
+  - DO NOT tell the user to "get an API token from app.leadbay.ai → Settings
+    → API Tokens" — that page does not yet exist. Use `install` (mints a
+    token) or `login --write-config` (mints a token to file).
+  - If the package 404s on npm: offer the "install from source" fallback in
+    §1.1, not a made-up GitHub URL.
+-->
+
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
 
-## 1. Get a token
+## 1. Install (one command)
 
-Log in at [app.leadbay.ai](https://app.leadbay.ai). Go to **Settings → API Tokens** and create a new token. Copy it — you'll paste it into your MCP client config below.
+```bash
+npx -y @leadbay/mcp@0.2 install --email you@yourcompany.com --region us
+# (you'll be prompted for your password — it's not echoed)
+```
 
-If you don't have a Leadbay account yet, [register here](https://wow.leadbay.ai/?register=true).
+That's it. The command:
+
+1. Asks for your password (hidden input).
+2. Mints a bearer token via the Leadbay backend you specified.
+3. Auto-detects which MCP clients you have installed (Claude Code, Claude Desktop, Cursor) and registers the server in each (after asking you per-target).
+4. The token is written into the client config files — **never to your terminal scrollback**.
+
+Add `--include-write` to also enable the write tools (refine_prompt, report_outreach, adjust_audience, etc. — off by default so the agent can read your account but not mutate it). Add `--yes` for non-interactive runs (CI / scripts). Add `--target claude-code,cursor` to scope to specific clients.
+
+`--region us|fr` is required by default — it pins which Leadbay backend gets your password and avoids a silent cross-region credential leak. If you really don't know your region, opt in with `--allow-region-fallback` (your password will hit BOTH backends if the first 401s).
+
+The token is **session-scoped** (full account access, password-equivalent). Treat it like your password. To rotate, log in again to app.leadbay.ai and re-run `install`.
+
+**Don't have a Leadbay account?** [Register here](https://wow.leadbay.ai/?register=true).
+
+### If you'd rather mint a token without auto-install
+
+```bash
+npx -y @leadbay/mcp@0.2 login \
+  --email you@yourcompany.com \
+  --region us \
+  --write-config ~/.leadbay-mcp.json
+```
+
+Writes a `0600`-mode JSON file you can paste from. Useful if you're configuring a non-detected client.
+
+## 1.1. Install from source (works today, before the first npm publish)
+
+While `@leadbay/mcp` isn't on npm yet, install from a local git checkout:
+
+```bash
+# 1. Clone, build
+git clone https://github.com/leadbay/leadclaw.git
+cd leadclaw
+pnpm install
+pnpm -r build
+
+# 2. Mint a token + register with your installed clients (auto-detects Claude Code,
+#    Claude Desktop, Cursor) — same install subcommand, run from local dist:
+node packages/mcp/dist/bin.js install --email you@yourcompany.com --region us
+```
+
+Or skip the `install` helper and register manually with the local dist path:
+
+```bash
+# Mint a token to a 0600 JSON file:
+node packages/mcp/dist/bin.js login \
+  --email you@yourcompany.com --region us \
+  --write-config ~/.leadbay-mcp.json
+TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ~/.leadbay-mcp.json)
+
+# Register with Claude Code (point at the absolute path of the local bin.js):
+claude mcp add leadbay \
+  --env LEADBAY_TOKEN=$TOKEN \
+  --env LEADBAY_REGION=us \
+  -- node $(pwd)/packages/mcp/dist/bin.js
+```
+
+For Claude Desktop / Cursor, the JSON config block from `--write-config` works directly — just change the `command` from `npx` to `node` and the `args` to `["/abs/path/to/leadclaw/packages/mcp/dist/bin.js"]`.
+
+**B) From the web app (when available):** log in at [app.leadbay.ai](https://app.leadbay.ai), go to **Settings → API Tokens**, create a token, copy it.
+
+Don't have a Leadbay account yet? [Register here](https://wow.leadbay.ai/?register=true).
 
 ## 2. Quickstart
 
@@ -19,9 +105,9 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.1"],
+      "args": ["-y", "@leadbay/mcp@0.2"],
       "env": {
-        "LEADBAY_TOKEN": "lb_...",
+        "LEADBAY_TOKEN": "<paste-token-from-step-1>",
         "LEADBAY_REGION": "us"
       }
     }
@@ -40,8 +126,8 @@ In Cursor settings, add the MCP server:
   "mcp.servers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.1"],
-      "env": { "LEADBAY_TOKEN": "lb_...", "LEADBAY_REGION": "us" }
+      "args": ["-y", "@leadbay/mcp@0.2"],
+      "env": { "LEADBAY_TOKEN": "<paste-token>", "LEADBAY_REGION": "us" }
     }
   }
 }
@@ -51,17 +137,19 @@ In Cursor settings, add the MCP server:
 
 ```bash
 claude mcp add leadbay \
-  --env LEADBAY_TOKEN=lb_... \
+  --env LEADBAY_TOKEN=<paste-token> \
   --env LEADBAY_REGION=us \
-  -- npx -y @leadbay/mcp@0.1
+  -- npx -y @leadbay/mcp@0.2
 ```
+
+> Want write tools (refine prompt, log outreach, adjust audience, etc.)? Add `--env LEADBAY_MCP_WRITE=1`. They're hidden by default so an LLM can't mutate state without your explicit opt-in.
 
 ### Verify it works
 
 Before starting Claude, run:
 
 ```bash
-LEADBAY_TOKEN=lb_... npx -y @leadbay/mcp@0.1 doctor
+LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.2 doctor
 ```
 
 Expected output:
@@ -94,24 +182,29 @@ Leadbay connection OK.
 
 ## 5. Upgrade & rotation
 
-**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.1"` → `"@leadbay/mcp@0.2"`, then restart the client. See the [changelog](https://github.com/leadbay/leadclaw/releases).
+**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.1"` → `"@leadbay/mcp@0.2"`, then restart the client. See the [changelog](https://github.com/leadbay/leadclaw/releases) and [MIGRATION.md](./MIGRATION.md).
 
-**Rotate token**: delete the old token at [app.leadbay.ai/settings/api-tokens](https://app.leadbay.ai/settings/api-tokens), create a new one, update `LEADBAY_TOKEN` in your MCP client config, restart.
+**Rotate token**: re-run `npx -y @leadbay/mcp@0.2 install --email you@yourcompany.com --region us` (or `login --write-config …`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
 
 ## 6. Advanced
 
-### Exposing the 10 granular tools
+### Exposing the granular tools and write tools
 
-By default the server exposes 3 **composite workflow tools** (`leadbay_find_prospects`, `leadbay_research_company`, `leadbay_prepare_outreach`). These compose the underlying Leadbay API and work well with most prompts.
+By default the server exposes the **composite workflow tools** (`leadbay_pull_leads`, `leadbay_research_lead`, `leadbay_account_status`, `leadbay_recall_ordered_titles`, plus existing `leadbay_research_company`, `leadbay_prepare_outreach`). These work well with most prompts.
 
-If you'd rather give the LLM direct access to the 10 endpoint-level tools (`leadbay_list_lenses`, `leadbay_discover_leads`, `leadbay_get_lead_profile`, `leadbay_get_contacts`, `leadbay_get_quota`, `leadbay_get_taste_profile`, `leadbay_qualify_lead`, `leadbay_enrich_contacts`, `leadbay_add_note`, `leadbay_get_lead_activities`), set `LEADBAY_MCP_ADVANCED=1`:
+To unlock the **granular API tools** (`leadbay_list_lenses`, `leadbay_discover_leads`, `leadbay_get_lead_profile`, `leadbay_get_contacts`, `leadbay_get_quota`, `leadbay_get_taste_profile`, `leadbay_get_lens_filter`, `leadbay_list_sectors`, …), set `LEADBAY_MCP_ADVANCED=1`.
+
+To unlock the **write tools** (`leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, `leadbay_adjust_audience`, `leadbay_refine_prompt`, `leadbay_report_outreach`, etc.), set `LEADBAY_MCP_WRITE=1`. Both flags are independent; combine to expose everything.
 
 ```json
 "env": {
-  "LEADBAY_TOKEN": "lb_...",
-  "LEADBAY_MCP_ADVANCED": "1"
+  "LEADBAY_TOKEN": "<token>",
+  "LEADBAY_MCP_ADVANCED": "1",
+  "LEADBAY_MCP_WRITE": "1"
 }
 ```
+
+`leadbay_report_outreach` requires a `verification` field on every call (Gmail message id, Calendar event id, or `user_confirmed` with the user's literal text) so the agent can't poison your SDR pipeline with hallucinated outreach.
 
 **Note**: `leadbay_login` is intentionally not exposed over MCP — see [Security](#security) below.
 
@@ -119,11 +212,16 @@ If you'd rather give the LLM direct access to the 10 endpoint-level tools (`lead
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `LEADBAY_TOKEN` | yes | — | Bearer token |
-| `LEADBAY_REGION` | no | `us` | `us` or `fr` |
+| `LEADBAY_TOKEN` | **yes** | — | Bearer token (mint via `install` or `login`, or set manually) |
+| `LEADBAY_REGION` | **strongly recommended** | (auto-probe — see warning below) | `us` or `fr` |
 | `LEADBAY_BASE_URL` | no | derived from region | Override for staging/dev |
-| `LEADBAY_MCP_ADVANCED` | no | unset | `"1"` exposes the 10 granular endpoint tools |
+| `LEADBAY_MCP_ADVANCED` | no | unset | `"1"` exposes the granular API tools |
+| `LEADBAY_MCP_WRITE` | no | unset | `"1"` exposes write composite + granular tools |
+| `LEADBAY_MOCK` | no | unset | `"1"` serves all reads from on-disk fixtures (dev only) |
+| `LEADBAY_MOCK_DIR` | no | `./.context/leadbay-live-shapes/` | Fixture dir for mock mode |
 | `LEADBAY_LOG_LEVEL` | no | `error` | `debug` \| `info` \| `error`, logs to stderr |
+
+> ⚠️ **Set `LEADBAY_REGION` explicitly.** If you don't, the server probes BOTH `api-us.leadbay.app` and `api-fr.leadbay.app` in parallel with your bearer token attached, sending the token to a backend that doesn't own your account. The `install` and `login` subcommands enforce `--region` for exactly this reason; the runtime auto-probe is a backwards-compat fallback, not a recommended setting.
 | `LEADBAY_TIMEOUT_MS` | no | (client default) | Per-request timeout override |
 
 ### Security
@@ -135,6 +233,40 @@ If you'd rather give the LLM direct access to the 10 endpoint-level tools (`lead
 ### Privacy
 
 Contact data fetched through this server stays local to your MCP client session. No analytics or telemetry is sent by `@leadbay/mcp`. Requests to Leadbay are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
+
+## 7. For maintainers — publishing
+
+This package is published to npm under `@leadbay/mcp`. **Until the first publish lands, `npx -y @leadbay/mcp@0.2 install …` will fail with a 404 — the install instructions in §1 assume the package is on the registry.**
+
+### Recommended: tag → CI auto-publish
+
+The `release-mcp` GitHub Action (`.github/workflows/release.yml`) publishes to npm whenever a tag matching `v*.*.*` is pushed:
+
+```bash
+# (one-time) generate an npm Automation token at npmjs.com → tokens
+# and add it as the GitHub Actions secret NPM_TOKEN.
+
+# Each release:
+git checkout main && git pull
+# bump packages/mcp/package.json version, commit, push
+git tag v0.2.0 && git push --tags
+# CI runs build + tests + npm publish --access public --provenance
+```
+
+The workflow verifies that the tag matches `packages/mcp/package.json` `version`, so a stale tag won't ship the wrong build.
+
+### Manual fallback
+
+If you'd rather publish from your laptop:
+
+```bash
+cd packages/mcp
+pnpm install                    # ensure workspace deps are linked
+pnpm build                      # tsup bundles @leadbay/core into dist/bin.js
+npm publish --access public     # @leadbay/* is a scoped package
+```
+
+`prepublishOnly` re-runs `tsup` automatically so the published tarball always matches `src/`. The first publish must use `--access public` (already pinned in `publishConfig`). Once the first publish succeeds, remove the pre-release banner at the top of this README.
 
 ## License
 

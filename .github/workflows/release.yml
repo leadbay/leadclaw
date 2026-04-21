@@ -1,0 +1,82 @@
+name: release-mcp
+
+# Publishes @leadbay/mcp to npm when a tag matching v* is pushed
+# (e.g. `git tag v0.2.0 && git push --tags`).
+#
+# One-time setup before the first run:
+#   1. Generate an npm automation token (https://www.npmjs.com/settings/<user>/tokens
+#      → Generate New Token → Automation).
+#   2. Add it as the GitHub Actions secret NPM_TOKEN
+#      (Settings → Secrets and variables → Actions → New repository secret).
+#
+# What this workflow does NOT do:
+#   - Auto-bump versions. Bump packages/mcp/package.json (and core/leadclaw if needed)
+#     in a regular PR, then tag the commit on main once merged.
+#   - Publish @leadbay/leadclaw or @leadbay/core. Add jobs for those if you decide
+#     to ship them on npm too (currently leadclaw distributes through ClawHub
+#     and core is bundled into mcp via tsup).
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    # Lets a maintainer trigger a release manually from the Actions UI
+    # (e.g. for a re-publish without re-tagging).
+    inputs:
+      dry_run:
+        description: "If true, run npm publish --dry-run (no actual publish)"
+        required: false
+        default: "false"
+
+jobs:
+  publish-mcp:
+    name: Publish @leadbay/mcp to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # for npm provenance (optional but recommended)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          # Tells npm to send the auth token only to the npm registry.
+          always-auth: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Run unit tests
+        run: pnpm -r test
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push'
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(node -p "require('./packages/mcp/package.json').version")
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "Tag v$TAG does not match packages/mcp/package.json version $PKG_VERSION"
+            exit 1
+          fi
+          echo "Tag matches: v$TAG = $PKG_VERSION"
+
+      - name: Publish @leadbay/mcp
+        working-directory: packages/mcp
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            npm publish --access public --provenance --dry-run
+          else
+            npm publish --access public --provenance
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
