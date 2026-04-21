@@ -9,9 +9,13 @@
     "dist/",
     "openclaw.plugin.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
     "logo.png"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "openclaw": {
     "extensions": [
       "./dist/index.js"
@@ -31,7 +35,8 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test"
   },
   "devDependencies": {
     "@leadbay/core": "workspace:*"
@@ -39,5 +44,23 @@
   "engines": {
     "node": ">=22"
   },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "leadbay",
+    "lead-generation",
+    "b2b",
+    "sales"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leadbay/leadclaw.git",
+    "directory": "packages/leadclaw"
+  },
+  "bugs": {
+    "url": "https://github.com/leadbay/leadclaw/issues"
+  },
+  "homepage": "https://github.com/leadbay/leadclaw/tree/main/packages/leadclaw#readme",
+  "author": "Leadbay",
   "license": "MIT"
 }

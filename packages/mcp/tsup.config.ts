@@ -1,4 +1,7 @@
 import { defineConfig } from "tsup";
+import { readFileSync } from "node:fs";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 
 // @leadbay/mcp is a CLI-only package. We bundle bin.ts into a single
 // self-contained dist/bin.js. No library surface is exposed to npm
@@ -16,5 +19,8 @@ export default defineConfig({
   target: "es2022",
   banner: {
     js: "#!/usr/bin/env node",
+  },
+  define: {
+    __LEADBAY_MCP_VERSION__: JSON.stringify(pkg.version),
   },
 });
