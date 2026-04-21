@@ -10,7 +10,9 @@ interface GetLeadActivitiesParams {
 export const getLeadActivities: Tool<GetLeadActivitiesParams> = {
   name: "leadbay_get_lead_activities",
   description:
-    "Get prospecting activity history for a lead (emails sent, calls made, status changes, notes). Use this to avoid redundant outreach and understand where this lead is in the sales process.",
+    "Get prospecting activity history for a lead (emails sent, calls made, status changes, notes). " +
+    "When to use: to avoid redundant outreach and understand where this lead is in the sales process. " +
+    "When NOT to use: when leadbay_research_lead has already been called — it includes recent prospecting actions in its engagement block.",
   inputSchema: {
     type: "object",
     properties: {

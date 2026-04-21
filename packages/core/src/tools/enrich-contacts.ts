@@ -12,7 +12,10 @@ interface EnrichContactsParams {
 export const enrichContacts: Tool<EnrichContactsParams> = {
   name: "leadbay_enrich_contacts",
   description:
-    "Order email and/or phone enrichment for a specific contact. The contactId must come from leadbay_get_lead_profile or leadbay_get_contacts — find the contact with recommended=true for the best match. Note: the recommended_contact on lead summaries does NOT include an ID. Enrichment is asynchronous — use leadbay_get_contacts after about 60 seconds to retrieve results.",
+    "Order email and/or phone enrichment for a specific contact. " +
+    "When to use: when you have a specific contact_id (from leadbay_get_contacts) and want to enrich just that one. " +
+    "When NOT to use: for bulk enrichment by job title across many leads — use leadbay_enrich_titles, which handles " +
+    "the selection lifecycle and returns a clean preview/launch flow.",
   optional: true,
   inputSchema: {
     type: "object",

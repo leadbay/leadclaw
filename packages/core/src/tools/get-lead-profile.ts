@@ -16,7 +16,11 @@ interface GetLeadProfileParams {
 export const getLeadProfile: Tool<GetLeadProfileParams> = {
   name: "leadbay_get_lead_profile",
   description:
-    "Get a full lead profile including company details, AI qualification scores, web insights (company profile, business signals, prospecting clues, key people, technologies), and contacts with recommended contact highlighted. Bundles multiple API calls into one response. If some data is unavailable, partial results are still returned.",
+    "Get a full lead profile including company details, AI qualification scores, web insights, and contacts. " +
+    "When to use: low-level — for fine-grained access to the raw shape of the lead profile. " +
+    "When NOT to use: as the agent's default lead-detail tool — use leadbay_research_lead, which structures " +
+    "the data top-down (qualification first, then signals, then firmographics, then contacts, then engagement) " +
+    "and reshapes web_fetch.content into a stable array form.",
   inputSchema: {
     type: "object",
     properties: {

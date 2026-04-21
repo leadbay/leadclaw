@@ -78,6 +78,7 @@ function fakeHttpsRequest(options: any, callback?: (res: any) => void): any {
     }
     const res = new EventEmitter() as any;
     res.statusCode = entry.script.status;
+    res.headers = (entry.script as any).responseHeaders ?? {};
     setImmediate(() => {
       if (callback) callback(res);
       const bodyStr =

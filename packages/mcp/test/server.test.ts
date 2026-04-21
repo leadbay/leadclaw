@@ -19,10 +19,14 @@ const BASE = "https://api-us.leadbay.app";
 
 async function connect(opts: {
   includeAdvanced?: boolean;
+  includeWrite?: boolean;
   client?: LeadbayClient;
 } = {}) {
   const lbClient = opts.client ?? new LeadbayClient(BASE, "u.test-token");
-  const server = buildServer(lbClient, { includeAdvanced: opts.includeAdvanced });
+  const server = buildServer(lbClient, {
+    includeAdvanced: opts.includeAdvanced,
+    includeWrite: opts.includeWrite,
+  });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const mcpClient = new Client({ name: "test", version: "0.0.1" }, {});
   await Promise.all([
@@ -36,17 +40,26 @@ beforeEach(() => {
   resetHttpMock();
 });
 
-describe("tools/list — default (composite only)", () => {
-  it("returns the 3 composite tools with non-empty descriptions", async () => {
+describe("tools/list — default (composite read only)", () => {
+  it("returns the composite read tools with non-empty descriptions", async () => {
     const { mcpClient } = await connect();
     const listed = await mcpClient.listTools();
-    const names = listed.tools.map((t) => t.name).sort();
+    const names = new Set(listed.tools.map((t) => t.name));
 
-    expect(names).toEqual([
-      "leadbay_find_prospects",
-      "leadbay_prepare_outreach",
-      "leadbay_research_company",
-    ]);
+    // v0.2.0: composite reads exposed by default; writes gated by includeWrite.
+    expect(names).toContain("leadbay_pull_leads");
+    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_account_status");
+    expect(names).toContain("leadbay_recall_ordered_titles");
+    // Existing composites (kept for back-compat)
+    expect(names).toContain("leadbay_research_company");
+    expect(names).toContain("leadbay_prepare_outreach");
+    // Write composites must NOT be exposed without includeWrite.
+    expect(names).not.toContain("leadbay_report_outreach");
+    expect(names).not.toContain("leadbay_refine_prompt");
+    expect(names).not.toContain("leadbay_adjust_audience");
+    // find_prospects was removed in v0.2.0 (replaced by pull_leads).
+    expect(names).not.toContain("leadbay_find_prospects");
 
     for (const t of listed.tools) {
       expect(t.description).toBeTypeOf("string");
@@ -68,29 +81,63 @@ describe("tools/list — default (composite only)", () => {
   });
 });
 
-describe("tools/list — advanced mode", () => {
-  it("exposes composite + 10 granular tools when includeAdvanced=true", async () => {
-    const { mcpClient } = await connect({ includeAdvanced: true });
-    const listed = await mcpClient.listTools();
-    const names = listed.tools.map((t) => t.name);
+describe("tools/list — write mode (LEADBAY_MCP_WRITE=1)", () => {
+  it("exposes composite write tools when includeWrite=true", async () => {
+    const { mcpClient } = await connect({ includeWrite: true });
+    const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
+    expect(names).toContain("leadbay_report_outreach");
+    expect(names).toContain("leadbay_refine_prompt");
+    expect(names).toContain("leadbay_answer_clarification");
+    expect(names).toContain("leadbay_adjust_audience");
+    expect(names).toContain("leadbay_bulk_qualify_leads");
+    expect(names).toContain("leadbay_enrich_titles");
+    // Granular writes still gated unless ALSO includeAdvanced.
+    expect(names).not.toContain("leadbay_select_leads");
+  });
+});
 
-    // 3 composite + 10 granular (all 11 minus login)
-    expect(names.length).toBe(13);
-    expect(names).toContain("leadbay_find_prospects");
+describe("tools/list — advanced mode", () => {
+  it("exposes composite reads + granular reads when includeAdvanced only", async () => {
+    const { mcpClient } = await connect({ includeAdvanced: true });
+    const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
+    expect(names).toContain("leadbay_pull_leads");
     expect(names).toContain("leadbay_list_lenses");
     expect(names).toContain("leadbay_discover_leads");
-    expect(names).not.toContain("leadbay_login"); // still gated for security
+    expect(names).toContain("leadbay_get_lens_filter");
+    expect(names).not.toContain("leadbay_login");
+    // Writes still gated.
+    expect(names).not.toContain("leadbay_select_leads");
+    expect(names).not.toContain("leadbay_report_outreach");
+  });
+
+  it("exposes everything except login when includeAdvanced+includeWrite", async () => {
+    const { mcpClient } = await connect({
+      includeAdvanced: true,
+      includeWrite: true,
+    });
+    const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
+    expect(names).toContain("leadbay_pull_leads");
+    expect(names).toContain("leadbay_select_leads");
+    expect(names).toContain("leadbay_set_user_prompt");
+    expect(names).toContain("leadbay_launch_bulk_enrichment");
+    expect(names).toContain("leadbay_report_outreach");
+    expect(names).not.toContain("leadbay_login");
   });
 });
 
 describe("tools/call — composite round-trip", () => {
-  it("leadbay_find_prospects returns leads via mocked HTTP", async () => {
+  it("leadbay_pull_leads returns leads via mocked HTTP", async () => {
     mockHttp([
+      // resolveDefaultLens → /me first
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.5/users/me",
         status: 200,
-        body: [{ id: 42, name: "X", is_last_active: true }],
+        body: {
+          id: "u",
+          organization: { id: "org-1", name: "X" },
+          last_requested_lens: 42,
+        },
       },
       {
         method: "GET",
@@ -108,22 +155,34 @@ describe("tools/call — composite round-trip", () => {
               size: null,
               website: "acme.com",
               contacts_count: 0,
-              ai_summary: "good",
-              split_ai_summary: null,
+              org_contacts_count: 0,
               tags: [],
               phone_numbers: [],
               keywords: [],
               recommended_contact_title: null,
               recommended_contact: null,
+              liked: false,
+              disliked: false,
             },
           ],
           pagination: { page: 0, pages: 1, total: 1 },
+          computing_wishlist: false,
+          computing_scores: false,
         },
+      },
+      // qualification fan-out (1 lead)
+      {
+        method: "GET",
+        path: "/1.5/leads/lead-1/ai_agent_responses",
+        status: 200,
+        body: [
+          { question: "Q1", question_created_at: "2026-04-20T00:00:00Z", lead_id: "lead-1", score: 8, response: "good fit", computed_at: "2026-04-20T00:00:00Z" },
+        ],
       },
     ]);
     const { mcpClient } = await connect();
     const result = await mcpClient.callTool({
-      name: "leadbay_find_prospects",
+      name: "leadbay_pull_leads",
       arguments: { count: 10 },
     });
     expect(result.isError).toBeFalsy();
@@ -132,6 +191,7 @@ describe("tools/call — composite round-trip", () => {
     const parsed = JSON.parse(text);
     expect(parsed.leads).toHaveLength(1);
     expect(parsed.leads[0].name).toBe("Acme");
+    expect(parsed.leads[0].qualification_summary).toBeDefined();
   });
 });
 
@@ -149,6 +209,14 @@ describe("tools/call — error envelopes", () => {
 
   it("AUTH_EXPIRED from client surfaces as isError:true with fix instructions", async () => {
     mockHttp([
+      // pull_leads → resolveDefaultLens → /me first
+      {
+        method: "GET",
+        path: "/1.5/users/me",
+        status: 401,
+        body: { message: "expired" },
+      },
+      // Fallback to /lenses scan after /me 401 — also 401.
       {
         method: "GET",
         path: "/1.5/lenses",
@@ -158,12 +226,11 @@ describe("tools/call — error envelopes", () => {
     ]);
     const { mcpClient } = await connect();
     const result = await mcpClient.callTool({
-      name: "leadbay_find_prospects",
+      name: "leadbay_pull_leads",
       arguments: {},
     });
     expect(result.isError).toBe(true);
     const content = result.content as any[];
-    // Hint text should reach the user via the LLM verbatim
     expect(content[0].text).toMatch(/authentication token expired/i);
     expect(content[0].text).toMatch(/Regenerate/);
   });
@@ -185,12 +252,19 @@ describe("tools/call — error envelopes", () => {
 });
 
 describe("server.instructions — LLM guidance string", () => {
-  it("buildServer includes a flow-guidance string", async () => {
+  it("buildServer leads with the report_outreach mandate (cross-phase critical)", async () => {
     const { SERVER_INSTRUCTIONS } = await import("../src/server.js");
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_find_prospects/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_research_company/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_prepare_outreach/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/LEADBAY_MCP_ADVANCED/);
+    // First sentence MUST be the verification mandate so the model retains it.
+    expect(SERVER_INSTRUCTIONS.slice(0, 200)).toMatch(/report_outreach/i);
+    expect(SERVER_INSTRUCTIONS).toMatch(/verification/i);
+    expect(SERVER_INSTRUCTIONS).toMatch(/gmail_message_id|calendar_event_id|user_confirmed/);
+  });
+
+  it("server instructions reference the new composite agent flow", async () => {
+    const { SERVER_INSTRUCTIONS } = await import("../src/server.js");
+    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_pull_leads/);
+    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_research_lead/);
+    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_account_status/);
   });
 });
 

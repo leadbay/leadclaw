@@ -1,5 +1,11 @@
 /**
  * Tests for the login tool (protocol-agnostic Tool shape).
+ *
+ * v0.2.0 (post-autoplan): login uses resolveRegion() which tries us first,
+ * then fr. The mock harness matches by method+path, so a single login script
+ * matches the first attempt; if you want to test the FR-fallback path,
+ * register two consecutive scripts (the first one is consumed by us, the
+ * second by fr).
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -44,11 +50,11 @@ describe("leadbay_login — password unescape", () => {
           method: "POST",
           path: "/1.5/auth/login",
           status: 200,
-          body: { token: "u.new-token" },
+          body: { token: "u.new-token", verified: true },
         },
         { method: "GET", path: /\/1\.5\/users\/me/, status: 404, body: {} },
       ]);
-      const client = new LeadbayClient(BASE);
+      const client = new LeadbayClient(BASE, undefined, "us");
       const { logger } = createLogger();
 
       await login.execute(
@@ -65,18 +71,18 @@ describe("leadbay_login — password unescape", () => {
   );
 });
 
-describe("leadbay_login — status path handling", () => {
-  it("200 response sets token on client and returns success", async () => {
+describe("leadbay_login — region auto-detect + status handling", () => {
+  it("200 on US first try → success, region=us", async () => {
     mockHttp([
       {
         method: "POST",
         path: "/1.5/auth/login",
         status: 200,
-        body: { token: "u.abc123" },
+        body: { token: "u.abc123", verified: true },
       },
       { method: "GET", path: /users\/me/, status: 404, body: {} },
     ]);
-    const client = new LeadbayClient(BASE);
+    const client = new LeadbayClient(BASE, undefined, "us");
     const { logger } = createLogger();
 
     const result: any = await login.execute(
@@ -85,14 +91,47 @@ describe("leadbay_login — status path handling", () => {
       { logger }
     );
 
-    expect(result).toEqual({
-      success: true,
-      message: "Logged in to Leadbay successfully",
-    });
+    expect(result.success).toBe(true);
+    expect(result.region).toBe("us");
+    expect(result.verified).toBe(true);
+    expect(result.message).toMatch(/Logged in to Leadbay/i);
     expect(client.isAuthenticated).toBe(true);
   });
 
-  it("401 returns LOGIN_FAILED (does NOT throw)", async () => {
+  it("401 on US, 200 on FR → success, region=fr (auto-fallback)", async () => {
+    mockHttp([
+      // First attempt: us → 401
+      {
+        method: "POST",
+        path: "/1.5/auth/login",
+        status: 401,
+        body: { message: "wrong region" },
+      },
+      // Second attempt: fr → 200
+      {
+        method: "POST",
+        path: "/1.5/auth/login",
+        status: 200,
+        body: { token: "u.fr-token", verified: true },
+      },
+      { method: "GET", path: /users\/me/, status: 404, body: {} },
+    ]);
+    const client = new LeadbayClient(BASE, undefined, "us");
+    const { logger } = createLogger();
+
+    const result: any = await login.execute(
+      client,
+      { email: "a@b.com", password: "secret" },
+      { logger }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.region).toBe("fr");
+    expect(client.isAuthenticated).toBe(true);
+    expect(client.region).toBe("fr");
+  });
+
+  it("401 on both regions returns LOGIN_FAILED", async () => {
     mockHttp([
       {
         method: "POST",
@@ -100,8 +139,14 @@ describe("leadbay_login — status path handling", () => {
         status: 401,
         body: { message: "bad credentials" },
       },
+      {
+        method: "POST",
+        path: "/1.5/auth/login",
+        status: 401,
+        body: { message: "bad credentials" },
+      },
     ]);
-    const client = new LeadbayClient(BASE);
+    const client = new LeadbayClient(BASE, undefined, "us");
     const { logger } = createLogger();
 
     const result: any = await login.execute(
@@ -113,12 +158,12 @@ describe("leadbay_login — status path handling", () => {
     expect(result).toMatchObject({
       error: true,
       code: "LOGIN_FAILED",
-      message: "bad credentials",
     });
+    expect(result.message).toMatch(/both regions/i);
     expect(client.isAuthenticated).toBe(false);
   });
 
-  it("network error returns NETWORK_ERROR", async () => {
+  it("network error on both regions returns LOGIN_FAILED", async () => {
     mockHttp([
       {
         method: "POST",
@@ -126,8 +171,14 @@ describe("leadbay_login — status path handling", () => {
         status: 0,
         error: new Error("ECONNREFUSED"),
       },
+      {
+        method: "POST",
+        path: "/1.5/auth/login",
+        status: 0,
+        error: new Error("ECONNREFUSED"),
+      },
     ]);
-    const client = new LeadbayClient(BASE);
+    const client = new LeadbayClient(BASE, undefined, "us");
     const { logger } = createLogger();
 
     const result: any = await login.execute(
@@ -136,11 +187,8 @@ describe("leadbay_login — status path handling", () => {
       { logger }
     );
 
-    expect(result).toMatchObject({
-      error: true,
-      code: "NETWORK_ERROR",
-    });
-    expect(result.message).toContain("ECONNREFUSED");
+    expect(result.error).toBe(true);
+    expect(result.code).toBe("LOGIN_FAILED");
   });
 
   it("prefetchOrgData rejection is swallowed (fire-and-forget)", async () => {
@@ -149,11 +197,11 @@ describe("leadbay_login — status path handling", () => {
         method: "POST",
         path: "/1.5/auth/login",
         status: 200,
-        body: { token: "u.abc" },
+        body: { token: "u.abc", verified: true },
       },
       { method: "GET", path: /users\/me/, status: 500, body: {} },
     ]);
-    const client = new LeadbayClient(BASE);
+    const client = new LeadbayClient(BASE, undefined, "us");
     const { logger } = createLogger();
 
     const result: any = await login.execute(
@@ -166,7 +214,7 @@ describe("leadbay_login — status path handling", () => {
     await new Promise((r) => setImmediate(r));
   });
 
-  it("logger.info and logger.error are invoked with descriptive messages", async () => {
+  it("logger.info / logger.error are invoked with descriptive messages on failure", async () => {
     mockHttp([
       {
         method: "POST",
@@ -174,8 +222,14 @@ describe("leadbay_login — status path handling", () => {
         status: 401,
         body: { message: "bad" },
       },
+      {
+        method: "POST",
+        path: "/1.5/auth/login",
+        status: 401,
+        body: { message: "bad" },
+      },
     ]);
-    const client = new LeadbayClient(BASE);
+    const client = new LeadbayClient(BASE, undefined, "us");
     const { logger, logs } = createLogger();
 
     await login.execute(
@@ -184,7 +238,9 @@ describe("leadbay_login — status path handling", () => {
       { logger }
     );
 
-    expect(logs.some((l) => l.level === "info" && /login: email=/.test(l.msg))).toBe(true);
+    expect(
+      logs.some((l) => l.level === "info" && /startRegion/.test(l.msg))
+    ).toBe(true);
     expect(logs.some((l) => l.level === "error")).toBe(true);
   });
 });

@@ -1,33 +1,53 @@
 // All interfaces use snake_case to match the Leadbay API (JsonNamingStrategy.SnakeCase)
 import type { LeadbayClient } from "./client.js";
 
+// Metadata propagated through every request — composites and the MCP error
+// formatter use this so the agent can see WHICH region the call hit, what
+// endpoint, how long it took, and (on 429) when to retry. There is no
+// request-id header on the Leadbay backend (probed 2026-04-20), so we don't
+// pretend there is one.
+export interface RequestMeta {
+  region: "us" | "fr" | "custom";
+  endpoint: string;
+  latency_ms: number | null;
+  retry_after: number | null;
+}
+
 export interface LeadbayError {
   error: true;
   code: string;
   message: string;
   hint: string;
+  _meta?: RequestMeta;
 }
 
 export interface LensPayload {
   id: number;
   name: string;
-  description: string | null;
-  is_last_active: boolean;
+  description?: string | null;
+  user_id?: string | null;
+  is_last_active?: boolean;
   is_default?: boolean;
+  default?: boolean;
+  draft_of?: number | null;
+  multi_product_mode?: boolean;
+  use_hq_only?: boolean;
 }
 
 export interface LocationPayload {
-  city: string | null;
-  state: string | null;
-  country: string | null;
-  full: string | null;
-  pos: [number, number] | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  full?: string | null;
+  pos?: [number, number] | null;
 }
 
 export interface SizePayload {
-  low: number | null;
-  high: number | null;
-  label: string | null;
+  low?: number | null;
+  high?: number | null;
+  min?: number | null;
+  max?: number | null;
+  label?: string | null;
 }
 
 export interface SplitAiSummary {
@@ -36,9 +56,12 @@ export interface SplitAiSummary {
   next_step: string | null;
 }
 
+// Tags carry a confidence score from the lead-summary API.
 export interface LeadTag {
-  score: number;
+  id?: number;
+  display_name?: string;
   tag: string;
+  score: number;
 }
 
 export interface RecommendedContactPayload {
@@ -50,6 +73,15 @@ export interface RecommendedContactPayload {
   phone_number?: string | null;
 }
 
+export interface SocialPresence {
+  crunchbase?: boolean;
+  facebook?: boolean;
+  instagram?: boolean;
+  linkedin?: boolean;
+  tiktok?: boolean;
+  twitter?: boolean;
+}
+
 export interface LeadPayload {
   id: string;
   name: string;
@@ -57,22 +89,34 @@ export interface LeadPayload {
   ai_agent_lead_score: number | null;
   location: LocationPayload | null;
   description: string | null;
-  short_description: string | null;
+  short_description?: string | null;
   size: SizePayload | null;
   website: string | null;
-  logo: string | null;
+  logo?: string | null;
   contacts_count: number;
   org_contacts_count: number;
-  ai_summary: string | null;
-  split_ai_summary: SplitAiSummary | null;
+  notes_count?: number;
+  epilogue_actions_count?: number;
+  prospecting_actions_count?: number;
+  ai_summary?: string | null;
+  split_ai_summary?: SplitAiSummary | null;
   liked: boolean;
   disliked: boolean;
+  new?: boolean;
+  exported?: boolean;
   tags: LeadTag[];
-  phone_numbers: string[];
-  keywords: Array<{ keyword: string; score: number }>;
+  phone_numbers?: string[];
+  keywords?: Array<{ keyword: string; score: number }>;
   recommended_contact_title?: string | null;
   recommended_contact?: RecommendedContactPayload | null;
   web_fetch_in_progress?: boolean;
+  enrichment_in_progress?: boolean;
+  social_presence?: SocialPresence;
+  has_phone?: boolean;
+  in_monitor?: boolean;
+  in_discover?: boolean;
+  need_attention?: boolean;
+  need_attention_today?: boolean;
 }
 
 export interface PaginationPayload {
@@ -88,6 +132,8 @@ export interface WishlistResponse {
   computing_scores: boolean;
 }
 
+// AI-rescore answers — the highest-signal payload Leadbay produces per lead.
+// Score is 0-10 PER QUESTION (different from the 0-100 lead-level scores).
 export interface AiAgentResponse {
   question: string;
   question_created_at: string;
@@ -95,14 +141,14 @@ export interface AiAgentResponse {
   score: number | null;
   response: string | null;
   computed_at: string | null;
-  outdated_at: string | null;
+  outdated_at?: string | null;
 }
 
 export interface ContactEnrichment {
   done: boolean;
-  credits_used: number;
-  email_requested: boolean;
-  phone_requested: boolean;
+  credits_used?: number;
+  email_requested?: boolean;
+  phone_requested?: boolean;
 }
 
 export interface ContactPayload {
@@ -121,18 +167,27 @@ export interface BillingStatePayload {
   status: string;
   ai_credits: number | null;
   ai_credits_quota: number | null;
+  freemium?: { daily_quota: number; monthly_quota: number };
 }
 
 export interface OrgPayload {
   id: string;
   name: string;
-  billing: BillingStatePayload | null;
+  description?: string;
+  website?: string;
+  location?: string;
+  completed?: boolean;
+  ai_agent_enabled?: boolean;
+  computing_intelligence?: boolean;
+  quota_plan?: string;
+  billing?: BillingStatePayload | null;
 }
 
 export interface NotePayload {
   id: string;
   note: string;
   created_at: string;
+  user_id?: string;
 }
 
 export interface LoginResponse {
@@ -140,26 +195,46 @@ export interface LoginResponse {
   verified: boolean;
 }
 
+// Web-fetch content is a dynamic dict keyed by emoji-prefixed section labels
+// (e.g. "🏢 company profile", "📈 business signals"). Composites that return
+// this to the agent reshape it into an ordered array — see WebFetchSignals.
+export interface WebFetchEntry {
+  hot?: boolean;
+  source: string;
+  date?: string;
+  description: string;
+}
+
+export type WebFetchContent = Record<string, WebFetchEntry[]>;
+
 export interface LeadWebFetchPayload {
   lead_id: string;
-  content: Record<string, unknown> | null;
+  content: WebFetchContent | null;
   fetch_at: string | null;
   in_progress: boolean;
 }
 
+// Composite-side reshaped form (avoids dynamic-key typing in agent payloads).
+export interface WebFetchSignalsSection {
+  section_label: string;
+  section_emoji: string | null;
+  entries: WebFetchEntry[];
+}
+
 export interface IdealBuyerProfilePayload {
-  summary: string;
-  key_characteristics: string[];
-  anti_patterns: string[];
+  summary?: string;
+  key_characteristics?: string[];
+  anti_patterns?: string[];
+  generated_at?: string;
 }
 
 export interface PurchaseIntentTagPayload {
-  id: number;
+  id?: number;
   display_name: string;
   tag: string;
-  description: string | null;
-  score: number | null;
-  reasoning: string | null;
+  description?: string | null;
+  score?: number | null;
+  reasoning?: string | null;
 }
 
 export interface AiAgentQuestionPayload {
@@ -170,7 +245,15 @@ export interface AiAgentQuestionPayload {
 
 export interface UserMePayload {
   id: string;
+  email?: string;
+  name?: string;
+  verified?: boolean;
+  admin?: boolean;
+  manager?: boolean;
   organization: OrgPayload;
+  last_requested_lens?: number | null;
+  language?: string;
+  free_ai_credits?: number;
 }
 
 export interface PaidContactPayload {
@@ -196,6 +279,132 @@ export interface PaginatedActivities {
   pagination: PaginationPayload;
 }
 
+// ─── Lens filter (criteria-based, type discriminator) ─────────────────────
+
+export type FilterCriterion =
+  | { type: "sector_ids"; is_excluded: boolean; sectors: string[] }
+  | { type: "size"; is_excluded: boolean; sizes: Array<{ min?: number; max?: number }> }
+  | { type: string; is_excluded: boolean; [k: string]: unknown };
+
+export interface LensFilterItem {
+  criteria: FilterCriterion[];
+}
+
+export interface LocationsBlock {
+  results: unknown[];
+  parents: unknown[];
+}
+
+export interface FilterPayload {
+  lens_filter: { items: LensFilterItem[] };
+  locations: LocationsBlock;
+}
+
+// ─── Sectors taxonomy ─────────────────────────────────────────────────────
+
+export interface SectorPayload {
+  id: string;
+  name: string;
+  // The /sectors/all endpoint may also surface aliases / parent ids — kept
+  // permissive.
+  [k: string]: unknown;
+}
+
+// ─── Selection / bulk enrichment ──────────────────────────────────────────
+
+export interface BulkEnrichPreview {
+  selected_leads: number;
+  enriched_contacts: number;
+  enrichable_contacts: number;
+  title_suggestions: string[];
+  // Newer field — will be populated once the backend ships it. Falls back to
+  // live aggregation in `recall_ordered_titles` if absent.
+  previously_enriched_titles?: string[];
+  auto_included_titles?: string[];
+}
+
+// ─── Org user_prompt + clarifications ─────────────────────────────────────
+
+export interface UserPromptPayload {
+  prompt: string;
+}
+
+export interface ClarificationOption {
+  id?: string;
+  label: string;
+  prompt_fragment?: string;
+}
+
+export interface ClarificationPayload {
+  id?: string;
+  question: string;
+  options?: ClarificationOption[];
+  created_at?: string;
+}
+
+// ─── Epilogue ─────────────────────────────────────────────────────────────
+
+export type EpilogueStatusType =
+  | "EPILOGUE_INTEREST_VALIDATED_OR_MEETING_PLANED"
+  | "EPILOGUE_COULD_NOT_REACH_STILL_TRYING"
+  | "EPILOGUE_NOT_INTERESTED_LOST"
+  | "EPILOGUE_STILL_CHASING";
+
+export interface EpilogueResponseItem {
+  lead_id: string;
+  status: EpilogueStatusType;
+  set_at: string;
+  set_by?: string;
+}
+
+export interface EpilogueResponsesPayload {
+  items: EpilogueResponseItem[];
+  pagination: PaginationPayload;
+}
+
+export interface ProspectingActionItem {
+  lead_id: string;
+  type: string;
+  date: string;
+  user_id?: string;
+}
+
+export interface ProspectingActionsPayload {
+  items: ProspectingActionItem[];
+  pagination: PaginationPayload;
+}
+
+// ─── Quota status (live endpoint) ─────────────────────────────────────────
+
+export type QuotaWindow = "daily" | "weekly" | "monthly";
+export type QuotaResource = "llm_completion" | "ai_rescore" | "web_fetch" | string;
+
+export interface QuotaSpend {
+  current_units: number;
+  max_units: number;
+  window_type: QuotaWindow;
+  resets_at: string;
+}
+
+export interface QuotaResourceUsage {
+  resource_type: QuotaResource;
+  count: number;
+  window_type: QuotaWindow;
+  resets_at: string;
+}
+
+export interface QuotaStatusPayload {
+  plan: string;
+  org: {
+    spend: QuotaSpend[];
+    resources: QuotaResourceUsage[];
+  };
+  user?: {
+    spend?: QuotaSpend[];
+    resources?: QuotaResourceUsage[];
+  };
+}
+
 // ─── Protocol-agnostic Tool type ──────────────────────────────────────────────
 
 export interface ToolLogger {
@@ -216,5 +425,11 @@ export interface Tool<P = any, R = any> {
   inputSchema: JSONSchema;
   optional?: boolean;
   advanced?: boolean;
+  // Mutates Leadbay state. MCP server gates these behind LEADBAY_MCP_WRITE=1.
+  // OpenClaw exposes them when exposeWrite=true is set in plugin config.
+  write?: boolean;
+  // Per-tool semver — bumped when the tool's input/output contract changes.
+  // Defaults to "0.1.0" if absent. Used by MIGRATION.md tracking.
+  version?: string;
   execute: (client: LeadbayClient, params: P, ctx?: ToolContext) => Promise<R>;
 }

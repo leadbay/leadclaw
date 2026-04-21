@@ -12,7 +12,11 @@ interface PrepareOutreachParams {
 export const prepareOutreach: Tool<PrepareOutreachParams> = {
   name: "leadbay_prepare_outreach",
   description:
-    "Prepare an outreach package for a lead: returns the recommended contact (best match by job title), their enriched email/phone (if available), and the lead's AI summary. If enrich=true and credits are available, will trigger enrichment on the recommended contact and return the ID to poll later. Write action — requires user-level permission.",
+    "Prepare an outreach package for a single lead: recommended contact + enriched contact details + AI summary. " +
+    "When to use: when the agent is about to draft outreach for ONE specific lead and needs the contact's email/phone. " +
+    "When NOT to use: across many leads — use leadbay_enrich_titles for bulk; for general lead detail use " +
+    "leadbay_research_lead (richer signals); to actually log the outreach action use leadbay_report_outreach " +
+    "(requires verification).",
   optional: true,
   inputSchema: {
     type: "object",

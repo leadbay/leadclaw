@@ -4,7 +4,11 @@ import type { Tool } from "../types.js";
 export const getTasteProfile: Tool<Record<string, never>> = {
   name: "leadbay_get_taste_profile",
   description:
-    "Get the user's Ideal Buyer Profile, purchase intent tags, and qualification questions. IMPORTANT: Call this at the very start of every session to understand what kind of leads the user is looking for. This data rarely changes and is cached.",
+    "Get the user's Ideal Buyer Profile, purchase intent tags, and qualification questions. " +
+    "When to use: at the very start of a session to understand what kind of leads the user is looking for. " +
+    "Data is cached. " +
+    "When NOT to use: per-lead — leadbay_research_lead already includes the per-lead qualification answers " +
+    "(which are scored against these org-level questions).",
   inputSchema: {
     type: "object",
     properties: {},
