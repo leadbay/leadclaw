@@ -85,7 +85,17 @@ export interface SocialPresence {
 export interface LeadPayload {
   id: string;
   name: string;
+  /**
+   * Similarity score: how closely this lead matches the user's ideal-customer
+   * profile (the active lens). Combined with `ai_agent_lead_score` and
+   * normalized server-side to a 0-100 scale before display.
+   */
   score: number | null;
+  /**
+   * Deep AI qualification adjustment, computed after running web searches and
+   * lead intelligence lookups. Acts as a boost/penalty on top of `score`;
+   * the two are combined and normalized server-side to a 0-100 scale.
+   */
   ai_agent_lead_score: number | null;
   location: LocationPayload | null;
   description: string | null;
@@ -133,11 +143,16 @@ export interface WishlistResponse {
 }
 
 // AI-rescore answers — the highest-signal payload Leadbay produces per lead.
-// Score is 0-10 PER QUESTION (different from the 0-100 lead-level scores).
+// Per-question qualification boost from the AI agent. Discrete values:
+// -10 (negative signal), 0 (neutral / no signal), 10 (positive signal),
+// 20 (strong positive signal). These boosts are summed and combined with
+// the lead's similarity `score`, then normalized server-side to the 0-100
+// lead-level scale before display. NOT a 0-10 scale despite legacy naming.
 export interface AiAgentResponse {
   question: string;
   question_created_at: string;
   lead_id: string;
+  /** Discrete boost: -10, 0, 10, or 20. See interface comment above. */
   score: number | null;
   response: string | null;
   computed_at: string | null;

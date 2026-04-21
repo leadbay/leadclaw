@@ -17,7 +17,11 @@ interface PullLeadsParams {
 interface QualificationSummary {
   answered: number;
   total: number;
-  avg_score_0_to_10: number | null;
+  /**
+   * Average of per-question AI agent boost scores (each -10/0/10/20).
+   * NOT a 0-10 average. Negative = net negative signal across questions.
+   */
+  avg_qualification_boost: number | null;
   best_response_excerpt: string | null;
 }
 
@@ -44,7 +48,7 @@ function summarise(responses: AiAgentResponse[]): QualificationSummary {
     excerpt = excerpt.slice(0, 197) + "...";
   }
 
-  return { answered, total, avg_score_0_to_10: avg, best_response_excerpt: excerpt };
+  return { answered, total, avg_qualification_boost: avg, best_response_excerpt: excerpt };
 }
 
 export const pullLeads: Tool<PullLeadsParams> = {
@@ -114,7 +118,7 @@ export const pullLeads: Tool<PullLeadsParams> = {
             summary: {
               answered: 0,
               total: 0,
-              avg_score_0_to_10: null,
+              avg_qualification_boost: null,
               best_response_excerpt: null,
             },
           };

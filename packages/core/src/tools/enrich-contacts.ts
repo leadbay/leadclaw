@@ -60,7 +60,7 @@ export const enrichContacts: Tool<EnrichContactsParams> = {
         throw client.makeError(
           "QUOTA_EXCEEDED",
           "No enrichment credits remaining",
-          "Purchase more credits at app.leadbay.ai"
+          "Contact Leadbay support to extend your credit quota"
         );
       }
     } catch (e: any) {

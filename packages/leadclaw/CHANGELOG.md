@@ -2,11 +2,14 @@
 
 ## 0.2.2 — 2026-04-21
 
-Docs-only release. Shares the `@leadbay/mcp@0.2.2` mental-model copy updates since both packages consume the same `@leadbay/core` tool descriptions.
+Bug fix + contract correction + mental-model docs release. Picks up `@leadbay/core@0.2.1` underneath.
 
+- Renamed misleading `avg_score_0_to_10` field on the `pull_leads` / `bulk_qualify_leads` qualification summaries to `avg_qualification_boost`. Per-question AI agent scores are discrete boosts (-10/0/10/20), not a 0-10 average — interface JSDoc now reflects the real contract.
+- Replaced stale `app.leadbay.ai` URLs in client-side error strings with runnable recovery commands. Recovery hints now include `--region <us|fr>` because the CLI refuses without it (anti-cross-region credential-leak guard).
+- README: stale `app.leadbay.ai` references swept.
 - Plugin manifest description rewritten from "Leadbay lead discovery, qualification, and contact enrichment for AI agents" to a framing that names the inbox model, the two scoring layers, and on-demand deepening.
 - Composite tool descriptions (`pull_leads`, `research_lead`, `bulk_qualify_leads`, `enrich_titles`, `account_status`) now teach the agent that Leadbay delivers a fresh batch per user login, paced by recent consumption; that roughly the top 10 are pre-AI-qualified while the rest are resource-saved (not worse); and that contacts are enriched on demand when the agent is ready to reach out.
-- No new tools, no schema changes. Version kept in sync with `@leadbay/mcp@0.2.2`.
+- Version kept in sync with `@leadbay/mcp@0.2.2`.
 
 ## 0.2.1 — 2026-04-21
 

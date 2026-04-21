@@ -41,7 +41,7 @@ export const getTasteProfile: Tool<Record<string, never>> = {
       })),
       ...(isEmpty
         ? {
-            hint: "No taste profile configured yet. Set it up at app.leadbay.ai for better lead matching.",
+            hint: "No taste profile configured yet. Use leadbay_refine_prompt or contact Leadbay support to set one up for better lead matching.",
           }
         : {}),
     };

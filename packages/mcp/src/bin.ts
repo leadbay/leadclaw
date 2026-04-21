@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   createClient,
@@ -33,7 +35,7 @@ USAGE
   leadbay-mcp --help     Print this help
 
 ENV VARS
-  LEADBAY_TOKEN          (required) Bearer token from https://app.leadbay.ai/settings/api-tokens
+  LEADBAY_TOKEN          (required) Bearer token (run \`leadbay-mcp install\` to mint one).
   LEADBAY_REGION         (optional) "us" or "fr". Auto-detected from /users/me if unset.
   LEADBAY_BASE_URL       (optional) Override API base URL (for staging/dev).
   LEADBAY_MCP_ADVANCED   (optional) Set to "1" to expose granular API tools alongside
@@ -92,7 +94,7 @@ function parseLogLevel(raw: string | undefined): LogLevel {
 function exitWithTokenError(): never {
   process.stderr.write(
     "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
-      "  1. Create a token at https://app.leadbay.ai/settings/api-tokens\n" +
+      "  1. Run: npx -y @leadbay/mcp install --email <you> --region <us|fr>\n" +
       "  2. Set it in your MCP client config (e.g. claude_desktop_config.json).\n" +
       "\n" +
       "Run `leadbay-mcp --help` for the full config template.\n"
@@ -751,7 +753,7 @@ async function runInstall(args: string[]): Promise<number> {
     `\nThe token was written into client config files but never printed to your terminal.\n` +
       `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.2 doctor\n` +
       `Restart your MCP client(s) to pick up the new server.\n` +
-      `If you ever leak the token, log in to app.leadbay.ai again to invalidate the prior session.\n`
+      `If you ever leak the token, run \`leadbay-mcp login --email <you> --region <us|fr>\` to mint a fresh one (which invalidates the prior session).\n`
   );
   return anyOk ? 0 : 1;
 }
@@ -864,14 +866,14 @@ async function main(): Promise<void> {
   await server.connect(transport);
 }
 
-// Only run main() when invoked as a CLI, not when imported by tests.
-// import.meta.url === file://<argv[1]> ish — compare by resolved path.
+// Run main() only when invoked as a CLI. realpath on both sides handles
+// npx shim symlinks (issue #3504: silent exit 0 under Node 25 + npx).
 const isEntrypoint = (() => {
   try {
     const entry = process.argv[1];
     if (!entry) return false;
-    const url = new URL(import.meta.url);
-    return url.pathname === entry || url.pathname.endsWith(entry);
+    const self = fileURLToPath(import.meta.url);
+    return realpathSync(self) === realpathSync(entry);
   } catch {
     return false;
   }

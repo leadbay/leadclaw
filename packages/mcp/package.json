@@ -27,6 +27,7 @@
     "@modelcontextprotocol/sdk": "1.29.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
     "@leadbay/core": "workspace:*"
   },
   "engines": {

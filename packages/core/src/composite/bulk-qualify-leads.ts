@@ -26,7 +26,11 @@ interface QualResult {
   qualification_summary: {
     answered: number;
     total: number;
-    avg_score_0_to_10: number | null;
+    /**
+     * Average of per-question AI agent boost scores (each -10/0/10/20).
+     * NOT a 0-10 average. Negative = net negative signal across questions.
+     */
+    avg_qualification_boost: number | null;
   } | null;
   signals_count: number | null;
 }
@@ -220,7 +224,7 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
               ? {
                   answered: responses.filter((r) => r.score != null).length,
                   total: responses.length,
-                  avg_score_0_to_10: avg,
+                  avg_qualification_boost: avg,
                 }
               : null,
           signals_count: lastWf?.content
