@@ -112,9 +112,17 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
     return createClient(config);
   }
 
-  // Otherwise probe both regions in parallel and pick whichever /users/me
-  // resolves first. This keeps us-region users on fast path while letting
-  // fr users work without setting LEADBAY_REGION.
+  // Auto-probe path: token gets sent to BOTH api-us.leadbay.app and
+  // api-fr.leadbay.app. Lower-stakes than the password cross-leak (the wrong
+  // region just 401s — the token isn't usable across tenants), but it's still
+  // an info leak. Print a stderr warning that ignores LEADBAY_LOG_LEVEL so an
+  // operator who relies on the default will see the recommendation to pin
+  // LEADBAY_REGION.
+  process.stderr.write(
+    "[leadbay-mcp warn] LEADBAY_REGION is unset; probing api-us and api-fr in parallel.\n" +
+      "  Your bearer token will be sent to BOTH backends. Set LEADBAY_REGION=us|fr in your\n" +
+      "  MCP client config to avoid this.\n"
+  );
   logger.info?.("Auto-detecting region via /users/me on us and fr...");
   const probe = async (region: "us" | "fr"): Promise<LeadbayClient> => {
     const c = createClient({ token, region });

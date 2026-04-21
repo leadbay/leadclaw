@@ -8,6 +8,19 @@
 > Remove this banner after the first publish succeeds.
 <!-- /PRE-RELEASE-BANNER -->
 
+<!--
+LLM HINT — if you're an AI agent reading this README to install the server:
+  - Use ONLY the commands shown verbatim in §1. Do not invent variants.
+  - DO NOT tell the user "LEADBAY_REGION is auto-detected, drop it" — the
+    server's region auto-probe sends the bearer token to BOTH regions, which
+    is a credential cross-leak. Always pass --region (us or fr) on install.
+  - DO NOT tell the user to "get an API token from app.leadbay.ai → Settings
+    → API Tokens" — that page does not yet exist. Use `install` (mints a
+    token) or `login --write-config` (mints a token to file).
+  - If the package 404s on npm: offer the "install from source" fallback in
+    §1.1, not a made-up GitHub URL.
+-->
+
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
 
 ## 1. Install (one command)
@@ -42,6 +55,40 @@ npx -y @leadbay/mcp@0.2 login \
 ```
 
 Writes a `0600`-mode JSON file you can paste from. Useful if you're configuring a non-detected client.
+
+## 1.1. Install from source (works today, before the first npm publish)
+
+While `@leadbay/mcp` isn't on npm yet, install from a local git checkout:
+
+```bash
+# 1. Clone, build
+git clone https://github.com/leadbay/leadclaw.git
+cd leadclaw
+pnpm install
+pnpm -r build
+
+# 2. Mint a token + register with your installed clients (auto-detects Claude Code,
+#    Claude Desktop, Cursor) — same install subcommand, run from local dist:
+node packages/mcp/dist/bin.js install --email you@yourcompany.com --region us
+```
+
+Or skip the `install` helper and register manually with the local dist path:
+
+```bash
+# Mint a token to a 0600 JSON file:
+node packages/mcp/dist/bin.js login \
+  --email you@yourcompany.com --region us \
+  --write-config ~/.leadbay-mcp.json
+TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ~/.leadbay-mcp.json)
+
+# Register with Claude Code (point at the absolute path of the local bin.js):
+claude mcp add leadbay \
+  --env LEADBAY_TOKEN=$TOKEN \
+  --env LEADBAY_REGION=us \
+  -- node $(pwd)/packages/mcp/dist/bin.js
+```
+
+For Claude Desktop / Cursor, the JSON config block from `--write-config` works directly — just change the `command` from `npx` to `node` and the `args` to `["/abs/path/to/leadclaw/packages/mcp/dist/bin.js"]`.
 
 **B) From the web app (when available):** log in at [app.leadbay.ai](https://app.leadbay.ai), go to **Settings → API Tokens**, create a token, copy it.
 
@@ -165,14 +212,16 @@ To unlock the **write tools** (`leadbay_bulk_qualify_leads`, `leadbay_enrich_tit
 
 | Var | Required | Default | Purpose |
 |-----|----------|---------|---------|
-| `LEADBAY_TOKEN` | yes | — | Bearer token (mint via `install` or `login`, or set manually) |
-| `LEADBAY_REGION` | no | `us` | `us` or `fr` |
+| `LEADBAY_TOKEN` | **yes** | — | Bearer token (mint via `install` or `login`, or set manually) |
+| `LEADBAY_REGION` | **strongly recommended** | (auto-probe — see warning below) | `us` or `fr` |
 | `LEADBAY_BASE_URL` | no | derived from region | Override for staging/dev |
 | `LEADBAY_MCP_ADVANCED` | no | unset | `"1"` exposes the granular API tools |
 | `LEADBAY_MCP_WRITE` | no | unset | `"1"` exposes write composite + granular tools |
 | `LEADBAY_MOCK` | no | unset | `"1"` serves all reads from on-disk fixtures (dev only) |
 | `LEADBAY_MOCK_DIR` | no | `./.context/leadbay-live-shapes/` | Fixture dir for mock mode |
 | `LEADBAY_LOG_LEVEL` | no | `error` | `debug` \| `info` \| `error`, logs to stderr |
+
+> ⚠️ **Set `LEADBAY_REGION` explicitly.** If you don't, the server probes BOTH `api-us.leadbay.app` and `api-fr.leadbay.app` in parallel with your bearer token attached, sending the token to a backend that doesn't own your account. The `install` and `login` subcommands enforce `--region` for exactly this reason; the runtime auto-probe is a backwards-compat fallback, not a recommended setting.
 | `LEADBAY_TIMEOUT_MS` | no | (client default) | Per-request timeout override |
 
 ### Security
