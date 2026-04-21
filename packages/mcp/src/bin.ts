@@ -1,5 +1,11 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createClient, LeadbayClient, type CreateClientConfig, type ToolLogger } from "@leadbay/core";
+import {
+  createClient,
+  LeadbayClient,
+  resolveRegion,
+  type CreateClientConfig,
+  type ToolLogger,
+} from "@leadbay/core";
 import { buildServer } from "./server.js";
 
 const VERSION = "0.2.0";
@@ -9,6 +15,11 @@ leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
 
 USAGE
   leadbay-mcp            Run the MCP stdio server (for Claude Desktop, Cursor, etc.)
+  leadbay-mcp login      Exchange email + password for a bearer token; prints a
+                         ready-to-paste MCP client config. Use this when you don't
+                         have an API token yet (e.g. when the app's API-tokens
+                         page isn't available). Reads --email from argv; prompts
+                         for password (or reads $LEADBAY_PASSWORD from env).
   leadbay-mcp doctor     Validate your token, probe your region, print account + quota.
   leadbay-mcp --version  Print version
   leadbay-mcp --help     Print this help
@@ -133,6 +144,123 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
   }
 }
 
+// Read a password from stdin without echoing (TTY) or from $LEADBAY_PASSWORD
+// when the env var is set. Falls through to plain readline if stdin isn't a TTY
+// (e.g. piped input — `echo pwd | leadbay-mcp login --email …`).
+async function readPassword(): Promise<string> {
+  const envPwd = process.env.LEADBAY_PASSWORD;
+  if (envPwd) return envPwd;
+
+  const isTTY = process.stdin.isTTY === true;
+  if (!isTTY) {
+    // Piped: read stdin to EOF.
+    return await new Promise<string>((resolve) => {
+      const chunks: Buffer[] = [];
+      process.stdin.on("data", (c) => chunks.push(c));
+      process.stdin.on("end", () =>
+        resolve(Buffer.concat(chunks).toString("utf8").replace(/\r?\n$/, ""))
+      );
+    });
+  }
+
+  process.stderr.write("Password: ");
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+  let buf = "";
+  return await new Promise<string>((resolve) => {
+    const onData = (key: string) => {
+      // Ctrl+C or Ctrl+D
+      if (key === "\u0003" || key === "\u0004") {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stderr.write("\n");
+        process.exit(130);
+      }
+      // Enter
+      if (key === "\r" || key === "\n") {
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+        process.stdin.removeListener("data", onData);
+        process.stderr.write("\n");
+        resolve(buf);
+        return;
+      }
+      // Backspace
+      if (key === "\u007f" || key === "\b") {
+        if (buf.length > 0) buf = buf.slice(0, -1);
+        return;
+      }
+      buf += key;
+    };
+    process.stdin.on("data", onData);
+  });
+}
+
+function parseFlag(args: string[], name: string): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === `--${name}` && i + 1 < args.length) return args[i + 1];
+    if (args[i].startsWith(`--${name}=`)) return args[i].slice(name.length + 3);
+  }
+  return undefined;
+}
+
+async function runLogin(args: string[]): Promise<number> {
+  const email = parseFlag(args, "email");
+  if (!email) {
+    process.stderr.write(
+      "Usage: leadbay-mcp login --email you@example.com\n" +
+        "  Then enter your password (hidden), or pipe it via stdin / set $LEADBAY_PASSWORD.\n"
+    );
+    return 2;
+  }
+  const password = await readPassword();
+  if (!password) {
+    process.stderr.write("leadbay-mcp login: empty password\n");
+    return 2;
+  }
+
+  let result;
+  try {
+    result = await resolveRegion(email, password);
+  } catch (err: any) {
+    process.stderr.write(`leadbay-mcp login: ${err?.message ?? String(err)}\n`);
+    return 1;
+  }
+
+  // Print a ready-to-paste config. Token + region go to stdout so users can
+  // pipe into jq / pbcopy; the explanatory text goes to stderr so it doesn't
+  // pollute the JSON if the user redirects.
+  process.stderr.write(
+    `\nLogged in to ${result.region.toUpperCase()} backend ` +
+      `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n\n`
+  );
+  process.stderr.write("Add this to your MCP client config:\n\n");
+  const config = {
+    mcpServers: {
+      leadbay: {
+        command: "npx",
+        args: ["-y", "@leadbay/mcp@0.2"],
+        env: {
+          LEADBAY_TOKEN: result.token,
+          LEADBAY_REGION: result.region,
+        },
+      },
+    },
+  };
+  process.stdout.write(JSON.stringify(config, null, 2) + "\n");
+  process.stderr.write(
+    `\nOr for Claude Code:\n\n` +
+      `  claude mcp add leadbay \\\n` +
+      `    --env LEADBAY_TOKEN=${result.token} \\\n` +
+      `    --env LEADBAY_REGION=${result.region} \\\n` +
+      `    -- npx -y @leadbay/mcp@0.2\n\n` +
+      `Restart your MCP client to pick up the new server.\n` +
+      `Treat the token like a password — it grants full access to your Leadbay account.\n`
+  );
+  return 0;
+}
+
 async function runDoctor(): Promise<number> {
   const token = process.env.LEADBAY_TOKEN;
   if (!token) {
@@ -207,6 +335,9 @@ async function main(): Promise<void> {
   if (arg === "--help" || arg === "-h" || arg === "help") {
     process.stdout.write(`${HELP}\n`);
     return;
+  }
+  if (arg === "login") {
+    process.exit(await runLogin(process.argv.slice(3)));
   }
   if (arg === "doctor") {
     process.exit(await runDoctor());

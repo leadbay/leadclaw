@@ -4,9 +4,20 @@ A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, a
 
 ## 1. Get a token
 
-Log in at [app.leadbay.ai](https://app.leadbay.ai). Go to **Settings → API Tokens** and create a new token. Copy it — you'll paste it into your MCP client config below.
+The MCP server needs a bearer token (`LEADBAY_TOKEN`). Two ways to get one:
 
-If you don't have a Leadbay account yet, [register here](https://wow.leadbay.ai/?register=true).
+**A) Mint one from your email + password (works today, no UI needed):**
+
+```bash
+npx -y @leadbay/mcp@0.2 login --email you@yourcompany.com
+# (you'll be prompted for your password — it's not echoed)
+```
+
+The command auto-detects your region (us/fr), prints a ready-to-paste MCP config, and tells you the Claude Code one-liner. Treat the token like a password.
+
+**B) From the web app (when available):** log in at [app.leadbay.ai](https://app.leadbay.ai), go to **Settings → API Tokens**, create a token, copy it.
+
+Don't have a Leadbay account yet? [Register here](https://wow.leadbay.ai/?register=true).
 
 ## 2. Quickstart
 
@@ -19,9 +30,9 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.1"],
+      "args": ["-y", "@leadbay/mcp@0.2"],
       "env": {
-        "LEADBAY_TOKEN": "lb_...",
+        "LEADBAY_TOKEN": "<paste-token-from-step-1>",
         "LEADBAY_REGION": "us"
       }
     }
@@ -40,8 +51,8 @@ In Cursor settings, add the MCP server:
   "mcp.servers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.1"],
-      "env": { "LEADBAY_TOKEN": "lb_...", "LEADBAY_REGION": "us" }
+      "args": ["-y", "@leadbay/mcp@0.2"],
+      "env": { "LEADBAY_TOKEN": "<paste-token>", "LEADBAY_REGION": "us" }
     }
   }
 }
@@ -51,17 +62,19 @@ In Cursor settings, add the MCP server:
 
 ```bash
 claude mcp add leadbay \
-  --env LEADBAY_TOKEN=lb_... \
+  --env LEADBAY_TOKEN=<paste-token> \
   --env LEADBAY_REGION=us \
-  -- npx -y @leadbay/mcp@0.1
+  -- npx -y @leadbay/mcp@0.2
 ```
+
+> Want write tools (refine prompt, log outreach, adjust audience, etc.)? Add `--env LEADBAY_MCP_WRITE=1`. They're hidden by default so an LLM can't mutate state without your explicit opt-in.
 
 ### Verify it works
 
 Before starting Claude, run:
 
 ```bash
-LEADBAY_TOKEN=lb_... npx -y @leadbay/mcp@0.1 doctor
+LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.2 doctor
 ```
 
 Expected output:
