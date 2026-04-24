@@ -97,6 +97,15 @@ export const researchLead: Tool<ResearchLeadParams> = {
     const lensId = params.lensId ?? (await client.resolveDefaultLens());
     const leadId = params.leadId;
 
+    // Mark the lead as seen+clicked so Leadbay ages it out of the
+    // Discover "new" view and the lens-refresh pipeline can deliver
+    // fresh leads on next pull. Fire-and-forget: failure here must NOT
+    // break research_lead.
+    void client.request<void>("POST", "/interactions", [
+      { type: "LEAD_SEEN",    leadId, lensId: String(lensId) },
+      { type: "LEAD_CLICKED", leadId, lensId: String(lensId) },
+    ]).catch(() => { /* swallow */ });
+
     // Fan-out the four sub-fetches in parallel. Soft-fail on the additive ones.
     const [profileR, qualR, contactsR, webFetchR] = await Promise.allSettled([
       client.request<LeadPayload>("GET", `/lenses/${lensId}/leads/${leadId}`),

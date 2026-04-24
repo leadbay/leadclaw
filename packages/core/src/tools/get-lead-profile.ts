@@ -38,6 +38,15 @@ export const getLeadProfile: Tool<GetLeadProfileParams> = {
   execute: async (client: LeadbayClient, params: GetLeadProfileParams) => {
     const lensId = params.lensId ?? (await client.resolveDefaultLens());
 
+    // Mark the lead as seen+clicked in the user's lens so it ages out of
+    // the 'new' Discover view and the lens refresh pipeline can deliver
+    // fresh leads tomorrow. Fire-and-forget: a failure here must NOT
+    // break the profile fetch.
+    void client.request<void>("POST", "/interactions", [
+      { type: "LEAD_SEEN",    leadId: params.leadId, lensId: String(lensId) },
+      { type: "LEAD_CLICKED", leadId: params.leadId, lensId: String(lensId) },
+    ]).catch(() => { /* swallow — interaction logging is best-effort */ });
+
     const [leadResult, qualResult, contactsResult, paidContactsResult, webFetchResult] =
       await Promise.allSettled([
         client.request<LeadPayload>(
