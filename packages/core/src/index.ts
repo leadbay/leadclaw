@@ -69,6 +69,7 @@ import { researchLead } from "./composite/research-lead.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
+import { importLeads } from "./composite/import-leads.js";
 import { enrichTitles } from "./composite/enrich-titles.js";
 import { bulkEnrichStatus } from "./composite/bulk-enrich-status.js";
 import { adjustAudience } from "./composite/adjust-audience.js";
@@ -114,7 +115,7 @@ export {
   bulkEnrichStatus,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
-  answerClarification, reportOutreach,
+  answerClarification, reportOutreach, importLeads,
 };
 
 // ─── Tool catalogues ─────────────────────────────────────────────────────
@@ -198,6 +199,7 @@ export const compositeWriteTools: Tool[] = [
   refinePrompt,
   answerClarification,
   reportOutreach,
+  importLeads,
 ];
 
 // Backward-compat alias for existing consumers.
