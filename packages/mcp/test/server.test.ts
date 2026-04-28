@@ -58,6 +58,7 @@ describe("tools/list — default (composite read only)", () => {
     expect(names).not.toContain("leadbay_report_outreach");
     expect(names).not.toContain("leadbay_refine_prompt");
     expect(names).not.toContain("leadbay_adjust_audience");
+    expect(names).not.toContain("leadbay_import_leads");
     // find_prospects was removed in v0.2.0 (replaced by pull_leads).
     expect(names).not.toContain("leadbay_find_prospects");
 
@@ -91,6 +92,7 @@ describe("tools/list — write mode (LEADBAY_MCP_WRITE=1)", () => {
     expect(names).toContain("leadbay_adjust_audience");
     expect(names).toContain("leadbay_bulk_qualify_leads");
     expect(names).toContain("leadbay_enrich_titles");
+    expect(names).toContain("leadbay_import_leads");
     // Granular writes still gated unless ALSO includeAdvanced.
     expect(names).not.toContain("leadbay_select_leads");
   });

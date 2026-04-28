@@ -155,6 +155,7 @@ describe("contract: register() gating", () => {
     expect(names).not.toContain("leadbay_refine_prompt");
     expect(names).not.toContain("leadbay_answer_clarification");
     expect(names).not.toContain("leadbay_report_outreach");
+    expect(names).not.toContain("leadbay_import_leads");
     // Must NOT include granular tools.
     expect(names).not.toContain("leadbay_get_lens_filter");
     expect(names).not.toContain("leadbay_select_leads");
@@ -173,6 +174,7 @@ describe("contract: register() gating", () => {
     expect(names).toContain("leadbay_adjust_audience");
     expect(names).toContain("leadbay_bulk_qualify_leads");
     expect(names).toContain("leadbay_enrich_titles");
+    expect(names).toContain("leadbay_import_leads");
     // Granulars still hidden.
     expect(names).not.toContain("leadbay_get_lens_filter");
     expect(names).not.toContain("leadbay_set_user_prompt");

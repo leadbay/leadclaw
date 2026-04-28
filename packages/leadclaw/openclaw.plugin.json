@@ -2,7 +2,7 @@
   "id": "leadclaw",
   "name": "LeadClaw",
   "description": "Leadbay for AI agents: a daily sales-lead inbox with firmographic + AI qualification layers, plus on-demand deeper qualification and contact enrichment. Each login delivers a fresh batch of leads paced by the user's recent consumption; the agent skims, deepens promising ones, and proposes outreach.",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "contracts": {
     "tools": [
       "leadbay_login",
@@ -19,6 +19,7 @@
       "leadbay_refine_prompt",
       "leadbay_answer_clarification",
       "leadbay_report_outreach",
+      "leadbay_import_leads",
       "leadbay_list_lenses",
       "leadbay_discover_leads",
       "leadbay_get_lead_profile",
@@ -96,7 +97,10 @@
       },
       "region": {
         "type": "string",
-        "enum": ["us", "fr"]
+        "enum": [
+          "us",
+          "fr"
+        ]
       },
       "baseUrl": {
         "type": "string"
