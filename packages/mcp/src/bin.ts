@@ -41,10 +41,12 @@ ENV VARS
   LEADBAY_BASE_URL       (optional) Override API base URL (for staging/dev).
   LEADBAY_MCP_ADVANCED   (optional) Set to "1" to expose granular API tools alongside
                          the composite workflow tools. Most users don't need this.
-  LEADBAY_MCP_WRITE      (optional) Set to "1" to expose write composites (refine_prompt,
-                         report_outreach, adjust_audience, etc.) and write granulars.
-                         Defaults off — read composites are exposed by default; mutations
-                         require explicit opt-in.
+  LEADBAY_MCP_WRITE      (optional) Default "1" (ON) since 0.3.0: exposes write composites
+                         (refine_prompt, report_outreach, adjust_audience, bulk_qualify_leads,
+                         enrich_titles, answer_clarification, import_leads). Set to "0" /
+                         "false" / "no" / "off" for read-only mode. Note: in 0.2.x, only
+                         "1" turned writes ON; "true" / "yes" / "on" were treated as OFF.
+                         The 0.3.0 parser accepts all those values as truthy. See MIGRATION.md.
   LEADBAY_MOCK           (optional) Set to "1" to serve all responses from on-disk fixtures
                          (no network, no real auth). Useful for agent-author dry-running.
                          GETs are matched against fixture JSON files; POSTs/DELETEs are
@@ -57,7 +59,7 @@ EXAMPLE Claude Desktop config (~/Library/Application Support/Claude/claude_deskt
     "mcpServers": {
       "leadbay": {
         "command": "npx",
-        "args": ["-y", "@leadbay/mcp@0.1"],
+        "args": ["-y", "@leadbay/mcp@0.3"],
         "env": {
           "LEADBAY_TOKEN": "lb_...",
           "LEADBAY_REGION": "us"
@@ -90,6 +92,29 @@ function makeStderrLogger(level: LogLevel): ToolLogger {
 function parseLogLevel(raw: string | undefined): LogLevel {
   if (raw === "debug" || raw === "info") return raw;
   return "error";
+}
+
+// Tri-state on LEADBAY_MCP_WRITE. Default is ON since 0.3.0 — flipped from
+// 0.2.x's strict "=== 1" semantics so the SERVER_INSTRUCTIONS no longer ship
+// a system prompt that references tools the server doesn't expose (#3504).
+//
+// Recognized:  unset/empty  -> true (default ON)
+//              1|true|yes|on -> true
+//              0|false|no|off -> false
+//              anything else -> true + one-shot stderr warning
+//
+// MIGRATION: in 0.2.x only "=== 1" was on; "true" / "yes" / "on" were OFF.
+// This parser flips those to ON. See MIGRATION.md.
+export function parseWriteEnv(): boolean {
+  const raw = process.env.LEADBAY_MCP_WRITE;
+  if (raw === undefined || raw === "") return true;
+  const v = raw.trim().toLowerCase();
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  process.stderr.write(
+    `[leadbay-mcp warn] LEADBAY_MCP_WRITE='${raw}' not recognized; defaulting to ON. Use 1/0.\n`
+  );
+  return true;
 }
 
 function exitWithTokenError(): never {
@@ -230,19 +255,95 @@ function hasFlag(args: string[], name: string): boolean {
   return args.some((a) => a === `--${name}`);
 }
 
+// Resolve the platform-correct default credentials path (DX-voice T3, 0.3.0).
+// Order: $XDG_CONFIG_HOME → macOS Application Support → %APPDATA% → ~/.config.
+// Backward-compat: if 0.2.x's ~/.leadbay-mcp.json already exists, use that
+// path on this run with a deprecation note pointing at the new path.
+export function resolveDefaultCredentialsPath(): { path: string; legacy: boolean } {
+  const fs = require_("node:fs");
+  const path = require_("node:path");
+  const legacyPath = path.join(require_("node:os").homedir(), ".leadbay-mcp.json");
+  if (fs.existsSync(legacyPath)) {
+    return { path: legacyPath, legacy: true };
+  }
+  return { path: computeFreshDefaultPath(), legacy: false };
+}
+
+// Pure decision: should `runLogin` refuse to overwrite `existingConfig` when
+// the user is logging in as `email`/`region`? Returns null when overwrite is
+// safe; returns a string reason when it should be refused.
+//
+// Identity = (email, region). Token equality is intentionally NOT checked —
+// every loginAt() mints a fresh token, so token-equality would always fire.
+// 0.2.x configs without an `email` field fall through to "safe" (the user
+// clearly wants to refresh whatever account that file holds — CLI gives no
+// other identity signal).
+export function checkLoginCollision(
+  existingConfig: unknown,
+  email: string,
+  region: "us" | "fr"
+): string | null {
+  if (!existingConfig || typeof existingConfig !== "object") {
+    return "existing file is not valid JSON";
+  }
+  const cfg = existingConfig as Record<string, any>;
+  const existingEmail: string | undefined =
+    typeof cfg.email === "string" && cfg.email.length > 0 ? cfg.email : undefined;
+  const existingRegion: string | undefined =
+    typeof cfg.mcpServers?.leadbay?.env?.LEADBAY_REGION === "string"
+      ? cfg.mcpServers.leadbay.env.LEADBAY_REGION
+      : undefined;
+  if (existingEmail !== undefined && existingEmail !== email) {
+    return `existing email=${existingEmail} (this login is email=${email})`;
+  }
+  if (existingRegion !== undefined && existingRegion !== region) {
+    return `existing region=${existingRegion} (this login is region=${region})`;
+  }
+  return null;
+}
+
+// Pure platform-routing for the non-legacy default path. Extracted so the
+// legacy-fallback message can name the path 0.3.0 would have used WITHOUT
+// re-reading the filesystem and without duplicating resolveDefaultCredentialsPath.
+export function computeFreshDefaultPath(): string {
+  const os = require_("node:os");
+  const path = require_("node:path");
+  const home = os.homedir();
+  const xdg = process.env.XDG_CONFIG_HOME;
+  if (xdg && xdg.length > 0) {
+    return path.join(xdg, "leadbay", "credentials.json");
+  }
+  if (process.platform === "darwin") {
+    return path.join(home, "Library", "Application Support", "leadbay", "credentials.json");
+  }
+  if (process.platform === "win32") {
+    const appdata = process.env.APPDATA ?? path.join(home, "AppData", "Roaming");
+    return path.join(appdata, "leadbay", "credentials.json");
+  }
+  return path.join(home, ".config", "leadbay", "credentials.json");
+}
+
 async function runLogin(args: string[]): Promise<number> {
   const email = parseFlag(args, "email");
+  const defaultPathPreview = (() => {
+    try { return resolveDefaultCredentialsPath().path; } catch { return "<HOME>/.config/leadbay/credentials.json"; }
+  })();
   if (!email) {
     process.stderr.write(
-      "Usage: leadbay-mcp login --email you@example.com [--region us|fr] [--allow-region-fallback] [--write-config PATH] [--quiet]\n" +
+      "Usage: leadbay-mcp login --email you@example.com [--region us|fr] [--allow-region-fallback]\n" +
+        "                        [--write-config PATH] [--unsafe-print-token] [--force] [--quiet]\n" +
         "  Then enter your password (hidden), or pipe it via stdin / set $LEADBAY_PASSWORD.\n" +
         "  --region            Pin the backend (us|fr); avoids sending your password to a backend you don't use.\n" +
         "                      Defaults to $LEADBAY_REGION if set; otherwise asks you to pass --allow-region-fallback.\n" +
         "  --allow-region-fallback   Try us, then fr (or fr, then us). Your password hits BOTH backends if the\n" +
         "                            first 401s. Only do this if you're OK with that.\n" +
-        "  --write-config PATH       Write the resulting MCP-client JSON to PATH with 0600 permissions instead\n" +
-        "                            of stdout. Recommended — keeps the token out of terminal scrollback / CI logs.\n" +
-        "  --quiet             With --write-config, suppress the printed Claude-Code one-liner that includes the token.\n"
+        `  Default behavior (0.3.0+): writes the MCP-client JSON to the platform-correct credentials path:\n` +
+        `                            ${defaultPathPreview} (mode 0600).\n` +
+        "  --write-config PATH       Override the default path with PATH (mode 0600).\n" +
+        "  --unsafe-print-token      Print the token to stdout (legacy 0.2.x behavior). Use only for CI flows that\n" +
+        "                            scrape stdout. The token will end up in scrollback / logs.\n" +
+        "  --force                   Overwrite the credentials file even if it already contains a different token/region.\n" +
+        "  --quiet                   With --write-config / default file-write, suppress the printed Claude-Code one-liner.\n"
     );
     return 2;
   }
@@ -302,11 +403,16 @@ async function runLogin(args: string[]): Promise<number> {
     return 1;
   }
 
+  // Stamp `email` at the envelope root so future re-logins on the same account
+  // can detect "same account, different token" (every loginAt() mints a fresh
+  // token; collision detection by token equality always failed). MCP clients
+  // ignore unknown top-level fields, so this is safe to add.
   const config = {
+    email,
     mcpServers: {
       leadbay: {
         command: "npx",
-        args: ["-y", "@leadbay/mcp@0.2"],
+        args: ["-y", "@leadbay/mcp@0.3"],
         env: {
           LEADBAY_TOKEN: result.token,
           LEADBAY_REGION: result.region,
@@ -317,50 +423,155 @@ async function runLogin(args: string[]): Promise<number> {
 
   const writeConfigPath = parseFlag(args, "write-config");
   const quiet = hasFlag(args, "quiet");
+  const force = hasFlag(args, "force");
+  const unsafePrint = hasFlag(args, "unsafe-print-token");
+  const printTokenLegacy = hasFlag(args, "print-token");
+  if (printTokenLegacy && !unsafePrint) {
+    process.stderr.write(
+      "[leadbay-mcp warn] --print-token is deprecated since 0.3.0; renaming to --unsafe-print-token. The flag still works for one release.\n"
+    );
+  }
+  const printToStdout = unsafePrint || printTokenLegacy;
 
-  if (writeConfigPath) {
-    const { writeFileSync, chmodSync } = await import("node:fs");
-    writeFileSync(writeConfigPath, JSON.stringify(config, null, 2) + "\n", {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    try { chmodSync(writeConfigPath, 0o600); } catch { /* best-effort */ }
+  // ── stdout path (legacy 0.2.x behavior, opt-in only since 0.3.0) ──
+  if (printToStdout) {
     process.stderr.write(
       `\nLogged in to ${result.region.toUpperCase()} backend ` +
-        `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n` +
-        `Wrote MCP config to ${writeConfigPath} (mode 0600). Token NOT printed to terminal.\n`
+        `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n\n` +
+        `⚠️  About to print your bearer token to STDOUT.\n` +
+        `   Treat it like a password. Do NOT paste this into chat, screen-share, or commit it.\n` +
+        `   For safer handling, re-run without --unsafe-print-token (default writes a 0600 file).\n\n` +
+        `Add this to your MCP client config:\n\n`
     );
-    if (!quiet) {
-      process.stderr.write(
-        `\nFor Claude Code, run:\n` +
-          `  claude mcp add leadbay --env LEADBAY_TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ${writeConfigPath}) ` +
-          `--env LEADBAY_REGION=${result.region} -- npx -y @leadbay/mcp@0.2\n`
-      );
-    }
+    process.stdout.write(JSON.stringify(config, null, 2) + "\n");
     process.stderr.write(
-      `\nTREAT THE TOKEN AS A SECRET. It grants full access to your Leadbay account.\n` +
-        `Delete the config file once your MCP client has it loaded, or keep it 0600.\n`
+      `\nOr for Claude Code (token included — same warning applies):\n\n` +
+        `  claude mcp add leadbay --scope user \\\n` +
+        `    --env LEADBAY_TOKEN=${result.token} \\\n` +
+        `    --env LEADBAY_REGION=${result.region} \\\n` +
+        `    -- npx -y @leadbay/mcp@0.3\n\n` +
+        `Restart your MCP client to pick up the new server.\n`
     );
     return 0;
   }
 
-  // Default: print to stdout (with a loud warning).
+  // ── file-write path: explicit --write-config OR default platform path ──
+  let targetPath: string;
+  let usingLegacyPath = false;
+  if (writeConfigPath) {
+    targetPath = writeConfigPath;
+  } else {
+    const resolved = resolveDefaultCredentialsPath();
+    targetPath = resolved.path;
+    usingLegacyPath = resolved.legacy;
+  }
+
+  // Collision detection (see checkLoginCollision for the decision rule).
+  try {
+    const { existsSync, readFileSync } = await import("node:fs");
+    if (existsSync(targetPath) && !force) {
+      let existing: unknown;
+      try {
+        existing = JSON.parse(readFileSync(targetPath, "utf8"));
+      } catch {
+        process.stderr.write(
+          `leadbay-mcp login: ${targetPath} exists but is not valid JSON. Pass --force to overwrite.\n`
+        );
+        return 1;
+      }
+      const collision = checkLoginCollision(existing, email, result.region);
+      if (collision) {
+        process.stderr.write(
+          `leadbay-mcp login: refusing to overwrite ${targetPath} — ${collision}.\n` +
+            `  Pass --force to overwrite, or --write-config /some/other/path.json to keep both.\n`
+        );
+        return 1;
+      }
+    }
+  } catch (err: any) {
+    process.stderr.write(`leadbay-mcp login: ${err?.message ?? String(err)}\n`);
+    return 1;
+  }
+
+  // Atomic write: tmp + chmod + rename. SIGINT mid-write leaves the tmp file
+  // (cleaned up best-effort), never a half-written credentials file. Setting
+  // mode on the tmp file BEFORE rename eliminates the writeFileSync→chmod
+  // TOCTOU window where the token could briefly sit at the umask default.
+  let actualMode: number | undefined;
+  try {
+    const { writeFileSync, chmodSync, mkdirSync, renameSync, statSync, unlinkSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+    mkdirSync(dirname(targetPath), { recursive: true });
+    const tmp = targetPath + ".tmp." + process.pid;
+    writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    try {
+      chmodSync(tmp, 0o600);
+    } catch {
+      // Filesystem may not support POSIX modes (FAT32/exFAT/some NFS). Continue
+      // — we'll surface the actual mode to the user below.
+    }
+    renameSync(tmp, targetPath);
+    try {
+      actualMode = statSync(targetPath).mode & 0o777;
+    } catch { /* mode reporting is best-effort */ }
+    // Defensive cleanup if rename somehow left the tmp behind (shouldn't happen
+    // on POSIX renameSync, but Windows can be quirky on cross-FS paths).
+    try { unlinkSync(tmp); } catch { /* expected to fail post-rename */ }
+  } catch (err: any) {
+    const code = err?.code;
+    if (code === "EACCES" || code === "EROFS" || code === "ENOENT") {
+      process.stderr.write(
+        `leadbay-mcp login: cannot write ${targetPath} (${code}).\n` +
+          `  Use --write-config /tmp/leadbay-mcp.json (or another writable path),\n` +
+          `  or --unsafe-print-token (last resort — token in stdout).\n`
+      );
+      return 1;
+    }
+    process.stderr.write(`leadbay-mcp login: ${err?.message ?? String(err)}\n`);
+    return 1;
+  }
+
+  // Don't claim "(mode 0600)" when stat says otherwise — tell the truth so the
+  // user can act on a permissions surprise.
+  const modeNote = actualMode === 0o600
+    ? "(mode 0600)"
+    : actualMode !== undefined
+    ? `(mode 0${actualMode.toString(8)} — chmod 0600 failed; treat the file as sensitive)`
+    : "(mode unknown)";
   process.stderr.write(
     `\nLogged in to ${result.region.toUpperCase()} backend ` +
-      `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n\n` +
-      `⚠️  About to print your bearer token to STDOUT.\n` +
-      `   Treat it like a password. Do NOT paste this into chat, screen-share, or commit it.\n` +
-      `   For safer handling, re-run with --write-config /path/to/config.json (writes 0600).\n\n` +
-      `Add this to your MCP client config:\n\n`
+      `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n` +
+      `Wrote MCP config to ${targetPath} ${modeNote}. Token NOT printed to terminal.\n`
   );
-  process.stdout.write(JSON.stringify(config, null, 2) + "\n");
+  if (usingLegacyPath) {
+    // Where would 0.3.0 have written this on a fresh install? Re-run the
+    // resolver against a synthetic non-legacy state so the message stays in
+    // sync with resolveDefaultCredentialsPath without duplicating its logic.
+    const newPath = computeFreshDefaultPath();
+    process.stderr.write(
+      `\n[leadbay-mcp note] Used the legacy 0.2.x path ${targetPath}. The 0.3.0 default is ${newPath}.\n` +
+        `  Move the file there at your convenience (no code change required — both paths are read).\n`
+    );
+  }
+  if (!quiet) {
+    // Default macOS path contains a space ("Application Support/"). Single-quote
+    // the path so the printed `claude mcp add …` is copy-paste safe regardless
+    // of where the credentials file landed.
+    const quotedPath = `'${targetPath.replace(/'/g, `'\\''`)}'`;
+    process.stderr.write(
+      `\nFor Claude Code, run:\n` +
+        `  claude mcp add leadbay --scope user \\\n` +
+        `    --env LEADBAY_TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ${quotedPath}) \\\n` +
+        `    --env LEADBAY_REGION=${result.region} \\\n` +
+        `    -- npx -y @leadbay/mcp@0.3\n`
+    );
+  }
   process.stderr.write(
-    `\nOr for Claude Code (token included — same warning applies):\n\n` +
-      `  claude mcp add leadbay \\\n` +
-      `    --env LEADBAY_TOKEN=${result.token} \\\n` +
-      `    --env LEADBAY_REGION=${result.region} \\\n` +
-      `    -- npx -y @leadbay/mcp@0.2\n\n` +
-      `Restart your MCP client to pick up the new server.\n`
+    `\nTREAT THE TOKEN AS A SECRET. It grants full access to your Leadbay account.\n` +
+      `Delete the config file once your MCP client has it loaded, or keep it 0600.\n`
   );
   return 0;
 }
@@ -569,23 +780,45 @@ async function readChoice(prompt: string, def = true): Promise<boolean> {
   });
 }
 
+// Build the argv passed to `claude mcp add`. Extracted as a pure function so
+// the contract — `--scope user`, env layout, npx version pin, write opt-out —
+// can be unit-tested without spawning anything.
+//
+// --scope user registers Leadbay globally for the user's account so the MCP
+// server is visible from any directory / new conversation. Without this,
+// claude mcp add defaults to project-local scope and Leadbay invisibly
+// disappears in fresh chats opened elsewhere — Ludo's #3504 third complaint.
+//
+// Default in 0.3.0 is writes-on; LEADBAY_MCP_WRITE is only injected when
+// explicitly disabled (so the env block stays minimal for the common case).
+export function buildClaudeCodeAddArgs(
+  token: string,
+  region: "us" | "fr",
+  includeWrite: boolean
+): string[] {
+  const args = [
+    "mcp",
+    "add",
+    "leadbay",
+    "--scope",
+    "user",
+    "--env",
+    `LEADBAY_TOKEN=${token}`,
+    "--env",
+    `LEADBAY_REGION=${region}`,
+  ];
+  if (!includeWrite) args.push("--env", `LEADBAY_MCP_WRITE=0`);
+  args.push("--", "npx", "-y", "@leadbay/mcp@0.3");
+  return args;
+}
+
 async function installInClaudeCode(
   token: string,
   region: "us" | "fr",
   includeWrite: boolean
 ): Promise<{ ok: boolean; message: string }> {
   const cp = await import("node:child_process");
-  const args = [
-    "mcp",
-    "add",
-    "leadbay",
-    "--env",
-    `LEADBAY_TOKEN=${token}`,
-    "--env",
-    `LEADBAY_REGION=${region}`,
-  ];
-  if (includeWrite) args.push("--env", `LEADBAY_MCP_WRITE=1`);
-  args.push("--", "npx", "-y", "@leadbay/mcp@0.2");
+  const args = buildClaudeCodeAddArgs(token, region, includeWrite);
   return await new Promise((resolve) => {
     const child = cp.spawn("claude", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
@@ -640,11 +873,12 @@ async function installInJsonConfig(
       LEADBAY_TOKEN: token,
       LEADBAY_REGION: region,
     };
-    if (includeWrite) env.LEADBAY_MCP_WRITE = "1";
+    // Default in 0.3.0 is writes-on; only set the env when explicitly disabled.
+    if (!includeWrite) env.LEADBAY_MCP_WRITE = "0";
 
     parsed.mcpServers.leadbay = {
       command: "npx",
-      args: ["-y", "@leadbay/mcp@0.2"],
+      args: ["-y", "@leadbay/mcp@0.3"],
       env,
     };
 
@@ -673,20 +907,32 @@ async function runInstall(args: string[]): Promise<number> {
   if (!email) {
     process.stderr.write(
       "Usage: leadbay-mcp install --email you@example.com [--region us|fr]\n" +
-        "                          [--allow-region-fallback] [--include-write]\n" +
+        "                          [--allow-region-fallback] [--no-write]\n" +
         "                          [--target claude-code,claude-desktop,cursor]\n" +
         "                          [--yes] [--force-legacy]\n" +
-        "  Mints a token AND registers the MCP server with your installed clients.\n" +
+        "  Mints a token AND registers the MCP server with your installed clients (at user scope).\n" +
         "  --target            Comma-separated subset; default = all detected.\n" +
-        "  --include-write     Enable LEADBAY_MCP_WRITE=1 (composite write tools — refine_prompt,\n" +
-        "                      report_outreach, adjust_audience). Off by default; off means the\n" +
-        "                      agent can read your Leadbay account but not mutate it.\n" +
+        "  --no-write          Disable composite write tools (refine_prompt, report_outreach,\n" +
+        "                      adjust_audience, etc.). They are ON by default since 0.3.0;\n" +
+        "                      pass --no-write for read-only agents.\n" +
+        "  --include-write     (deprecated since 0.3.0; now a no-op — writes are on by default).\n" +
         "  --yes               Don't ask before installing into each detected client.\n" +
         "  --force-legacy      Write to claude_desktop_config.json even when Claude Desktop 2026\n" +
         "                      DXT is detected. Not recommended — the app overwrites that file.\n" +
         "                      Use the .dxt bundle instead: https://github.com/leadbay/leadclaw/releases\n"
     );
     return 2;
+  }
+
+  // Deprecate --include-write IMMEDIATELY (before password prompt) so the
+  // user actually sees the warning. In 0.2.x this flag enabled writes; in
+  // 0.3.0 writes are on by default and the flag is a no-op.
+  if (hasFlag(args, "include-write")) {
+    process.stderr.write(
+      "[leadbay-mcp warn] --include-write is the default since 0.3.0; the flag is now a no-op.\n" +
+        "  Composite write tools (refine_prompt, report_outreach, adjust_audience, etc.) are ON by default.\n" +
+        "  Pass --no-write to install in read-only mode.\n\n"
+    );
   }
 
   // Region pin (same rule as login — refuse to auto-detect without consent).
@@ -787,11 +1033,18 @@ async function runInstall(args: string[]): Promise<number> {
   }
   process.stderr.write(`Logged in to ${region.toUpperCase()} backend.\n\n`);
 
-  const includeWrite = hasFlag(args, "include-write");
-  if (!includeWrite) {
+  // Writes are ON by default since 0.3.0; --no-write opts out. (The legacy
+  // --include-write flag was a no-op deprecation handled at the top of runInstall.)
+  const includeWrite = !hasFlag(args, "no-write");
+  if (includeWrite) {
     process.stderr.write(
-      "Note: write tools (refine_prompt, report_outreach, adjust_audience, etc.) are NOT enabled.\n" +
-        "      Re-run with --include-write to enable them.\n\n"
+      "Composite write tools ENABLED (bulk_qualify_leads, enrich_titles, refine_prompt,\n" +
+        "  report_outreach, adjust_audience, answer_clarification, import_leads).\n" +
+        "  To disable: set LEADBAY_MCP_WRITE=0 in the env block, or re-run install with --no-write.\n\n"
+    );
+  } else {
+    process.stderr.write(
+      "Composite write tools DISABLED (read-only agent). Re-run without --no-write to enable.\n\n"
     );
   }
 
@@ -835,7 +1088,7 @@ async function runInstall(args: string[]): Promise<number> {
   }
   process.stderr.write(
     `\nThe token was written into client config files but never printed to your terminal.\n` +
-      `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.2 doctor\n` +
+      `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.3 doctor\n` +
       `Restart your MCP client(s) to pick up the new server.\n` +
       `If you ever leak the token, run \`leadbay-mcp login --email <you> --region <us|fr>\` to mint a fresh one (which invalidates the prior session).\n`
   );
@@ -931,7 +1184,7 @@ async function main(): Promise<void> {
   const logger = makeStderrLogger(parseLogLevel(process.env.LEADBAY_LOG_LEVEL));
   const client = await resolveClientFromEnv(logger);
   const includeAdvanced = process.env.LEADBAY_MCP_ADVANCED === "1";
-  const includeWrite = process.env.LEADBAY_MCP_WRITE === "1";
+  const includeWrite = parseWriteEnv();
 
   // Bulk tracker: file-backed by default at ~/.leadbay/bulks.json.
   // Fails loudly unless LEADBAY_BULK_STORE_ALLOW_MEMORY=1 is set.

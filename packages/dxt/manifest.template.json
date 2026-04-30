@@ -43,7 +43,7 @@
     "leadbay_token": {
       "type": "string",
       "title": "Leadbay bearer token",
-      "description": "Mint one with: npx -y @leadbay/mcp login --email <you> --region <us|fr> --write-config ~/leadbay.json (then copy the token from that file)",
+      "description": "Mint one with: npx -y @leadbay/mcp@0.3 login --email <you> --region <us|fr> (then copy LEADBAY_TOKEN from the credentials file the command writes — path is shown on stderr)",
       "sensitive": true,
       "required": true
     },
@@ -58,8 +58,8 @@
     "leadbay_mcp_write": {
       "type": "boolean",
       "title": "Enable write tools",
-      "description": "Let Claude mutate your Leadbay account (refine_prompt, adjust_audience, report_outreach). Off by default — enable only when you want the agent to modify state.",
-      "default": false,
+      "description": "Allow Claude to call composite write tools (refine_prompt, adjust_audience, report_outreach, bulk_qualify_leads, enrich_titles, answer_clarification, import_leads). ON by default since 0.3.0 — turn this off only if you want a strictly read-only agent.",
+      "default": true,
       "required": false
     }
   },

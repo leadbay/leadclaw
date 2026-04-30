@@ -13,9 +13,12 @@ import type { Tool } from "@leadbay/core";
 //
 // Tool exposure is gated by plugin config:
 //   - composite read tools: ALWAYS exposed (the agent's default surface)
-//   - composite write tools: ALWAYS exposed (OpenClaw runs in user context;
-//     the agent has explicit consent. Write composites enforce their own
-//     verification — e.g. report_outreach requires verification={source, ref}.)
+//   - composite write tools: exposed only when exposeWrite=true
+//     (independent of the @leadbay/mcp default — OpenClaw plugins go through
+//     a separate consent surface. The MCP server flipped this to default-on
+//     in 0.3.0 so its own SERVER_INSTRUCTIONS would stop referencing
+//     unregistered tools; OpenClaw doesn't ship those instructions, so the
+//     gate stays explicit here.)
 //   - granular read tools: exposed only when exposeGranular=true
 //   - granular write tools: exposed only when both exposeGranular=true
 //     AND exposeWrite=true

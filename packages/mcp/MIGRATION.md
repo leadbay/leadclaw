@@ -1,3 +1,75 @@
+# Migration: leadbay-mcp 0.2.x → 0.3.0
+
+This release fixes [product#3504](https://github.com/leadbay/product/issues/3504): the default-installed MCP server's system prompt told the agent to call tools that the server didn't actually expose. Three behavior changes you need to know about.
+
+## 1. `LEADBAY_MCP_WRITE` defaults to ON
+
+In 0.2.x the composite write tools (`leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, `leadbay_refine_prompt`, `leadbay_report_outreach`, `leadbay_adjust_audience`, `leadbay_answer_clarification`, `leadbay_import_leads`) were gated behind `LEADBAY_MCP_WRITE=1`. The `SERVER_INSTRUCTIONS` referenced them anyway → users got an agent system prompt that lied about what was available.
+
+**0.3.0**: `LEADBAY_MCP_WRITE` defaults to `"1"` (ON). The system prompt is built from the actual exposed tool set, so it stops lying. To restore the previous read-only behavior, set `LEADBAY_MCP_WRITE=0` (or `--no-write` on `leadbay-mcp install`).
+
+### Value-vocabulary flip
+
+In 0.2.x the parser was strict: only `LEADBAY_MCP_WRITE === "1"` turned writes on. So `=true`, `=yes`, `=on` were treated as OFF (probably accidentally — the user clearly meant "on"). The 0.3.0 parser accepts all of these as ON:
+
+| Value | 0.2.x meaning | 0.3.0 meaning |
+|---|---|---|
+| unset | OFF | **ON** |
+| `""` | OFF | **ON** |
+| `"1"` / `"true"` / `"yes"` / `"on"` | OFF (only `"1"`) / OFF (the rest) | **ON** |
+| `"0"` / `"false"` / `"no"` / `"off"` | OFF | OFF |
+| anything else | OFF | ON + stderr warning |
+
+If you were relying on `LEADBAY_MCP_WRITE=true` to mean OFF (unlikely but possible), switch to `LEADBAY_MCP_WRITE=0`.
+
+## 2. `leadbay-mcp login` no longer prints the token to stdout
+
+In 0.2.x `login` printed the bearer token (inside an MCP-config JSON blob) to stdout by default, with a stderr warning. Real users (Ludo's incident) had tokens leak into terminal scrollback / agent chat / CI logs.
+
+**0.3.0**: `login` writes a `0600`-mode credentials file by default. The path resolves per-platform:
+
+| Platform | Default path |
+|---|---|
+| Linux (or anywhere `XDG_CONFIG_HOME` is set) | `$XDG_CONFIG_HOME/leadbay/credentials.json` (or `~/.config/leadbay/credentials.json`) |
+| macOS | `~/Library/Application Support/leadbay/credentials.json` |
+| Windows | `%APPDATA%\leadbay\credentials.json` |
+
+If `~/.leadbay-mcp.json` (the 0.2.x default) already exists, `login` writes to that path with a one-shot deprecation note pointing at the new location.
+
+### `--unsafe-print-token` (legacy CI use)
+
+Pass `--unsafe-print-token` to restore the old "print to stdout" behavior. The deprecated `--print-token` alias still works for one release with a warning. Use only if you have to — the token will end up in scrollback / logs.
+
+### Collision detection
+
+If the target file already exists with a different `LEADBAY_TOKEN` or `LEADBAY_REGION`, `login` refuses without `--force` and tells you how to keep both files. Toggling between accounts no longer silently overwrites the prior token.
+
+### File-write errors
+
+`EACCES` / `EROFS` / `ENOENT` print actionable remediation pointing at `--write-config /tmp/...` or `--unsafe-print-token`.
+
+## 3. `leadbay-mcp install` registers Claude Code at `--scope user`
+
+Previously `claude mcp add leadbay …` defaulted to project-local scope, so opening Claude Code from a different directory made Leadbay invisible. Ludo's #3504 third complaint.
+
+**0.3.0**: `install` injects `--scope user` into the `claude mcp add` argv. New installs are visible from any project.
+
+If you have a 0.2.x project-scope install and want to upgrade to user scope, run:
+```bash
+claude mcp remove leadbay
+npx -y @leadbay/mcp@0.3 install --email you@yourcompany.com --region us
+```
+Or do it manually:
+```bash
+claude mcp add leadbay --scope user --env LEADBAY_TOKEN=<token> --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.3
+```
+
+## 4. `--include-write` is a no-op
+
+The legacy `leadbay-mcp install --include-write` flag is accepted but a no-op — writes are on by default in 0.3.0. The deprecation warning prints **before** the password prompt so users see it.
+
+---
+
 # Migration: leadclaw / leadbay-mcp 0.1.x → 0.2.0
 
 This release is the autoplan-reviewed agent-experience overhaul. The OpenClaw
