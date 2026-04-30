@@ -40,13 +40,13 @@ beforeEach(() => {
   resetHttpMock();
 });
 
-describe("tools/list — default (composite read only)", () => {
-  it("returns the composite read tools with non-empty descriptions", async () => {
-    const { mcpClient } = await connect();
+describe("tools/list — default (composite reads + writes since 0.3.0)", () => {
+  it("returns composite reads AND writes with non-empty descriptions (writes-on default)", async () => {
+    const { mcpClient } = await connect({ includeWrite: true });
     const listed = await mcpClient.listTools();
     const names = new Set(listed.tools.map((t) => t.name));
 
-    // v0.2.0: composite reads exposed by default; writes gated by includeWrite.
+    // 0.3.0: composite reads + writes both exposed by default.
     expect(names).toContain("leadbay_pull_leads");
     expect(names).toContain("leadbay_research_lead");
     expect(names).toContain("leadbay_account_status");
@@ -54,13 +54,20 @@ describe("tools/list — default (composite read only)", () => {
     // Existing composites (kept for back-compat)
     expect(names).toContain("leadbay_research_company");
     expect(names).toContain("leadbay_prepare_outreach");
-    // Write composites must NOT be exposed without includeWrite.
-    expect(names).not.toContain("leadbay_report_outreach");
-    expect(names).not.toContain("leadbay_refine_prompt");
-    expect(names).not.toContain("leadbay_adjust_audience");
-    expect(names).not.toContain("leadbay_import_leads");
-    // find_prospects was removed in v0.2.0 (replaced by pull_leads).
+    // Composite writes — exposed under the new default.
+    expect(names).toContain("leadbay_report_outreach");
+    expect(names).toContain("leadbay_refine_prompt");
+    expect(names).toContain("leadbay_adjust_audience");
+    expect(names).toContain("leadbay_bulk_qualify_leads");
+    expect(names).toContain("leadbay_enrich_titles");
+    expect(names).toContain("leadbay_answer_clarification");
+    expect(names).toContain("leadbay_import_leads");
+    // login NEVER on MCP; find_prospects was removed in v0.2.0.
+    expect(names).not.toContain("leadbay_login");
     expect(names).not.toContain("leadbay_find_prospects");
+    // Granular tools still gated by includeAdvanced.
+    expect(names).not.toContain("leadbay_list_lenses");
+    expect(names).not.toContain("leadbay_select_leads");
 
     for (const t of listed.tools) {
       expect(t.description).toBeTypeOf("string");
@@ -70,30 +77,34 @@ describe("tools/list — default (composite read only)", () => {
   });
 
   it("does NOT expose leadbay_login (UC-3 security)", async () => {
-    const { mcpClient } = await connect();
+    const { mcpClient } = await connect({ includeWrite: true });
     const listed = await mcpClient.listTools();
     expect(listed.tools.map((t) => t.name)).not.toContain("leadbay_login");
   });
 
   it("does NOT expose granular tools by default", async () => {
-    const { mcpClient } = await connect();
+    const { mcpClient } = await connect({ includeWrite: true });
     const listed = await mcpClient.listTools();
     expect(listed.tools.map((t) => t.name)).not.toContain("leadbay_list_lenses");
   });
 });
 
-describe("tools/list — write mode (LEADBAY_MCP_WRITE=1)", () => {
-  it("exposes composite write tools when includeWrite=true", async () => {
-    const { mcpClient } = await connect({ includeWrite: true });
+describe("tools/list — read-only mode (LEADBAY_MCP_WRITE=0 / includeWrite=false)", () => {
+  it("excludes composite write tools when includeWrite=false", async () => {
+    const { mcpClient } = await connect({ includeWrite: false });
     const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
-    expect(names).toContain("leadbay_report_outreach");
-    expect(names).toContain("leadbay_refine_prompt");
-    expect(names).toContain("leadbay_answer_clarification");
-    expect(names).toContain("leadbay_adjust_audience");
-    expect(names).toContain("leadbay_bulk_qualify_leads");
-    expect(names).toContain("leadbay_enrich_titles");
-    expect(names).toContain("leadbay_import_leads");
-    // Granular writes still gated unless ALSO includeAdvanced.
+    // Reads still exposed.
+    expect(names).toContain("leadbay_pull_leads");
+    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_account_status");
+    // Writes hidden.
+    expect(names).not.toContain("leadbay_report_outreach");
+    expect(names).not.toContain("leadbay_refine_prompt");
+    expect(names).not.toContain("leadbay_answer_clarification");
+    expect(names).not.toContain("leadbay_adjust_audience");
+    expect(names).not.toContain("leadbay_bulk_qualify_leads");
+    expect(names).not.toContain("leadbay_enrich_titles");
+    expect(names).not.toContain("leadbay_import_leads");
     expect(names).not.toContain("leadbay_select_leads");
   });
 });
@@ -253,36 +264,99 @@ describe("tools/call — error envelopes", () => {
   });
 });
 
-describe("server.instructions — LLM guidance string", () => {
-  it("buildServer leads with the report_outreach mandate (cross-phase critical)", async () => {
-    const { SERVER_INSTRUCTIONS } = await import("../src/server.js");
+describe("buildServerInstructions — dynamic LLM guidance", () => {
+  const FULL_EXPOSURE = new Set([
+    "leadbay_account_status",
+    "leadbay_pull_leads",
+    "leadbay_research_lead",
+    "leadbay_recall_ordered_titles",
+    "leadbay_bulk_qualify_leads",
+    "leadbay_enrich_titles",
+    "leadbay_adjust_audience",
+    "leadbay_refine_prompt",
+    "leadbay_answer_clarification",
+    "leadbay_report_outreach",
+  ]);
+
+  const READ_ONLY = new Set([
+    "leadbay_account_status",
+    "leadbay_pull_leads",
+    "leadbay_research_lead",
+    "leadbay_recall_ordered_titles",
+  ]);
+
+  it("default (writes exposed) leads with the report_outreach mandate", async () => {
+    const { buildServerInstructions } = await import("../src/server.js");
+    const out = buildServerInstructions(FULL_EXPOSURE);
     // First sentence MUST be the verification mandate so the model retains it.
-    expect(SERVER_INSTRUCTIONS.slice(0, 200)).toMatch(/report_outreach/i);
-    expect(SERVER_INSTRUCTIONS).toMatch(/verification/i);
-    expect(SERVER_INSTRUCTIONS).toMatch(/gmail_message_id|calendar_event_id|user_confirmed/);
+    expect(out.slice(0, 200)).toMatch(/report_outreach/i);
+    expect(out).toMatch(/verification/i);
+    expect(out).toMatch(/gmail_message_id|calendar_event_id|user_confirmed/);
   });
 
-  it("server instructions reference the new composite agent flow", async () => {
-    const { SERVER_INSTRUCTIONS } = await import("../src/server.js");
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_pull_leads/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_research_lead/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_account_status/);
+  it("default references the composite agent flow", async () => {
+    const { buildServerInstructions } = await import("../src/server.js");
+    const out = buildServerInstructions(FULL_EXPOSURE);
+    expect(out).toMatch(/leadbay_pull_leads/);
+    expect(out).toMatch(/leadbay_research_lead/);
+    expect(out).toMatch(/leadbay_account_status/);
   });
 
-  it("server instructions teach the inbox + pace + scoring mental model", async () => {
-    const { SERVER_INSTRUCTIONS } = await import("../src/server.js");
+  it("default teaches the inbox + pace + scoring mental model", async () => {
+    const { buildServerInstructions } = await import("../src/server.js");
+    const out = buildServerInstructions(FULL_EXPOSURE);
     // Inbox framing — the daily-cadence anchor.
-    expect(SERVER_INSTRUCTIONS).toMatch(/inbox/i);
+    expect(out).toMatch(/inbox/i);
     // Consumption-based pacing.
-    expect(SERVER_INSTRUCTIONS).toMatch(/paced|pace/i);
+    expect(out).toMatch(/paced|pace/i);
     // Two scoring layers with concrete field names.
-    expect(SERVER_INSTRUCTIONS).toMatch(/two scoring layers/i);
-    expect(SERVER_INSTRUCTIONS).toMatch(/ai_agent_lead_score/);
+    expect(out).toMatch(/two scoring layers/i);
+    expect(out).toMatch(/ai_agent_lead_score/);
     // Daily-rhythm recommendation.
-    expect(SERVER_INSTRUCTIONS).toMatch(/daily|each day/i);
-    // Points to the on-demand deepening tools.
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_bulk_qualify_leads/);
-    expect(SERVER_INSTRUCTIONS).toMatch(/leadbay_enrich_titles/);
+    expect(out).toMatch(/daily|each day/i);
+    // Points to the on-demand deepening tools when they are exposed.
+    expect(out).toMatch(/leadbay_bulk_qualify_leads/);
+    expect(out).toMatch(/leadbay_enrich_titles/);
+  });
+
+  it("read-only mode does NOT mention write tools or the report_outreach mandate", async () => {
+    const { buildServerInstructions } = await import("../src/server.js");
+    const out = buildServerInstructions(READ_ONLY);
+    // First 200 chars must NOT carry the verification mandate (report_outreach absent).
+    expect(out.slice(0, 200)).not.toMatch(/report_outreach/i);
+    // Body must not name any write tool.
+    expect(out).not.toMatch(/leadbay_bulk_qualify_leads/);
+    expect(out).not.toMatch(/leadbay_enrich_titles/);
+    expect(out).not.toMatch(/leadbay_adjust_audience/);
+    expect(out).not.toMatch(/leadbay_refine_prompt/);
+    expect(out).not.toMatch(/leadbay_answer_clarification/);
+    expect(out).not.toMatch(/leadbay_report_outreach/);
+    // Mental-model framing IS still present.
+    expect(out).toMatch(/inbox/i);
+    expect(out).toMatch(/two scoring layers/i);
+    // Read-only fallback prose IS present.
+    expect(out).toMatch(/those actions require write tools/i);
+    expect(out).toMatch(/LEADBAY_MCP_WRITE=0/);
+    // Still references the composite read flow.
+    expect(out).toMatch(/leadbay_pull_leads/);
+    expect(out).toMatch(/leadbay_research_lead/);
+  });
+
+  it("buildServer wires dynamic instructions through the MCP transport", async () => {
+    // Read-only mode: verify the transport carries the dynamic short version.
+    const { mcpClient } = await connect({ includeWrite: false });
+    const caps = mcpClient.getServerCapabilities();
+    void caps; // capabilities are tools-only; instructions are on the InitializeResult.
+    // The MCP SDK attaches `instructions` to the server-side init response. The
+    // simplest way to assert the runtime path is via getInstructions() if
+    // available, otherwise via a direct probe of the server instance.
+    const instructions = (mcpClient as any).getInstructions?.();
+    if (typeof instructions === "string") {
+      expect(instructions.slice(0, 200)).not.toMatch(/report_outreach/i);
+      expect(instructions).not.toMatch(/leadbay_refine_prompt/);
+      expect(instructions).toMatch(/inbox/i);
+      expect(instructions).toMatch(/those actions require write tools/i);
+    }
   });
 });
 

@@ -1,5 +1,37 @@
 # Changelog — @leadbay/mcp
 
+## 0.3.0 — 2026-04-29
+
+Behavior-changing release: closes [product#3504](https://github.com/leadbay/product/issues/3504) end-to-end. Default-installed MCP server now matches its own system prompt out of the box, the `login` command never lands a bearer token in scrollback by default, and `claude mcp add` registers Leadbay at user scope so it's visible from any project.
+
+### Coverage — composite write tools default ON
+
+- **`LEADBAY_MCP_WRITE` default is now `"1"` (ON).** The composite write tools (`leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, `leadbay_refine_prompt`, `leadbay_report_outreach`, `leadbay_adjust_audience`, `leadbay_answer_clarification`, `leadbay_import_leads`) are exposed by default. Set `LEADBAY_MCP_WRITE=0` (or `--no-write` on `install`) to disable them.
+- **`SERVER_INSTRUCTIONS` is now dynamic.** The system prompt sent to MCP clients references only the tools actually registered on this instance. Read-only-mode agents receive a different prompt that omits the verification mandate and tells the agent to ask the user to enable writes if they request a config-mutating action.
+- **`leadbay-mcp install --include-write` is a no-op (deprecated).** Writes are on by default. Pass `--no-write` for the inverse. The deprecation warning prints **before** the password prompt so it's not buried.
+- **`LEADBAY_MCP_WRITE` value-vocabulary expanded.** In 0.2.x only `"1"` was ON; `"true"` / `"yes"` / `"on"` were treated as OFF. In 0.3.0 the parser accepts all of those as ON, and `"0"` / `"false"` / `"no"` / `"off"` as OFF. Unrecognized values default to ON with a one-shot stderr warning. **Existing operators using `=true` / `=yes` / `=on` will see writes flip ON.** See [MIGRATION.md](./MIGRATION.md).
+
+### Login — no token in stdout
+
+- **`leadbay-mcp login` default writes a 0600-mode credentials file.** The path resolves to `$XDG_CONFIG_HOME/leadbay/credentials.json` if set, else `~/Library/Application Support/leadbay/credentials.json` on macOS, `%APPDATA%\leadbay\credentials.json` on Windows, else `~/.config/leadbay/credentials.json`. Existing `~/.leadbay-mcp.json` files (0.2.x) are still honored on this run with a deprecation note pointing at the new path (no automatic file move).
+- **`--unsafe-print-token`** restores the previous "print JSON config to stdout" behavior. The deprecated `--print-token` alias still works for one release with a deprecation warning.
+- **Collision detection** — if the target credentials file already exists with a different `LEADBAY_TOKEN` or `LEADBAY_REGION`, `login` refuses without `--force` and tells the operator how to keep both files.
+- **EACCES / EROFS / ENOENT** errors on the file write print actionable remediation pointing at `--write-config /tmp/...` or `--unsafe-print-token`.
+
+### Scope — visible from any project
+
+- **`leadbay-mcp install` now passes `--scope user` to `claude mcp add`.** This was Ludo's third complaint in #3504: the default `claude mcp add` is project-local, so a freshly-opened conversation from a different directory can't see the server. README §2 (Claude Code), §1 (install), and §4 (troubleshooting table) all reflect the user-scope recommendation.
+
+### Migration
+
+- Read [MIGRATION.md](./MIGRATION.md) for the value-vocabulary flip, the login default, and the install scope change.
+- The legacy DXT manifest key (`leadbay_mcp_write`) is unchanged in shape — it now defaults `true` (ON) and feeds the same `LEADBAY_MCP_WRITE` env var. Users who explicitly set the toggle to `false` keep their read-only behavior; users who never touched it (the bug case Ludo hit) now get the new default ON.
+- Tests: dropped the `SERVER_INSTRUCTIONS` const re-export. Tests now exercise `buildServerInstructions(exposedSet)` directly across the default/read-only/advanced matrices. New unit suites: `parse-write-env.test.ts`, `login-default.test.ts`, `install-flags.test.ts`.
+
+### Known follow-up (0.4.0)
+
+- `compositeWriteTools` will split into safer-tier (credit-spending: bulk_qualify_leads, enrich_titles, report_outreach, answer_clarification) and config-mutating-tier (refine_prompt, adjust_audience, import_leads), with audit-log + one-click undo on the config-mutating side. Tracked separately.
+
 ## 0.2.5 — 2026-04-28
 
 New `leadbay_import_leads` composite write tool.

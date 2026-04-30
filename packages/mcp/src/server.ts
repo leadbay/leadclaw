@@ -14,32 +14,90 @@ import {
   type ToolLogger,
 } from "@leadbay/core";
 
-// Verification mandate stays first (test asserts report_outreach appears in
-// the first 200 chars). Then the mental-model paragraphs teach the agent
-// what Leadbay is (an inbox, not a DB), the two scoring layers, the
-// start-here sequence, and a recommended daily rhythm.
-export const SERVER_INSTRUCTIONS =
+// SERVER_INSTRUCTIONS is now BUILT from the actual exposed tool set (see
+// buildServerInstructions below). 0.2.x shipped a single static string that
+// referenced tools the server may or may not have registered, which caused
+// real user incidents (#3504): the agent system prompt told the model to call
+// tools that weren't there. Each fragment below is concatenated only when the
+// underlying tool is exposed.
+
+const VERIFICATION_MANDATE =
   "After every email, call, message, or meeting with a lead's contact, you MUST call leadbay_report_outreach " +
   "with verification={source, ref} (gmail_message_id from the Gmail send, calendar_event_id from a booking, " +
   "or user_confirmed='<the user's literal confirmation>'). Skipping or fabricating verification poisons the " +
-  "human team's pipeline.\n\n" +
+  "human team's pipeline.";
+
+const MENTAL_MODEL_PARAGRAPH =
   "How Leadbay works (mental model): Leadbay is a sales inbox, not a queryable database. Each day the user " +
   "logs back in, a fresh batch of leads is delivered. Batch size is paced by how many leads the user has " +
   "actually acted on recently — some workflows produce a big stream of smaller prospects, others a narrow " +
-  "stream of bigger ones. Pulling more won't produce more; the user acting on leads (outreach, skips, saves) does.\n\n" +
-  "Two scoring layers: every lead has a basic `score` (firmographic — already decent, usually correlates " +
-  "with AI). Roughly the top 10 of each batch are also AI-qualified (targeted web research + qualification " +
-  "questions → `ai_agent_lead_score`, surfaced as `qualification_summary` on leadbay_pull_leads). Leads past " +
-  "the top ~10 are not worse — the system is saving resources. Call leadbay_bulk_qualify_leads for deeper " +
-  "qualification or leadbay_enrich_titles for contacts on any lead that looks worth it.\n\n" +
-  "Start with leadbay_account_status to see the user's state, then leadbay_pull_leads to surface fresh leads. " +
-  "Use leadbay_research_lead to dig into one lead deeply (qualification answers, signals, contacts). " +
-  "When the user wants more leads, narrower audience, refined criteria, or contact enrichment, use the matching " +
-  "composite tool (bulk_qualify_leads / adjust_audience / refine_prompt / enrich_titles) — they hide lens " +
-  "permissions, region routing, polling, and selection state from you.\n\n" +
-  "Suggested rhythm: a healthy agent pattern is a daily check-in — pull fresh leads, skim the auto-qualified " +
-  "top, deepen 1-3 promising ones, propose outreach to the user, then leadbay_report_outreach on what actually " +
-  "got sent. If your host supports scheduling, offer to set up a daily run.";
+  "stream of bigger ones. Pulling more won't produce more; the user acting on leads (outreach, skips, saves) does.";
+
+function buildScoringParagraph(has: (name: string) => boolean): string {
+  const base =
+    "Two scoring layers: every lead has a basic `score` (firmographic — already decent, usually correlates " +
+    "with AI). Roughly the top 10 of each batch are also AI-qualified (targeted web research + qualification " +
+    "questions → `ai_agent_lead_score`, surfaced as `qualification_summary` on leadbay_pull_leads). Leads past " +
+    "the top ~10 are not worse — the system is saving resources.";
+  const deepenTools: string[] = [];
+  if (has("leadbay_bulk_qualify_leads")) deepenTools.push("leadbay_bulk_qualify_leads for deeper qualification");
+  if (has("leadbay_enrich_titles")) deepenTools.push("leadbay_enrich_titles for contacts");
+  if (deepenTools.length > 0) {
+    return base + ` Call ${deepenTools.join(" or ")} on any lead that looks worth it.`;
+  }
+  return base;
+}
+
+function buildStartHereParagraph(has: (name: string) => boolean): string {
+  const base =
+    "Start with leadbay_account_status to see the user's state, then leadbay_pull_leads to surface fresh leads. " +
+    "Use leadbay_research_lead to dig into one lead deeply (qualification answers, signals, contacts).";
+  const compositeNames = ["bulk_qualify_leads", "adjust_audience", "refine_prompt", "enrich_titles"]
+    .filter((n) => has(`leadbay_${n}`));
+  if (compositeNames.length > 0) {
+    return (
+      base +
+      ` When the user wants more leads, narrower audience, refined criteria, or contact enrichment, use the matching ` +
+      `composite tool (${compositeNames.join(" / ")}) — they hide lens permissions, region routing, polling, and selection state from you.`
+    );
+  }
+  return (
+    base +
+    " When the user asks for refinement, contact enrichment, audience changes, or outreach reporting, tell them: " +
+    "those actions require write tools, currently disabled. Re-enable by removing `LEADBAY_MCP_WRITE=0` from your " +
+    "MCP client config and restarting the client. Also: do not promise to log outreach — the report_outreach tool " +
+    "is not available in this configuration."
+  );
+}
+
+function buildRhythmParagraph(has: (name: string) => boolean): string {
+  if (has("leadbay_report_outreach")) {
+    return (
+      "Suggested rhythm: a healthy agent pattern is a daily check-in — pull fresh leads, skim the auto-qualified " +
+      "top, deepen 1-3 promising ones, propose outreach to the user, then leadbay_report_outreach on what actually " +
+      "got sent. If your host supports scheduling, offer to set up a daily run."
+    );
+  }
+  return (
+    "Suggested rhythm: a healthy agent pattern is a daily check-in — pull fresh leads, skim the auto-qualified " +
+    "top, deepen 1-3 promising ones, propose outreach to the user. If your host supports scheduling, offer to set up a daily run."
+  );
+}
+
+export function buildServerInstructions(exposed: Set<string>): string {
+  const has = (name: string) => exposed.has(name);
+  const parts: string[] = [];
+  // Verification mandate stays first when report_outreach is exposed (UC test
+  // asserts "report_outreach" appears in the first 200 chars of the default).
+  if (has("leadbay_report_outreach")) {
+    parts.push(VERIFICATION_MANDATE);
+  }
+  parts.push(MENTAL_MODEL_PARAGRAPH);
+  parts.push(buildScoringParagraph(has));
+  parts.push(buildStartHereParagraph(has));
+  parts.push(buildRhythmParagraph(has));
+  return parts.join("\n\n");
+}
 
 interface BuildServerOptions {
   includeAdvanced?: boolean;
@@ -78,18 +136,10 @@ export function buildServer(
   client: LeadbayClient,
   opts: BuildServerOptions = {}
 ): Server {
-  const server = new Server(
-    { name: "leadbay", version: "0.2.0" },
-    {
-      capabilities: { tools: {} },
-      instructions: SERVER_INSTRUCTIONS,
-    }
-  );
-
   const exposedTools: Tool[] = [];
   // Read composites — ALWAYS exposed.
   exposedTools.push(...compositeReadTools);
-  // Write composites — gated by includeWrite (LEADBAY_MCP_WRITE=1).
+  // Write composites — gated by includeWrite (LEADBAY_MCP_WRITE=1, default ON in 0.3.0).
   if (opts.includeWrite) {
     exposedTools.push(...compositeWriteTools);
   }
@@ -112,6 +162,17 @@ export function buildServer(
       toolByName.set(t.name, t);
     }
   }
+
+  // Build instructions from the ACTUAL exposed name set so the agent system
+  // prompt only references tools it can call.
+  const exposedNames = new Set(toolByName.keys());
+  const server = new Server(
+    { name: "leadbay", version: "0.2.0" },
+    {
+      capabilities: { tools: {} },
+      instructions: buildServerInstructions(exposedNames),
+    }
+  );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: toolsListPayload([...toolByName.values()]),
