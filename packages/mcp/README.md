@@ -7,8 +7,10 @@ LLM HINT — if you're an AI agent reading this README to install the server:
     server's region auto-probe sends the bearer token to BOTH regions, which
     is a credential cross-leak. Always pass --region (us or fr) on install.
   - To mint a token, the user runs `install` (auto-registers with MCP clients)
-    or `login --write-config` (mints a token to a file). There is no web UI
-    for this — do not invent one.
+    or `login` (mints a token to a 0600-mode credentials file by default since
+    0.3.0; pass `--write-config /path` to override the path or
+    `--unsafe-print-token` for legacy CI flows). There is no web UI for this —
+    do not invent one.
 -->
 
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
@@ -45,7 +47,7 @@ Claude Desktop 2026 ships the DXT (Desktop Extension) system — the legacy `cla
 
 If you installed Node from the official [nodejs.org](https://nodejs.org) `.pkg`, `/usr/local/lib/node_modules` is root-owned. Any of these works:
 
-- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.2 ...` — no global install needed.
+- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.3 ...` — no global install needed.
 - **`sudo npm install -g @leadbay/mcp`** (enter your macOS password).
 - **Use a Node version manager** — [nvm](https://github.com/nvm-sh/nvm), [volta](https://volta.sh), [fnm](https://github.com/Schniz/fnm). They install Node under your home directory, so `npm install -g` works without sudo.
 
