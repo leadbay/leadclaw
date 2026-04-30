@@ -269,6 +269,39 @@ export function resolveDefaultCredentialsPath(): { path: string; legacy: boolean
   return { path: computeFreshDefaultPath(), legacy: false };
 }
 
+// Pure decision: should `runLogin` refuse to overwrite `existingConfig` when
+// the user is logging in as `email`/`region`? Returns null when overwrite is
+// safe; returns a string reason when it should be refused.
+//
+// Identity = (email, region). Token equality is intentionally NOT checked —
+// every loginAt() mints a fresh token, so token-equality would always fire.
+// 0.2.x configs without an `email` field fall through to "safe" (the user
+// clearly wants to refresh whatever account that file holds — CLI gives no
+// other identity signal).
+export function checkLoginCollision(
+  existingConfig: unknown,
+  email: string,
+  region: "us" | "fr"
+): string | null {
+  if (!existingConfig || typeof existingConfig !== "object") {
+    return "existing file is not valid JSON";
+  }
+  const cfg = existingConfig as Record<string, any>;
+  const existingEmail: string | undefined =
+    typeof cfg.email === "string" && cfg.email.length > 0 ? cfg.email : undefined;
+  const existingRegion: string | undefined =
+    typeof cfg.mcpServers?.leadbay?.env?.LEADBAY_REGION === "string"
+      ? cfg.mcpServers.leadbay.env.LEADBAY_REGION
+      : undefined;
+  if (existingEmail !== undefined && existingEmail !== email) {
+    return `existing email=${existingEmail} (this login is email=${email})`;
+  }
+  if (existingRegion !== undefined && existingRegion !== region) {
+    return `existing region=${existingRegion} (this login is region=${region})`;
+  }
+  return null;
+}
+
 // Pure platform-routing for the non-legacy default path. Extracted so the
 // legacy-fallback message can name the path 0.3.0 would have used WITHOUT
 // re-reading the filesystem and without duplicating resolveDefaultCredentialsPath.
@@ -370,7 +403,12 @@ async function runLogin(args: string[]): Promise<number> {
     return 1;
   }
 
+  // Stamp `email` at the envelope root so future re-logins on the same account
+  // can detect "same account, different token" (every loginAt() mints a fresh
+  // token; collision detection by token equality always failed). MCP clients
+  // ignore unknown top-level fields, so this is safe to add.
   const config = {
+    email,
     mcpServers: {
       leadbay: {
         command: "npx",
@@ -428,33 +466,24 @@ async function runLogin(args: string[]): Promise<number> {
     usingLegacyPath = resolved.legacy;
   }
 
-  // Collision detection: if target file exists with a different token/region,
-  // refuse without --force. Same account → silent overwrite OK.
+  // Collision detection (see checkLoginCollision for the decision rule).
   try {
     const { existsSync, readFileSync } = await import("node:fs");
     if (existsSync(targetPath) && !force) {
+      let existing: unknown;
       try {
-        const raw = readFileSync(targetPath, "utf8");
-        const existing = JSON.parse(raw);
-        const existingEnv = existing?.mcpServers?.leadbay?.env ?? {};
-        const existingToken: string | undefined = existingEnv.LEADBAY_TOKEN;
-        const existingRegion: string | undefined = existingEnv.LEADBAY_REGION;
-        const tokenDiff = typeof existingToken === "string" && existingToken !== result.token;
-        const regionDiff = typeof existingRegion === "string" && existingRegion !== result.region;
-        if (tokenDiff || regionDiff) {
-          const existingPrefix = existingToken ? existingToken.slice(0, 8) + "…" : "(missing)";
-          process.stderr.write(
-            `leadbay-mcp login: refusing to overwrite ${targetPath} — existing config points at\n` +
-              `  region=${existingRegion ?? "(missing)"} token=${existingPrefix}\n` +
-              `  Different from this login (region=${result.region}). Pass --force to overwrite, or\n` +
-              `  --write-config /some/other/path.json to keep both.\n`
-          );
-          return 1;
-        }
+        existing = JSON.parse(readFileSync(targetPath, "utf8"));
       } catch {
-        // Existing file is not parseable JSON — treat as collision (don't clobber unknown content).
         process.stderr.write(
           `leadbay-mcp login: ${targetPath} exists but is not valid JSON. Pass --force to overwrite.\n`
+        );
+        return 1;
+      }
+      const collision = checkLoginCollision(existing, email, result.region);
+      if (collision) {
+        process.stderr.write(
+          `leadbay-mcp login: refusing to overwrite ${targetPath} — ${collision}.\n` +
+            `  Pass --force to overwrite, or --write-config /some/other/path.json to keep both.\n`
         );
         return 1;
       }
@@ -464,15 +493,33 @@ async function runLogin(args: string[]): Promise<number> {
     return 1;
   }
 
+  // Atomic write: tmp + chmod + rename. SIGINT mid-write leaves the tmp file
+  // (cleaned up best-effort), never a half-written credentials file. Setting
+  // mode on the tmp file BEFORE rename eliminates the writeFileSync→chmod
+  // TOCTOU window where the token could briefly sit at the umask default.
+  let actualMode: number | undefined;
   try {
-    const { writeFileSync, chmodSync, mkdirSync } = await import("node:fs");
+    const { writeFileSync, chmodSync, mkdirSync, renameSync, statSync, unlinkSync } = await import("node:fs");
     const { dirname } = await import("node:path");
     mkdirSync(dirname(targetPath), { recursive: true });
-    writeFileSync(targetPath, JSON.stringify(config, null, 2) + "\n", {
+    const tmp = targetPath + ".tmp." + process.pid;
+    writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", {
       encoding: "utf8",
       mode: 0o600,
     });
-    try { chmodSync(targetPath, 0o600); } catch { /* best-effort */ }
+    try {
+      chmodSync(tmp, 0o600);
+    } catch {
+      // Filesystem may not support POSIX modes (FAT32/exFAT/some NFS). Continue
+      // — we'll surface the actual mode to the user below.
+    }
+    renameSync(tmp, targetPath);
+    try {
+      actualMode = statSync(targetPath).mode & 0o777;
+    } catch { /* mode reporting is best-effort */ }
+    // Defensive cleanup if rename somehow left the tmp behind (shouldn't happen
+    // on POSIX renameSync, but Windows can be quirky on cross-FS paths).
+    try { unlinkSync(tmp); } catch { /* expected to fail post-rename */ }
   } catch (err: any) {
     const code = err?.code;
     if (code === "EACCES" || code === "EROFS" || code === "ENOENT") {
@@ -487,10 +534,17 @@ async function runLogin(args: string[]): Promise<number> {
     return 1;
   }
 
+  // Don't claim "(mode 0600)" when stat says otherwise — tell the truth so the
+  // user can act on a permissions surprise.
+  const modeNote = actualMode === 0o600
+    ? "(mode 0600)"
+    : actualMode !== undefined
+    ? `(mode 0${actualMode.toString(8)} — chmod 0600 failed; treat the file as sensitive)`
+    : "(mode unknown)";
   process.stderr.write(
     `\nLogged in to ${result.region.toUpperCase()} backend ` +
       `(${result.verified ? "verified" : "UNVERIFIED — check your email"}).\n` +
-      `Wrote MCP config to ${targetPath} (mode 0600). Token NOT printed to terminal.\n`
+      `Wrote MCP config to ${targetPath} ${modeNote}. Token NOT printed to terminal.\n`
   );
   if (usingLegacyPath) {
     // Where would 0.3.0 have written this on a fresh install? Re-run the
@@ -503,10 +557,14 @@ async function runLogin(args: string[]): Promise<number> {
     );
   }
   if (!quiet) {
+    // Default macOS path contains a space ("Application Support/"). Single-quote
+    // the path so the printed `claude mcp add …` is copy-paste safe regardless
+    // of where the credentials file landed.
+    const quotedPath = `'${targetPath.replace(/'/g, `'\\''`)}'`;
     process.stderr.write(
       `\nFor Claude Code, run:\n` +
         `  claude mcp add leadbay --scope user \\\n` +
-        `    --env LEADBAY_TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ${targetPath}) \\\n` +
+        `    --env LEADBAY_TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ${quotedPath}) \\\n` +
         `    --env LEADBAY_REGION=${result.region} \\\n` +
         `    -- npx -y @leadbay/mcp@0.3\n`
     );
