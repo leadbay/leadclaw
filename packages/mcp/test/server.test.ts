@@ -342,21 +342,29 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
     expect(out).toMatch(/leadbay_research_lead/);
   });
 
-  it("buildServer wires dynamic instructions through the MCP transport", async () => {
-    // Read-only mode: verify the transport carries the dynamic short version.
-    const { mcpClient } = await connect({ includeWrite: false });
-    const caps = mcpClient.getServerCapabilities();
-    void caps; // capabilities are tools-only; instructions are on the InitializeResult.
-    // The MCP SDK attaches `instructions` to the server-side init response. The
-    // simplest way to assert the runtime path is via getInstructions() if
-    // available, otherwise via a direct probe of the server instance.
-    const instructions = (mcpClient as any).getInstructions?.();
-    if (typeof instructions === "string") {
-      expect(instructions.slice(0, 200)).not.toMatch(/report_outreach/i);
-      expect(instructions).not.toMatch(/leadbay_refine_prompt/);
-      expect(instructions).toMatch(/inbox/i);
-      expect(instructions).toMatch(/those actions require write tools/i);
-    }
+  it("buildServer attaches dynamic instructions to the Server (read-only mode)", async () => {
+    const { server } = await connect({ includeWrite: false });
+    // MCP SDK 1.29.0 stores the constructor-time `instructions` option on
+    // Server._instructions. We assert against that directly so the test cannot
+    // silently pass if the wiring breaks. (Plain getServerCapabilities() does
+    // NOT carry the instructions string — it's emitted on InitializeResult.)
+    const instructions = (server as any)._instructions;
+    expect(typeof instructions).toBe("string");
+    expect(instructions.slice(0, 200)).not.toMatch(/report_outreach/i);
+    expect(instructions).not.toMatch(/leadbay_refine_prompt/);
+    expect(instructions).toMatch(/inbox/i);
+    expect(instructions).toMatch(/those actions require write tools/i);
+  });
+
+  it("buildServer attaches dynamic instructions to the Server (default writes-on)", async () => {
+    const { server } = await connect({ includeWrite: true });
+    const instructions = (server as any)._instructions;
+    expect(typeof instructions).toBe("string");
+    // Verification mandate leads when report_outreach is exposed.
+    expect(instructions.slice(0, 200)).toMatch(/report_outreach/i);
+    expect(instructions).toMatch(/leadbay_bulk_qualify_leads/);
+    expect(instructions).toMatch(/leadbay_enrich_titles/);
+    expect(instructions).not.toMatch(/those actions require write tools/i);
   });
 });
 

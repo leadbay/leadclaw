@@ -167,7 +167,7 @@ export function buildServer(
   // prompt only references tools it can call.
   const exposedNames = new Set(toolByName.keys());
   const server = new Server(
-    { name: "leadbay", version: "0.2.0" },
+    { name: "leadbay", version: "0.3.0" },
     {
       capabilities: { tools: {} },
       instructions: buildServerInstructions(exposedNames),

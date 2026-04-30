@@ -260,29 +260,34 @@ function hasFlag(args: string[], name: string): boolean {
 // Backward-compat: if 0.2.x's ~/.leadbay-mcp.json already exists, use that
 // path on this run with a deprecation note pointing at the new path.
 export function resolveDefaultCredentialsPath(): { path: string; legacy: boolean } {
-  const os = require_("node:os");
-  const path = require_("node:path");
   const fs = require_("node:fs");
-  const home = os.homedir();
-  const legacyPath = path.join(home, ".leadbay-mcp.json");
+  const path = require_("node:path");
+  const legacyPath = path.join(require_("node:os").homedir(), ".leadbay-mcp.json");
   if (fs.existsSync(legacyPath)) {
     return { path: legacyPath, legacy: true };
   }
+  return { path: computeFreshDefaultPath(), legacy: false };
+}
+
+// Pure platform-routing for the non-legacy default path. Extracted so the
+// legacy-fallback message can name the path 0.3.0 would have used WITHOUT
+// re-reading the filesystem and without duplicating resolveDefaultCredentialsPath.
+export function computeFreshDefaultPath(): string {
+  const os = require_("node:os");
+  const path = require_("node:path");
+  const home = os.homedir();
   const xdg = process.env.XDG_CONFIG_HOME;
   if (xdg && xdg.length > 0) {
-    return { path: path.join(xdg, "leadbay", "credentials.json"), legacy: false };
+    return path.join(xdg, "leadbay", "credentials.json");
   }
   if (process.platform === "darwin") {
-    return {
-      path: path.join(home, "Library", "Application Support", "leadbay", "credentials.json"),
-      legacy: false,
-    };
+    return path.join(home, "Library", "Application Support", "leadbay", "credentials.json");
   }
   if (process.platform === "win32") {
     const appdata = process.env.APPDATA ?? path.join(home, "AppData", "Roaming");
-    return { path: path.join(appdata, "leadbay", "credentials.json"), legacy: false };
+    return path.join(appdata, "leadbay", "credentials.json");
   }
-  return { path: path.join(home, ".config", "leadbay", "credentials.json"), legacy: false };
+  return path.join(home, ".config", "leadbay", "credentials.json");
 }
 
 async function runLogin(args: string[]): Promise<number> {
@@ -488,20 +493,10 @@ async function runLogin(args: string[]): Promise<number> {
       `Wrote MCP config to ${targetPath} (mode 0600). Token NOT printed to terminal.\n`
   );
   if (usingLegacyPath) {
-    const fresh = resolveDefaultCredentialsPath.toString; // ensure helper imported
-    void fresh;
-    // Recompute the non-legacy path purely for the message.
-    const os = require_("node:os");
-    const path = require_("node:path");
-    const home = os.homedir();
-    const xdg = process.env.XDG_CONFIG_HOME;
-    const newPath = xdg
-      ? path.join(xdg, "leadbay", "credentials.json")
-      : process.platform === "darwin"
-      ? path.join(home, "Library", "Application Support", "leadbay", "credentials.json")
-      : process.platform === "win32"
-      ? path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "leadbay", "credentials.json")
-      : path.join(home, ".config", "leadbay", "credentials.json");
+    // Where would 0.3.0 have written this on a fresh install? Re-run the
+    // resolver against a synthetic non-legacy state so the message stays in
+    // sync with resolveDefaultCredentialsPath without duplicating its logic.
+    const newPath = computeFreshDefaultPath();
     process.stderr.write(
       `\n[leadbay-mcp note] Used the legacy 0.2.x path ${targetPath}. The 0.3.0 default is ${newPath}.\n` +
         `  Move the file there at your convenience (no code change required — both paths are read).\n`
