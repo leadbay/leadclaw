@@ -622,6 +622,13 @@ export interface Tool<P = any, R = any> {
   name: string;
   description: string;
   inputSchema: JSONSchema;
+  // MCP-spec output shape (2025-11-25). When set, the MCP server sends a
+  // matching `structuredContent` block on every successful call so the
+  // client can consume the typed payload directly without re-parsing the
+  // JSON-stringified text. Backwards-compat: text content stays even when
+  // outputSchema is set; clients that don't read structuredContent see no
+  // change.
+  outputSchema?: JSONSchema;
   // MCP-spec annotations: hints for clients about read/write/idempotency
   // posture. Optional for backwards-compat — tools without annotations work
   // exactly as before; clients that don't read annotations ignore them.

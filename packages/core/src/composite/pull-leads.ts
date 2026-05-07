@@ -91,6 +91,48 @@ export const pullLeads: Tool<PullLeadsParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      lens: {
+        type: "object",
+        description: "Lens metadata (id of the lens that was queried).",
+        properties: { id: { type: "number" } },
+      },
+      leads: {
+        type: "array",
+        description:
+          "The page of leads. In default mode (verbose:false) each lead is the trimmed agent-friendly shape; in verbose:true the full LeadPayload.",
+        items: { type: "object" },
+      },
+      pagination: {
+        type: "object",
+        description: "page (0-indexed), pages (total), total (item count).",
+        properties: {
+          page: { type: "number" },
+          pages: { type: "number" },
+          total: { type: "number" },
+        },
+      },
+      computing_wishlist: {
+        type: "boolean",
+        description: "True if Leadbay is still rebuilding this lens's wishlist.",
+      },
+      computing_scores: {
+        type: "boolean",
+        description: "True if scoring is still running.",
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region + last-call latency.",
+        properties: {
+          region: { type: "string" },
+          latency_ms: { type: ["number", "null"] },
+        },
+      },
+    },
+    required: ["lens", "leads", "pagination"],
+  },
   execute: async (
     client: LeadbayClient,
     params: PullLeadsParams,

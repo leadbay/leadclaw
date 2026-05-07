@@ -21,6 +21,51 @@ export const accountStatus: Tool<Record<string, never>> = {
     "When NOT to use: as a pre-flight gate before bulk ops — operations themselves return 429; this tool is " +
     "for context, not gating.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  outputSchema: {
+    type: "object",
+    properties: {
+      user: {
+        type: "object",
+        description: "Identity & roles for the current bearer-token holder.",
+        properties: {
+          email: { type: ["string", "null"] },
+          name: { type: ["string", "null"] },
+          admin: { type: "boolean" },
+          manager: { type: "boolean" },
+          language: { type: "string" },
+        },
+      },
+      organization: {
+        type: "object",
+        description: "Org-level state and feature flags.",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          ai_agent_enabled: { type: "boolean" },
+          computing_intelligence: {
+            type: "boolean",
+            description:
+              "True if Leadbay is mid-regenerating intelligence after a refine_prompt; new leads will reflect it shortly.",
+          },
+          plan: { type: ["string", "null"] },
+        },
+      },
+      last_requested_lens: {
+        type: ["number", "null"],
+        description: "Most recent lens id the user pulled leads from.",
+      },
+      quota: {
+        type: ["object", "null"],
+        description:
+          "Per-resource quota state (llm_completion, ai_rescore, web_fetch) across daily/weekly/monthly windows. Null if /quota_status failed (logged in stderr).",
+      },
+      _meta: {
+        type: "object",
+        properties: { region: { type: "string" } },
+      },
+    },
+    required: ["user", "organization"],
+  },
   execute: async (client: LeadbayClient, _params, ctx?: ToolContext) => {
     const me = await client.resolveMe();
 

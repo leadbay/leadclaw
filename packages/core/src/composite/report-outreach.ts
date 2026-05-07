@@ -94,6 +94,36 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
     required: ["note", "verification"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    description:
+      "Either the dry_run shape (would_write_notes / would_set_epilogue) OR the live result (note_results / epilogue_result).",
+    properties: {
+      dry_run: { type: "boolean" },
+      would_write_notes: {
+        type: "array",
+        description: "On dry_run: the per-lead POST shapes that WOULD be issued.",
+        items: { type: "object" },
+      },
+      would_set_epilogue: {
+        type: ["object", "null"],
+        description: "On dry_run: the epilogue POST shape that WOULD be issued.",
+      },
+      note_results: {
+        type: "array",
+        description: "Per-lead note write outcome: { lead_id, ok, note_id?, error? }.",
+        items: { type: "object" },
+      },
+      epilogue_result: {
+        type: "object",
+        description: "Whether the epilogue status was applied + any error.",
+        properties: {
+          applied: { type: "boolean" },
+          error: { type: "string" },
+        },
+      },
+    },
+  },
   execute: async (
     client: LeadbayClient,
     params: ReportOutreachParams,

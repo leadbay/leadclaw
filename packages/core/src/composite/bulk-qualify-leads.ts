@@ -85,6 +85,40 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      qualified: {
+        type: "array",
+        description:
+          "Leads whose qualification finished within budget. Each entry: lead_id, qualification_summary{answered,total,avg_qualification_boost}, signals_count.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description:
+          "Leads launched but whose qualification did not complete within budget. Re-poll via leadbay_qualify_status with the bulk_id (when present).",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description: "Leads whose web_fetch launch failed (per-lead error).",
+        items: { type: "object" },
+      },
+      quota_exceeded: {
+        type: "boolean",
+        description:
+          "True if 429 was hit mid-fanout. Already-launched leads keep polling; further launches stopped.",
+      },
+      exhausted: {
+        type: "boolean",
+        description: "True if the lens's wishlist had no more unqualified leads to qualify.",
+      },
+      total_unqualified_found: { type: "number" },
+      message: { type: "string", description: "Human-readable summary; absent on the happy path." },
+    },
+    required: ["qualified", "still_running", "failed", "quota_exceeded"],
+  },
   execute: async (
     client: LeadbayClient,
     params: BulkQualifyLeadsParams,

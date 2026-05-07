@@ -97,6 +97,61 @@ export const researchLead: Tool<ResearchLeadParams> = {
     required: ["leadId"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      qualification: {
+        type: "array",
+        description:
+          "Per-question AI qualification answers, ordered by mission importance. Each entry: question, boost_score (canonical -10|0|10|20), score_scale, response, computed_at. score_0_to_10 is a deprecated alias of boost_score (removed in 0.7.0).",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            boost_score: { type: ["number", "null"] },
+            score_scale: { type: "string" },
+            score_0_to_10: { type: ["number", "null"] },
+            response: { type: ["string", "null"] },
+            computed_at: { type: ["string", "null"] },
+          },
+        },
+      },
+      signals: {
+        type: "array",
+        description:
+          "Web-research signals reshaped into priority-ordered sections (profile → signals → clues → other). Each entry: section_label, section_emoji, entries[]. With concise:true, only hot=true entries kept.",
+        items: { type: "object" },
+      },
+      firmographics: {
+        type: "object",
+        description: "Lead profile basics: id, name, sector_id, size, location, website, description, short_description.",
+      },
+      contacts: {
+        type: "array",
+        description: "Enriched contacts known to this org for this lead.",
+        items: { type: "object" },
+      },
+      org_contacts: {
+        type: "array",
+        description: "Contacts visible at the org level beyond this lens.",
+        items: { type: "object" },
+      },
+      recent: {
+        type: "object",
+        description:
+          "Recent engagement: notes, epilogue, prospecting_actions. Each is null/missing when no engagement exists. Conditionally fetched (not fanned out unless counts > 0).",
+      },
+      _meta: {
+        type: "object",
+        properties: {
+          region: { type: "string" },
+          latency_ms: { type: ["number", "null"] },
+          web_fetch_in_progress: { type: "boolean" },
+        },
+      },
+    },
+    required: ["qualification", "signals", "firmographics"],
+  },
   execute: async (
     client: LeadbayClient,
     params: ResearchLeadParams,

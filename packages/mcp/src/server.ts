@@ -132,6 +132,7 @@ function toolsListPayload(tools: Tool[]) {
       inputSchema: t.inputSchema,
     };
     if (t.annotations) out.annotations = t.annotations;
+    if (t.outputSchema) out.outputSchema = t.outputSchema;
     return out;
   });
 }
@@ -218,11 +219,25 @@ export function buildServer(
           isError: true,
         };
       }
-      return {
+      const response: Record<string, unknown> = {
         content: [
           { type: "text", text: JSON.stringify(result, null, 2) },
         ],
       };
+      // MCP 2025-11-25 §Tools: when the tool declares outputSchema, send a
+      // matching `structuredContent` block alongside the text so capable
+      // clients can consume the typed payload without re-parsing. Only emit
+      // for plain-object results (the spec requires structuredContent to be
+      // an object). Arrays and primitives stay text-only.
+      if (
+        tool.outputSchema &&
+        result !== null &&
+        typeof result === "object" &&
+        !Array.isArray(result)
+      ) {
+        response.structuredContent = result;
+      }
+      return response;
     } catch (err: any) {
       return {
         content: [
