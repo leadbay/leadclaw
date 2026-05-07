@@ -85,6 +85,11 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
           ref: { type: "string" },
         },
         required: ["source", "ref"],
+        // Security-load-bearing: the verification field prevents the agent from
+        // poisoning the SDR pipeline with hallucinated outreach. Extra keys here
+        // would create an injection vector (e.g., agent passes
+        // verification.bypass="true"). Hard-rejected per second-opinion #3.
+        additionalProperties: false,
       },
       dry_run: {
         type: "boolean",
@@ -137,6 +142,23 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
           "report_outreach requires verification={source, ref} on every call. This prevents hallucinated outreach from poisoning the pipeline.",
         hint:
           "Provide verification.source as one of: gmail_message_id (the Gmail message id from sending), calendar_event_id (the event id from booking), or user_confirmed (set verification.ref to the user's literal confirmation in chat).",
+      };
+    }
+    // Hard-reject extra keys on verification (security-load-bearing). The
+    // MCP SDK does NOT enforce additionalProperties:false on nested input
+    // schemas, so we validate at runtime per second-opinion #3 (iter 12).
+    // Closes the injection vector "agent passes verification.bypass=true".
+    const verificationKeys = Object.keys(params.verification);
+    const extraKeys = verificationKeys.filter(
+      (k) => k !== "source" && k !== "ref"
+    );
+    if (extraKeys.length > 0) {
+      return {
+        error: true,
+        code: "VERIFICATION_EXTRA_KEYS",
+        message: `verification accepts only {source, ref}; rejected extra key(s): ${extraKeys.join(", ")}`,
+        hint:
+          "Drop the extra key(s). Verification is security-sensitive — extra fields are not silently accepted.",
       };
     }
     if (!VALID_SOURCES.has(params.verification.source)) {

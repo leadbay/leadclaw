@@ -1135,6 +1135,9 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
             },
           },
           required: ["domain"],
+          // Domain entries are a closed shape — agents passing extra keys
+          // (e.g., `leadId: "..."`) would silently no-op. Reject explicitly.
+          additionalProperties: false,
         },
       },
       records: {

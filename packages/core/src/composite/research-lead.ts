@@ -134,33 +134,48 @@ export const researchLead: Tool<ResearchLeadParams> = {
       },
       firmographics: {
         type: "object",
-        description: "Lead profile basics: id, name, sector_id, size, location, website, description, short_description.",
+        description:
+          "Lead profile basics: id, name, sector_id, size, location, website, description, short_description, plus tags/score/ai_agent_lead_score/social.",
       },
       contacts: {
-        type: "array",
-        description: "Enriched contacts known to this org for this lead.",
-        items: { type: "object" },
-      },
-      org_contacts: {
-        type: "array",
-        description: "Contacts visible at the org level beyond this lens.",
-        items: { type: "object" },
-      },
-      recent: {
         type: "object",
         description:
-          "Recent engagement: notes, epilogue, prospecting_actions. Each is null/missing when no engagement exists. Conditionally fetched (not fanned out unless counts > 0).",
+          "Two-tier contact set: `enriched` (paid contacts known on this lens for this lead) and `org` (org-level contacts visible beyond the lens).",
+        properties: {
+          enriched: { type: "array", items: { type: "object" } },
+          org: { type: "array", items: { type: "object" } },
+        },
+      },
+      engagement: {
+        type: "object",
+        description:
+          "What humans/prior agent runs already did: liked/disliked flags, recommended_contact, counts (notes/epilogue/prospecting), and the most-recent items (recent_notes, recent_epilogue, recent_prospecting). Counts > 0 trigger conditional fan-out for the recent_* fields.",
+        properties: {
+          liked: { type: "boolean" },
+          disliked: { type: "boolean" },
+          new: { type: "boolean" },
+          recommended_contact_title: { type: ["string", "null"] },
+          recommended_contact: { type: ["object", "null"] },
+          notes_count: { type: "number" },
+          epilogue_actions_count: { type: "number" },
+          prospecting_actions_count: { type: "number" },
+          recent_notes: { type: "array", items: { type: "object" } },
+          recent_epilogue: { type: "array", items: { type: "object" } },
+          recent_prospecting: { type: "array", items: { type: "object" } },
+        },
       },
       _meta: {
         type: "object",
+        description:
+          "Operator context: region (us/fr/custom), lens_id (the lens used for the lead-by-id fetch), web_fetch_in_progress (true if the backend is still hydrating signals).",
         properties: {
           region: { type: "string" },
-          latency_ms: { type: ["number", "null"] },
+          lens_id: { type: "number" },
           web_fetch_in_progress: { type: "boolean" },
         },
       },
     },
-    required: ["qualification", "signals", "firmographics"],
+    required: ["qualification", "signals", "firmographics", "contacts", "engagement"],
   },
   execute: async (
     client: LeadbayClient,

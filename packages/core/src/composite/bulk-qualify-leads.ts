@@ -116,6 +116,16 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
       },
       total_unqualified_found: { type: "number" },
       message: { type: "string", description: "Human-readable summary; absent on the happy path." },
+      lens_id: {
+        type: "number",
+        description:
+          "The lens id the qualification ran against. Present on every successful return.",
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region.",
+        properties: { region: { type: "string" } },
+      },
     },
     required: ["qualified", "still_running", "failed", "quota_exceeded"],
   },
@@ -226,14 +236,37 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
       });
     }
 
+    // Signal-aware sleep helper. The polling loops below await a 5s gap
+    // between API hits; without observing ctx.signal the user's cancel is
+    // ignored until the natural budget exhaustion. With this helper, abort
+    // resolves immediately and the loop's next iteration sees aborted=true
+    // and breaks. (Per second-opinion #5 in iter 12.)
+    const sleepWithSignal = (ms: number) =>
+      new Promise<void>((resolve) => {
+        if (ctx?.signal?.aborted) {
+          resolve();
+          return;
+        }
+        const t = setTimeout(resolve, ms);
+        ctx?.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true }
+        );
+      });
+
     // Poll each launched lead in parallel until web_fetch.in_progress=false AND
-    // ai_agent_responses is populated, OR budget exhausted.
+    // ai_agent_responses is populated, OR budget exhausted, OR client cancelled.
     const results = await Promise.all(
       launched.map(async (leadId): Promise<QualResult & { _stillRunning: boolean }> => {
         const leadDeadline = Math.min(Date.now() + perLeadBudget, totalDeadline);
         let lastQual: AiAgentResponse[] | null = null;
         let lastWf: LeadWebFetchPayload | null = null;
         while (Date.now() < leadDeadline) {
+          if (ctx?.signal?.aborted) break;
           try {
             const [wfR, qualR] = await Promise.allSettled([
               client.request<LeadWebFetchPayload>(
@@ -265,7 +298,8 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
           } catch {
             // ignore — try again on next tick
           }
-          await new Promise((r) => setTimeout(r, 5_000));
+          if (ctx?.signal?.aborted) break;
+          await sleepWithSignal(5_000);
         }
 
         const stillRunning =

@@ -141,8 +141,13 @@ describe("schema strictness — additionalProperties:false (P1.2)", () => {
   });
 
   it("verification with extra unknown field is rejected (nested additionalProperties)", async () => {
+    // Iter 13 (post second-opinion #3): the verification block is
+    // security-load-bearing; extra keys would create an injection vector
+    // (e.g., agent passes verification.bypass="true" hoping the server
+    // honours it). The schema MUST reject such extras. This test asserts
+    // POSITIVELY (rejection is required), not "passes either way".
     const { mcpClient } = await connect();
-    let threw = false;
+    let rejected = false;
     let result: any = null;
     try {
       result = await mcpClient.callTool({
@@ -157,19 +162,21 @@ describe("schema strictness — additionalProperties:false (P1.2)", () => {
           } as any,
         },
       });
-    } catch {
-      threw = true;
+    } catch (err: any) {
+      // SDK schema layer threw (preferred) — verification rejected.
+      rejected = true;
     }
-    // Nested verification has its own additionalProperties:false — extra
-    // sneaky field should be rejected at the schema layer or the tool
-    // handler. Either is acceptable.
-    if (!threw) {
-      // If the request went through, the tool runtime check on
-      // verification.source enum still rejects bad sources, so this
-      // assertion may not fire if "user_confirmed" passed but the
-      // bogus field was silently dropped at the JSON-RPC layer.
-      // Either way: the process must be alive.
-      expect(result).toBeDefined();
+    if (!rejected) {
+      // The call returned; it MUST be isError:true (handler-level reject).
+      // The SDK does NOT enforce nested additionalProperties:false on
+      // tools/call, so report_outreach validates at runtime instead
+      // (composite/report-outreach.ts:VERIFICATION_EXTRA_KEYS path).
+      expect(result?.isError, "expected nested-extras rejection on verification").toBe(true);
+      // The error code names the offending field — actionable per Q11.
+      const text = (result.content?.[0] as any)?.text ?? "";
+      expect(text).toMatch(/sneaky/i);
+    } else {
+      expect(rejected).toBe(true);
     }
   });
 });
