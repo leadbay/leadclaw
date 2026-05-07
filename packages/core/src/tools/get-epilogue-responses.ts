@@ -9,6 +9,13 @@ interface GetEpilogueResponsesParams {
 
 export const getEpilogueResponses: Tool<GetEpilogueResponsesParams> = {
   name: "leadbay_get_epilogue_responses",
+  annotations: {
+    title: "Read epilogue responses",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read the lead's epilogue history — what status (still chasing, meeting booked, etc.) was set when, and by whom. " +
     "When to use: to see the lead's outreach progression before deciding the next step. " +

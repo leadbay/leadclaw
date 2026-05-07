@@ -7,6 +7,13 @@ interface GetWebFetchParams {
 
 export const getWebFetch: Tool<GetWebFetchParams> = {
   name: "leadbay_get_web_fetch",
+  annotations: {
+    title: "Read web-fetch result",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read the AI-generated web-research summary for a lead — company profile, business signals, prospecting clues, " +
     "each with sources and 'hot' flags marking high-signal recent items. The content is dictioned by emoji-prefixed " +

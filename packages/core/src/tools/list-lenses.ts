@@ -4,6 +4,13 @@ import type { LensPayload } from "../types.js";
 
 export const listLenses: Tool<Record<string, never>> = {
   name: "leadbay_list_lenses",
+  annotations: {
+    title: "List active lenses",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "List all available Leadbay lenses (saved lead search configurations). Each lens defines a different " +
     "target market or buyer segment. The lens with is_last_active=true is used by default for lead discovery. " +

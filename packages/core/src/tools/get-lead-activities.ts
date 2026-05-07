@@ -9,6 +9,13 @@ interface GetLeadActivitiesParams {
 
 export const getLeadActivities: Tool<GetLeadActivitiesParams> = {
   name: "leadbay_get_lead_activities",
+  annotations: {
+    title: "Read a lead's activity feed",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get prospecting activity history for a lead (emails sent, calls made, status changes, notes). " +
     "When to use: to avoid redundant outreach and understand where this lead is in the sales process. " +

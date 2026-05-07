@@ -7,6 +7,13 @@ interface CreateLensDraftParams {
 
 export const createLensDraft: Tool<CreateLensDraftParams> = {
   name: "leadbay_create_lens_draft",
+  annotations: {
+    title: "Create a lens draft",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Create (or fetch existing) draft of an org-level lens. Idempotent — same user calling twice returns " +
     "the same draft. The returned lens has draft_of set to the original lens id. " +

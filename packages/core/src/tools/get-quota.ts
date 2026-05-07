@@ -3,6 +3,13 @@ import type { Tool, QuotaStatusPayload } from "../types.js";
 
 export const getQuota: Tool<Record<string, never>> = {
   name: "leadbay_get_quota",
+  annotations: {
+    title: "Read quota status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read remaining quota / spend across daily, weekly, monthly windows for the org's resources " +
     "(llm_completion, ai_rescore, web_fetch). Each entry shows current_units vs max_units and resets_at. " +

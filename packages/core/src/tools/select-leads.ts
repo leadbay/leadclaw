@@ -12,6 +12,13 @@ interface SelectLeadsParams {
 
 export const selectLeads: Tool<SelectLeadsParams> = {
   name: "leadbay_select_leads",
+  annotations: {
+    title: "Select leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Add leads to the user's transient selection (used by selection-scoped bulk operations). " +
     "When to use: low-level. The user's selection is a per-token global state — be careful when invoking " +

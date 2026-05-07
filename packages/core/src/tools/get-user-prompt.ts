@@ -3,6 +3,13 @@ import type { Tool, UserPromptPayload } from "../types.js";
 
 export const getUserPrompt: Tool<Record<string, never>> = {
   name: "leadbay_get_user_prompt",
+  annotations: {
+    title: "Read user prompt",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read the org's intelligence-refinement prompt (free-text instruction that steers lead recommendations beyond firmographics). " +
     "Returns null if none is set (the backend returns 204 in that case). " +

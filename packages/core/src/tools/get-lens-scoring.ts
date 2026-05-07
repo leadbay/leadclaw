@@ -12,6 +12,13 @@ interface LensScoringPayload {
 
 export const getLensScoring: Tool<GetLensScoringParams> = {
   name: "leadbay_get_lens_scoring",
+  annotations: {
+    title: "Read lens scoring",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read the AI-scoring criteria configured on a lens (what makes a lead score 100 vs 30). " +
     "When to use: when explaining why a lead got the score it did. " +

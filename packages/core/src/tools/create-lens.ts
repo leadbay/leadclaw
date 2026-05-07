@@ -9,6 +9,13 @@ interface CreateLensParams {
 
 export const createLens: Tool<CreateLensParams> = {
   name: "leadbay_create_lens",
+  annotations: {
+    title: "Create a new lens",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Create a new user-level lens by cloning an existing lens's filter/scoring as the starting point. " +
     "When to use: when adjust_audience determined the current lens cannot be edited (e.g. it's the org default). " +

@@ -3,6 +3,13 @@ import type { Tool } from "../types.js";
 
 export const clearUserPrompt: Tool<Record<string, never>> = {
   name: "leadbay_clear_user_prompt",
+  annotations: {
+    title: "Clear the user prompt",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Remove the org's intelligence-refinement prompt (revert to AI-only generation). Admin-only. " +
     "Triggers full intelligence regeneration. " +

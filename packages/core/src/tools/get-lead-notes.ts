@@ -7,6 +7,13 @@ interface GetLeadNotesParams {
 
 export const getLeadNotes: Tool<GetLeadNotesParams> = {
   name: "leadbay_get_lead_notes",
+  annotations: {
+    title: "Read lead notes",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read existing notes on a lead — context the human team or prior agent runs have already captured. " +
     "When to use: before adding a note via leadbay_report_outreach, to avoid duplicating or overwriting context the SDR already wrote. " +

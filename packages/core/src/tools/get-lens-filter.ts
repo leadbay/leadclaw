@@ -7,6 +7,13 @@ interface GetLensFilterParams {
 
 export const getLensFilter: Tool<GetLensFilterParams> = {
   name: "leadbay_get_lens_filter",
+  annotations: {
+    title: "Read lens filter",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Read the firmographic filter (sectors, sizes, locations) currently applied to a lens. " +
     "When to use: before adjusting an audience — see what's already restricted so changes are diffs, not full replacements. " +

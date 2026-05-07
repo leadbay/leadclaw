@@ -9,6 +9,13 @@ interface AddNoteParams {
 
 export const addNote: Tool<AddNoteParams> = {
   name: "leadbay_add_note",
+  annotations: {
+    title: "Add a note on a lead",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Add a note to a lead. Notes are visible to the whole organization in Leadbay. " +
     "When to use: low-level — for free-form notes not tied to outreach actions. " +

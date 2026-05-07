@@ -3,6 +3,13 @@ import type { Tool } from "../types.js";
 
 export const getTasteProfile: Tool<Record<string, never>> = {
   name: "leadbay_get_taste_profile",
+  annotations: {
+    title: "Read the org's taste profile",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get the user's Ideal Buyer Profile, purchase intent tags, and qualification questions. " +
     "When to use: at the very start of a session to understand what kind of leads the user is looking for. " +

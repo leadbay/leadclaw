@@ -25,9 +25,9 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 const BASE = "https://api-us.leadbay.app";
 
-async function connect() {
+async function connect(opts: { includeAdvanced?: boolean; includeWrite?: boolean } = { includeWrite: true }) {
   const lbClient = new LeadbayClient(BASE, "u.test-token");
-  const server = buildServer(lbClient, { includeWrite: true });
+  const server = buildServer(lbClient, opts);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const mcpClient = new Client({ name: "test", version: "0.0.1" }, {});
   await Promise.all([
@@ -133,5 +133,88 @@ describe("tools/list annotations (MCP spec ToolAnnotations)", () => {
       idempotentHint: true,
       openWorldHint: true,
     });
+  });
+});
+
+describe("granular tool annotations (advanced surface — iter 3)", () => {
+  it("every granular tool has annotations when includeAdvanced=true", async () => {
+    const { mcpClient } = await connect({ includeAdvanced: true, includeWrite: true });
+    const listed = await mcpClient.listTools();
+    const missing: string[] = [];
+    for (const t of listed.tools) {
+      if (!t.annotations) {
+        missing.push(t.name);
+      }
+    }
+    expect(missing, `tools missing annotations: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("granular reads are flagged readOnlyHint:true", async () => {
+    const { mcpClient } = await connect({ includeAdvanced: true, includeWrite: true });
+    const listed = await mcpClient.listTools();
+    const granularReadNames = [
+      "leadbay_list_lenses",
+      "leadbay_discover_leads",
+      "leadbay_get_lead_profile",
+      "leadbay_get_lead_activities",
+      "leadbay_get_taste_profile",
+      "leadbay_get_contacts",
+      "leadbay_get_quota",
+      "leadbay_get_lens_filter",
+      "leadbay_get_lens_scoring",
+      "leadbay_list_sectors",
+      "leadbay_get_user_prompt",
+      "leadbay_get_clarification",
+      "leadbay_get_lead_notes",
+      "leadbay_get_epilogue_responses",
+      "leadbay_get_prospecting_actions",
+      "leadbay_get_web_fetch",
+      "leadbay_get_selection_ids",
+      "leadbay_get_enrichment_job_titles",
+      "leadbay_list_mappable_fields",
+      // preview_bulk_enrichment is in granularWriteTools by catalog but
+      // is read-only on the wire.
+      "leadbay_preview_bulk_enrichment",
+    ];
+    for (const name of granularReadNames) {
+      const t = listed.tools.find((tool) => tool.name === name);
+      expect(t, `${name} not found`).toBeDefined();
+      expect(t!.annotations!.readOnlyHint, `${name} readOnlyHint`).toBe(true);
+      expect(t!.annotations!.destructiveHint, `${name} destructiveHint`).toBe(false);
+    }
+  });
+
+  it("granular writes are flagged destructiveHint:true with correct idempotency", async () => {
+    const { mcpClient } = await connect({ includeAdvanced: true, includeWrite: true });
+    const listed = await mcpClient.listTools();
+    // (toolName, expectedIdempotent)
+    const granularWrites: Array<[string, boolean]> = [
+      ["leadbay_qualify_lead", true],
+      ["leadbay_enrich_contacts", true],
+      ["leadbay_add_note", false],
+      ["leadbay_select_leads", true],
+      ["leadbay_deselect_leads", true],
+      ["leadbay_clear_selection", true],
+      ["leadbay_set_active_lens", true],
+      ["leadbay_create_lens", false],
+      ["leadbay_update_lens", true],
+      ["leadbay_update_lens_filter", true],
+      ["leadbay_create_lens_draft", false],
+      ["leadbay_promote_lens", false],
+      ["leadbay_set_user_prompt", true],
+      ["leadbay_clear_user_prompt", true],
+      ["leadbay_pick_clarification", false],
+      ["leadbay_dismiss_clarification", false],
+      ["leadbay_set_epilogue_status", true],
+      ["leadbay_remove_epilogue", true],
+      ["leadbay_launch_bulk_enrichment", true],
+    ];
+    for (const [name, idempotent] of granularWrites) {
+      const t = listed.tools.find((tool) => tool.name === name);
+      expect(t, `${name} not found`).toBeDefined();
+      expect(t!.annotations!.destructiveHint, `${name} destructiveHint`).toBe(true);
+      expect(t!.annotations!.readOnlyHint, `${name} readOnlyHint`).toBe(false);
+      expect(t!.annotations!.idempotentHint, `${name} idempotentHint`).toBe(idempotent);
+    }
   });
 });

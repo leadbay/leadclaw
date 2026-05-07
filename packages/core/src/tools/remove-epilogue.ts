@@ -7,6 +7,13 @@ interface RemoveEpilogueParams {
 
 export const removeEpilogue: Tool<RemoveEpilogueParams> = {
   name: "leadbay_remove_epilogue",
+  annotations: {
+    title: "Remove lead epilogue",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Bulk-clear the epilogue status from a set of leads. " +
     "When to use: when an outreach action was logged in error and needs to be undone. " +

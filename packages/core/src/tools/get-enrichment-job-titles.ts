@@ -3,6 +3,13 @@ import type { Tool } from "../types.js";
 
 export const getEnrichmentJobTitles: Tool<Record<string, never>> = {
   name: "leadbay_get_enrichment_job_titles",
+  annotations: {
+    title: "Read enrichment job titles",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "List the actual job titles present across the leads currently in the user's selection — " +
     "the candidate set the user can ask to enrich. " +

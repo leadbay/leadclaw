@@ -10,6 +10,13 @@ interface DiscoverLeadsParams {
 
 export const discoverLeads: Tool<DiscoverLeadsParams> = {
   name: "leadbay_discover_leads",
+  annotations: {
+    title: "Discover leads in a lens",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get AI-recommended leads from Leadbay. Returns paginated lead summaries with scores, AI summaries, tags, and recommended contacts. " +
     "When to use: low-level when you need raw paginated wishlist access without the qualification_summary attached by leadbay_pull_leads. " +

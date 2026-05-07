@@ -9,6 +9,13 @@ interface LoginParams {
 
 export const login: Tool<LoginParams> = {
   name: "leadbay_login",
+  annotations: {
+    title: "Mint a Leadbay bearer token",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Log in to Leadbay with email and password. Auto-detects region (us|fr) — the user does not need to know " +
     "which backend their account lives on. " +

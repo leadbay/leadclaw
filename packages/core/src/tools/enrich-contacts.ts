@@ -11,6 +11,13 @@ interface EnrichContactsParams {
 
 export const enrichContacts: Tool<EnrichContactsParams> = {
   name: "leadbay_enrich_contacts",
+  annotations: {
+    title: "Enrich contacts for a lead",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Order email and/or phone enrichment for a specific contact. " +
     "When to use: when you have a specific contact_id (from leadbay_get_contacts) and want to enrich just that one. " +

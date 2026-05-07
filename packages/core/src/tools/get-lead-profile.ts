@@ -15,6 +15,13 @@ interface GetLeadProfileParams {
 
 export const getLeadProfile: Tool<GetLeadProfileParams> = {
   name: "leadbay_get_lead_profile",
+  annotations: {
+    title: "Read a lead profile",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get a full lead profile including company details, AI qualification scores, web insights, and contacts. " +
     "When to use: low-level — for fine-grained access to the raw shape of the lead profile. " +
