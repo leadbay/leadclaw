@@ -438,6 +438,7 @@ export const importAndQualify: Tool<
           "to force fresh re-qualification.",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

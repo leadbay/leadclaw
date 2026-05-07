@@ -27,6 +27,7 @@ export const getLensScoring: Tool<GetLensScoringParams> = {
     type: "object",
     properties: { lensId: { type: "number", description: "Lens id (required)" } },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetLensScoringParams) => {
     return await client.request<LensScoringPayload>(

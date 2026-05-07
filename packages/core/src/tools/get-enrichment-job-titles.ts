@@ -16,7 +16,7 @@ export const getEnrichmentJobTitles: Tool<Record<string, never>> = {
     "When to use: after leadbay_select_leads, to know which titles are even available before launching a bulk enrichment. " +
     "When NOT to use: standalone — the selection must already be populated, otherwise the result is an empty array. " +
     "leadbay_enrich_titles wraps this whole flow when you don't need to inspect the title list manually.",
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     return await client.request<string[]>(
       "GET",

@@ -83,6 +83,7 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
         description: `Total polling budget in ms (default ${DEFAULT_TOTAL_BUDGET_MS})`,
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

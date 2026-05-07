@@ -47,6 +47,7 @@ export const launchBulkEnrichment: Tool<LaunchBulkEnrichmentParams> = {
       },
     },
     required: ["titles"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

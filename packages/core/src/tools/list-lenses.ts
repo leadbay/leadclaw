@@ -19,6 +19,7 @@ export const listLenses: Tool<Record<string, never>> = {
   inputSchema: {
     type: "object",
     properties: {},
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient) => {
     const lenses = await client.request<LensPayload[]>("GET", "/lenses");

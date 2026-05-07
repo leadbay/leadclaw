@@ -41,6 +41,7 @@ export const getLeadProfile: Tool<GetLeadProfileParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetLeadProfileParams) => {
     const lensId = params.lensId ?? (await client.resolveDefaultLens());

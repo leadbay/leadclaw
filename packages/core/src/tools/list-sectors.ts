@@ -31,6 +31,7 @@ export const listSectors: Tool<ListSectorsParams> = {
           "Include sectors hidden from the UI (default false; ~91k items if true)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: ListSectorsParams) => {
     // Prefer the caller's language when not specified — pulls from /me which

@@ -37,6 +37,7 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
         description: "Results per page, max 50 (default: 20)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: DiscoverLeadsParams) => {
     const lensId = params.lensId ?? (await client.resolveDefaultLens());

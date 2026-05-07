@@ -50,6 +50,7 @@ export const recallOrderedTitles: Tool<RecallOrderedTitlesParams> = {
           "Override the auto-resolved last-active lens when omitting leadIds (escape hatch)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

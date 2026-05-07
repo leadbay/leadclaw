@@ -64,6 +64,7 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       },
     },
     required: ["bulk_id"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

@@ -33,6 +33,7 @@ export const previewBulkEnrichment: Tool<PreviewBulkEnrichmentParams> = {
       },
     },
     required: ["titles"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

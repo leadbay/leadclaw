@@ -25,6 +25,7 @@ export const setActiveLens: Tool<SetActiveLensParams> = {
     type: "object",
     properties: { lensId: { type: "number", description: "Lens id (required)" } },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetActiveLensParams) => {
     await client.requestVoid(

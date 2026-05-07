@@ -92,6 +92,7 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
       },
     },
     required: ["note", "verification"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

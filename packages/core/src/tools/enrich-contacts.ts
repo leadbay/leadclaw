@@ -45,6 +45,7 @@ export const enrichContacts: Tool<EnrichContactsParams> = {
       },
     },
     required: ["leadId", "contactId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: EnrichContactsParams) => {
     const email = params.email ?? true;

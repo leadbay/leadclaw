@@ -35,6 +35,7 @@ export const addNote: Tool<AddNoteParams> = {
       },
     },
     required: ["leadId", "note"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: AddNoteParams) => {
     if (!params.note || params.note.trim().length === 0) {

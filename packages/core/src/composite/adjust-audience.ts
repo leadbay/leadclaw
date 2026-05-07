@@ -203,6 +203,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           "Name to use when this composite has to clone the default lens (otherwise auto-named)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

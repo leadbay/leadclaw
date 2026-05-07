@@ -16,7 +16,7 @@ export const clearSelection: Tool<Record<string, never>> = {
     "When NOT to use: in normal flow — composites clear in their own finally blocks.",
   optional: true,
   write: true,
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     await client.requestVoid("POST", "/leads/selection/clear");
     return { cleared: true };

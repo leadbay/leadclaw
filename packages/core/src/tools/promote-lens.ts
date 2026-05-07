@@ -24,6 +24,7 @@ export const promoteLens: Tool<PromoteLensParams> = {
     type: "object",
     properties: { lensId: { type: "number" } },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: PromoteLensParams) => {
     await client.requestVoid("POST", `/lenses/${params.lensId}/promote`);

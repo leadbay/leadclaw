@@ -36,6 +36,7 @@ export const qualifyLead: Tool<QualifyLeadParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: QualifyLeadParams) => {
     const force = params.forceFetch ?? false;

@@ -54,6 +54,7 @@ export const setEpilogueStatus: Tool<SetEpilogueStatusParams> = {
       },
     },
     required: ["lead_ids", "status"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetEpilogueStatusParams) => {
     const wire = EPILOGUE_LABEL_MAP[params.status];

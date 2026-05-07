@@ -1200,6 +1200,7 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
     },
     // Neither field is "required" at the schema level; xor + presence is
     // enforced in execute() so we can produce specific error codes.
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

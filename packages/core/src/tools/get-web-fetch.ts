@@ -25,6 +25,7 @@ export const getWebFetch: Tool<GetWebFetchParams> = {
     type: "object",
     properties: { leadId: { type: "string", description: "Lead UUID (required)" } },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetWebFetchParams) => {
     return await client.request<LeadWebFetchPayload>(

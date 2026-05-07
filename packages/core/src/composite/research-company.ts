@@ -37,6 +37,7 @@ export const researchCompany: Tool<ResearchCompanyParams> = {
           "Lead UUID if already known (one of companyName or leadId required). Takes precedence over companyName.",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

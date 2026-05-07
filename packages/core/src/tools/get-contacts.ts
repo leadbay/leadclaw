@@ -29,6 +29,7 @@ export const getContacts: Tool<GetContactsParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetContactsParams) => {
     const [orgResult, paidResult] = await Promise.allSettled([

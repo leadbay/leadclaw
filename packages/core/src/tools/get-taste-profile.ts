@@ -19,6 +19,7 @@ export const getTasteProfile: Tool<Record<string, never>> = {
   inputSchema: {
     type: "object",
     properties: {},
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient) => {
     const profile = await client.resolveTasteProfile();

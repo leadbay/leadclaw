@@ -74,6 +74,7 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
         description: "If true, don't launch — only preview.",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

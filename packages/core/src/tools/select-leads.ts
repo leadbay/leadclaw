@@ -40,6 +40,7 @@ export const selectLeads: Tool<SelectLeadsParams> = {
       },
     },
     required: ["leadIds"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SelectLeadsParams) => {
     const qs = params.leadIds

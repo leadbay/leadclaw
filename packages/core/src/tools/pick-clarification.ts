@@ -29,6 +29,7 @@ export const pickClarification: Tool<PickClarificationParams> = {
       option_id: { type: "string", description: "Id of one of the clarification's options" },
       text_answer: { type: "string", description: "Free-text answer (overrides option_id if both are set)" },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

@@ -30,6 +30,7 @@ export const removeEpilogue: Tool<RemoveEpilogueParams> = {
       },
     },
     required: ["lead_ids"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: RemoveEpilogueParams) => {
     await client.requestVoid("POST", "/leads/remove_epilogue", {

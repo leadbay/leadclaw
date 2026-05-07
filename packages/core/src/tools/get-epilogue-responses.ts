@@ -28,6 +28,7 @@ export const getEpilogueResponses: Tool<GetEpilogueResponsesParams> = {
       page: { type: "number", description: "Page number, 0-indexed (default 0)" },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

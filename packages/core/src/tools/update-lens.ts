@@ -35,6 +35,7 @@ export const updateLens: Tool<UpdateLensParams> = {
       use_hq_only: { type: "boolean" },
     },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: UpdateLensParams) => {
     const { lensId, ...body } = params;

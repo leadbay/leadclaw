@@ -16,7 +16,7 @@ export const getQuota: Tool<Record<string, never>> = {
     "When to use: after a 429 error, to explain to the user which window was hit and when it resets. " +
     "When NOT to use: as a pre-flight gate before bulk operations — operations themselves return 429 with hints; " +
     "this tool is for diagnostics, not gating.",
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     const orgId = await client.resolveOrgId();
     return await client.request<QuotaStatusPayload>(

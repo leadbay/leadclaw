@@ -39,6 +39,7 @@ export const prepareOutreach: Tool<PrepareOutreachParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

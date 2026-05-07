@@ -30,6 +30,7 @@ export const createLens: Tool<CreateLensParams> = {
       description: { type: "string" },
     },
     required: ["base", "name"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: CreateLensParams) => {
     const lens = await client.request<LensPayload>("POST", "/lenses", {

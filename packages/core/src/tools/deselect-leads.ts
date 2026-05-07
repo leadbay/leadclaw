@@ -34,6 +34,7 @@ export const deselectLeads: Tool<DeselectLeadsParams> = {
       },
     },
     required: ["leadIds"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: DeselectLeadsParams) => {
     const qs = params.leadIds

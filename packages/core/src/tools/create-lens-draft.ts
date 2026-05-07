@@ -25,6 +25,7 @@ export const createLensDraft: Tool<CreateLensDraftParams> = {
     type: "object",
     properties: { lensId: { type: "number", description: "Lens id of the org-level lens to draft" } },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: CreateLensDraftParams) => {
     return await client.request<LensPayload>(

@@ -17,7 +17,7 @@ export const clearUserPrompt: Tool<Record<string, never>> = {
     "When NOT to use: to replace with a different prompt — just call leadbay_refine_prompt; that overwrites.",
   optional: true,
   write: true,
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     const orgId = await client.resolveOrgId();
     await client.requestVoid("DELETE", `/organizations/${orgId}/user_prompt`);

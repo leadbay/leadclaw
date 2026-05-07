@@ -24,6 +24,7 @@ export const getLensFilter: Tool<GetLensFilterParams> = {
       lensId: { type: "number", description: "Lens id (required)" },
     },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetLensFilterParams) => {
     return await client.request<FilterPayload>(

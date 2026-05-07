@@ -89,6 +89,7 @@ export const pullLeads: Tool<PullLeadsParams> = {
           "If true, include the full set of lead-summary fields. Default false: returns the trimmed agent-friendly form.",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

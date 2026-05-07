@@ -15,7 +15,7 @@ export const getUserPrompt: Tool<Record<string, never>> = {
     "Returns null if none is set (the backend returns 204 in that case). " +
     "When to use: to know what's currently steering the agent's recommendations before suggesting a refine. " +
     "When NOT to use: to set/change the prompt — use leadbay_refine_prompt.",
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     const orgId = await client.resolveOrgId();
     // /user_prompt returns 204 when unset — request<T>() returns null in that case.

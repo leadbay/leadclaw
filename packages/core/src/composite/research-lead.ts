@@ -95,6 +95,7 @@ export const researchLead: Tool<ResearchLeadParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,
@@ -186,10 +187,20 @@ export const researchLead: Tool<ResearchLeadParams> = {
 
     return {
       // 1) qualification — single most important block for "is this lead worth pursuing"
+      // boost_score is the canonical field (per AiAgentResponse.score). The valid
+      // set is the discrete -10/0/10/20 boost (see types.ts comment), NOT a 0-10
+      // average — the eval doc flagged the old `score_0_to_10` field name as
+      // misleading. We now ship `boost_score` as canonical alongside an explicit
+      // `score_scale` annotation; `score_0_to_10` is kept as a deprecated alias
+      // for one minor version (0.6.x) and removed in 0.7.0. See MIGRATION.md.
       qualification:
         qualR.status === "fulfilled"
           ? qualR.value.map((r) => ({
               question: r.question,
+              boost_score: r.score,
+              score_scale: "-10|0|10|20" as const,
+              // Deprecated alias — same value as boost_score. Will be removed
+              // in 0.7.0; consumers should switch to boost_score.
               score_0_to_10: r.score,
               response: r.response,
               computed_at: r.computed_at,

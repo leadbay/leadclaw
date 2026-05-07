@@ -34,6 +34,7 @@ export const setUserPrompt: Tool<SetUserPromptParams> = {
       },
     },
     required: ["prompt"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetUserPromptParams) => {
     const orgId = await client.resolveOrgId();

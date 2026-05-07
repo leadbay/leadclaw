@@ -75,6 +75,7 @@ export const qualifyStatus: Tool<
       },
     },
     required: ["qualify_id"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

@@ -22,6 +22,7 @@ export const getLeadNotes: Tool<GetLeadNotesParams> = {
     type: "object",
     properties: { leadId: { type: "string", description: "Lead UUID (required)" } },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetLeadNotesParams) => {
     return await client.request<NotePayload[]>(

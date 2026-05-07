@@ -48,6 +48,7 @@ export const refinePrompt: Tool<RefinePromptParams> = {
       },
     },
     required: ["prompt"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

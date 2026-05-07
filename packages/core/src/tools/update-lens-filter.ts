@@ -39,6 +39,7 @@ export const updateLensFilter: Tool<UpdateLensFilterParams> = {
       },
     },
     required: ["lensId", "filter"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

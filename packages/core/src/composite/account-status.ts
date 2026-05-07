@@ -20,7 +20,7 @@ export const accountStatus: Tool<Record<string, never>> = {
     "the user which resource window was exhausted and when it resets. " +
     "When NOT to use: as a pre-flight gate before bulk ops — operations themselves return 429; this tool is " +
     "for context, not gating.",
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient, _params, ctx?: ToolContext) => {
     const me = await client.resolveMe();
 

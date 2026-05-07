@@ -29,6 +29,7 @@ export const login: Tool<LoginParams> = {
       password: { type: "string", description: "Leadbay account password" },
     },
     required: ["email", "password"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

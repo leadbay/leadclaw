@@ -33,6 +33,7 @@ export const getLeadActivities: Tool<GetLeadActivitiesParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetLeadActivitiesParams) => {
     const count = Math.min(params.count ?? 50, 100);
