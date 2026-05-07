@@ -7,6 +7,8 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
+  ElicitRequestSchema,
+  ElicitResultSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { listPrompts, getPrompt } from "./prompts.js";
 import {
@@ -266,6 +268,29 @@ export function buildServer(
             });
         }
       : undefined;
+    // MCP 2025-11-25 §Elicitation: composites that need a one-off user
+    // answer (refine_prompt's clarification, report_outreach's
+    // user_confirmed) can call ctx.elicit instead of returning a
+    // "please call answer_X" telephone payload. Calls extra.sendRequest
+    // with the spec form-based ElicitRequestSchema. Errors propagate
+    // (composite null-checks ctx.elicit before calling, and any
+    // capability-mismatch reject is surfaced).
+    const elicit: ToolContext["elicit"] = async (params) => {
+      const result = await extra.sendRequest(
+        {
+          method: "elicitation/create",
+          params: {
+            message: params.message,
+            requestedSchema: params.requestedSchema as any,
+          },
+        },
+        ElicitResultSchema
+      );
+      return {
+        action: result.action,
+        content: result.content as Record<string, unknown> | undefined,
+      };
+    };
     try {
       // MCP 2025-11-25 §Cancellation: extra.signal is aborted by the SDK
       // when the client sends `notifications/cancelled`. Plumbing it to
@@ -277,6 +302,7 @@ export function buildServer(
         bulkTracker: opts.bulkTracker,
         signal: extra.signal,
         progress,
+        elicit,
       });
       // Leadbay tools may return error envelopes ({ error: true, code, ... })
       // rather than throwing. Surface those as MCP isError so the LLM doesn't

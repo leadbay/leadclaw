@@ -594,6 +594,20 @@ export interface ToolContext {
   // swallows transport errors. Callers that don't observe this leave the
   // function unset and the wire stays cheap.
   progress?: (params: { progress: number; total?: number; message?: string }) => void;
+  // Ask the user a clarifying question via the MCP client (spec
+  // elicitation/create form-based mode). Composites that need a one-off
+  // answer (refine_prompt clarifications, report_outreach user_confirmed)
+  // can use this instead of returning a "please call answer_X" telephone
+  // payload to the agent. Returns the user's response { action, content? }.
+  // Always null-check before calling — older clients lacking elicitation
+  // capability cause this to be undefined; composite must fall back.
+  elicit?: (params: {
+    message: string;
+    requestedSchema: Record<string, unknown>;
+  }) => Promise<{
+    action: "accept" | "decline" | "cancel";
+    content?: Record<string, unknown>;
+  }>;
 }
 
 export type JSONSchema = Record<string, unknown>;
