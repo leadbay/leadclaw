@@ -102,8 +102,9 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
   outputSchema: {
     type: "object",
     description:
-      "Either the dry_run shape (would_write_notes / would_set_epilogue) OR the live result (note_results / epilogue_result).",
+      "Either the dry_run shape (dry_run:true with would_write_notes / would_set_epilogue) OR the live result (notes:{succeeded,failed} + epilogue:{status,applied,error?} + verification + _meta). Schema declares both shapes; the dry_run discriminator picks which sub-shape applies.",
     properties: {
+      // dry_run discriminator + dry_run subshape (from before iter 13)
       dry_run: { type: "boolean" },
       would_write_notes: {
         type: "array",
@@ -114,18 +115,44 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
         type: ["object", "null"],
         description: "On dry_run: the epilogue POST shape that WOULD be issued.",
       },
-      note_results: {
-        type: "array",
-        description: "Per-lead note write outcome: { lead_id, ok, note_id?, error? }.",
-        items: { type: "object" },
-      },
-      epilogue_result: {
+      // Live subshape — what execute() actually returns when dry_run is false.
+      notes: {
         type: "object",
-        description: "Whether the epilogue status was applied + any error.",
+        description: "Per-lead note-write outcome (split into succeeded / failed sub-arrays).",
         properties: {
+          succeeded: {
+            type: "array",
+            items: { type: "object" },
+          },
+          failed: {
+            type: "array",
+            items: { type: "object" },
+          },
+        },
+      },
+      epilogue: {
+        type: "object",
+        description:
+          "Epilogue status outcome: status (the wire-format string written to /leads/epilogue, or null when not requested), applied (true/false), error (when applied=false).",
+        properties: {
+          status: { type: ["string", "null"] },
           applied: { type: "boolean" },
           error: { type: "string" },
         },
+      },
+      verification: {
+        type: "object",
+        description:
+          "Echo of the verification block the agent supplied. Useful for the client UI to render \"logged with proof X\".",
+        properties: {
+          source: { type: "string" },
+          ref: { type: "string" },
+        },
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region.",
+        properties: { region: { type: "string" } },
       },
     },
   },

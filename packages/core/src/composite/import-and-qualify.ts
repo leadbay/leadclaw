@@ -367,6 +367,10 @@ export const importAndQualify: Tool<
             },
           },
           required: ["domain"],
+          // Closed shape — extra keys silently no-op, so reject explicitly.
+          // Parallel surface to import_leads.domains[] (iter 13). Per second-
+          // opinion #2 finding #3.
+          additionalProperties: false,
         },
       },
       records: {
@@ -402,6 +406,10 @@ export const importAndQualify: Tool<
           statuses: { type: "object", description: "Optional status string mapping." },
           default_status: { type: ["string", "null"], description: "Optional default status." },
         },
+        // mappings has a closed shape (fields/custom_fields/statuses/default_status).
+        // Inner objects (fields, custom_fields, statuses) keep open shapes
+        // because their keys are user-defined CSV column names.
+        additionalProperties: false,
       },
       per_lead_budget_ms: {
         type: "number",
@@ -484,6 +492,14 @@ export const importAndQualify: Tool<
 
     // Phase 1 — IMPORT. Re-uses the existing composite end-to-end (chunking,
     // mapping preflight, custom-field validation, polling, AbortSignal).
+    // Per second-opinion #2 finding #2: progress emit lifted from runPreview
+    // (preview-only branch) to the live main path so users get the full
+    // 3-phase stream during real imports.
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: "Importing leads (phase 1/3 — preprocess + commit)",
+    });
     const importResult = await importLeads.execute(
       client,
       {
@@ -566,6 +582,11 @@ export const importAndQualify: Tool<
 
     // Phase 2 — register the qualify handle BEFORE launching web_fetch so the
     // bulk record exists on disk if the launch fans out and crashes.
+    ctx?.progress?.({
+      progress: 2,
+      total: 3,
+      message: "Import committed; preparing qualification (phase 2/3)",
+    });
     const lensId = params.lensId ?? (await client.resolveDefaultLens());
 
     // Source-of-truth for "leads to qualify": GET /imports/{id}/leads (added
