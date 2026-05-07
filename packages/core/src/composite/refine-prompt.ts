@@ -124,6 +124,89 @@ export const refinePrompt: Tool<RefinePromptParams> = {
     }
 
     if (clarification) {
+      // Iter 14 (per second-opinion #2): if the client supports
+      // elicitation, ask the user the clarification directly via
+      // elicitation/create — the spec's "no telephone" pattern. The
+      // server pulls the answer and POSTs to /pick_clarification, then
+      // returns "applied" without bouncing through the agent.
+      if (ctx?.elicit) {
+        const opts = clarification.options ?? [];
+        const requestedSchema =
+          opts.length > 0
+            ? {
+                type: "object",
+                properties: {
+                  option_id: {
+                    type: "string",
+                    title: "Pick one",
+                    description: "Choose the option that best matches your intent.",
+                    enum: opts
+                      .filter((o) => o.id)
+                      .map((o) => o.id as string),
+                    enumNames: opts
+                      .filter((o) => o.id)
+                      .map((o) => o.label),
+                  },
+                },
+                required: ["option_id"],
+              }
+            : {
+                type: "object",
+                properties: {
+                  text_answer: {
+                    type: "string",
+                    title: "Answer",
+                    description:
+                      "Free-text answer to the clarification. Plain English.",
+                  },
+                },
+                required: ["text_answer"],
+              };
+        try {
+          const elicited = await ctx.elicit({
+            message: clarification.question,
+            requestedSchema,
+          });
+          if (elicited.action === "accept" && elicited.content) {
+            const body =
+              typeof elicited.content.option_id === "string"
+                ? { option_id: elicited.content.option_id }
+                : typeof elicited.content.text_answer === "string"
+                ? { text_answer: elicited.content.text_answer }
+                : null;
+            if (body) {
+              try {
+                await client.requestVoid(
+                  "POST",
+                  `/organizations/${orgId}/pick_clarification`,
+                  body
+                );
+                client.invalidateMe();
+                return {
+                  status: "applied",
+                  clarified_via_elicit: true,
+                  computing_intelligence: true,
+                  message:
+                    "Prompt set + clarification answered via the client's elicitation UI. Leadbay is regenerating intelligence.",
+                  _meta: { region: client.region },
+                };
+              } catch (err: any) {
+                ctx?.logger?.warn?.(
+                  `refine_prompt: pick_clarification POST failed after elicit: ${err?.message ?? err?.code ?? err}`
+                );
+                // Fall through to telephone path; let the agent retry via
+                // answer_clarification.
+              }
+            }
+          }
+          // action=decline or cancel: surface to the agent so it can
+          // ask the user another way (or abandon).
+        } catch (err: any) {
+          ctx?.logger?.warn?.(
+            `refine_prompt: elicit failed: ${err?.message ?? err?.code ?? err} — falling back to telephone path`
+          );
+        }
+      }
       return {
         status: "clarification_pending",
         clarification,

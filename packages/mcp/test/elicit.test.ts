@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { httpsMockFactory } from "./harness.js";
+import { mockHttp, resetHttpMock, httpsMockFactory } from "./harness.js";
 
 vi.mock("node:https", () => httpsMockFactory());
 
@@ -94,4 +94,82 @@ describe("elicitation/create round-trip (P2 elicitInput)", () => {
     expect(parsed.action).toBe("accept");
     expect(parsed.color).toBe("blue");
   });
+
+  it("refine_prompt uses ctx.elicit when client supports elicitation (iter14)", async () => {
+    // Mock backend: POST user_prompt → GET clarifications (returns one) →
+    // POST pick_clarification (the auto-answer triggered by elicit accept).
+    mockHttp([
+      {
+        method: "GET",
+        path: "/1.5/users/me",
+        status: 200,
+        body: {
+          email: "admin@example.com",
+          admin: true,
+          organization: { id: "org-1", name: "Test Co" },
+          last_requested_lens: 1,
+        },
+      },
+      {
+        method: "POST",
+        path: "/1.5/organizations/org-1/user_prompt",
+        status: 200,
+        body: {},
+      },
+      {
+        method: "GET",
+        path: "/1.5/organizations/org-1/clarifications",
+        status: 200,
+        body: {
+          id: "clar-1",
+          question: "Did you mean dental hospitals or general hospitals?",
+          options: [
+            { id: "opt-dental", label: "Dental hospitals" },
+            { id: "opt-general", label: "General hospitals" },
+          ],
+          created_at: new Date().toISOString(),
+        },
+      },
+      {
+        method: "POST",
+        path: "/1.5/organizations/org-1/pick_clarification",
+        status: 200,
+        body: {},
+      },
+    ]);
+
+    const lbClient = new LeadbayClient(BASE, "u.test-token");
+    const server = buildServer(lbClient, { includeWrite: true });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const mcpClient = new Client(
+      { name: "test", version: "0.0.1" },
+      { capabilities: { elicitation: {} } }
+    );
+    // Client picks the dental option when asked.
+    mcpClient.setRequestHandler(ElicitRequestSchema, async (req) => {
+      expect(req.params.message).toContain("dental");
+      return {
+        action: "accept",
+        content: { option_id: "opt-dental" },
+      };
+    });
+    await Promise.all([
+      server.connect(serverTransport),
+      mcpClient.connect(clientTransport),
+    ]);
+
+    const result = await mcpClient.callTool({
+      name: "leadbay_refine_prompt",
+      arguments: {
+        prompt: "focus on hospitals",
+        clarification_poll_attempts: 1,
+        clarification_poll_gap_ms: 5,
+      },
+    });
+    expect((result as any).isError).not.toBe(true);
+    const text = (result as any).content[0].text;
+    const parsed = JSON.parse(text);
+    expect(parsed.status).toBe("applied");
+    expect(parsed.clarified_via_elicit).toBe(true);
+  }, 15_000);
 });
