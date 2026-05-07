@@ -104,6 +104,11 @@ interface BuildServerOptions {
   includeWrite?: boolean;
   logger?: ToolLogger;
   bulkTracker?: BulkTracker;
+  // Test-only escape hatch: extra tools to register alongside the
+  // production catalog. Lets unit tests exercise signal/progress
+  // wiring without depending on long-running real composites.
+  // Production code does not pass this.
+  extraTools?: Tool[];
 }
 
 function formatErrorForLLM(err: any): string {
@@ -156,6 +161,10 @@ export function buildServer(
       exposedTools.push(...granularWriteTools);
     }
   }
+  // Test-only injection point.
+  if (opts.extraTools) {
+    exposedTools.push(...opts.extraTools);
+  }
 
   // UC-3: leadbay_login is NEVER registered on MCP (prompt-injection vector).
   // It remains available only in the OpenClaw adapter.
@@ -183,7 +192,7 @@ export function buildServer(
     tools: toolsListPayload([...toolByName.values()]),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
     const name = req.params.name;
     const tool = toolByName.get(name);
     if (!tool) {
@@ -200,9 +209,15 @@ export function buildServer(
 
     const args = (req.params.arguments ?? {}) as any;
     try {
+      // MCP 2025-11-25 §Cancellation: extra.signal is aborted by the SDK
+      // when the client sends `notifications/cancelled`. Plumbing it to
+      // ToolContext.signal lets long-running composites (bulk_qualify_leads,
+      // enrich_titles, import_and_qualify) actually stop polling when the
+      // user clicks Cancel in Claude Desktop / Cursor.
       const result = await tool.execute(client, args, {
         logger: opts.logger,
         bulkTracker: opts.bulkTracker,
+        signal: extra.signal,
       });
       // Leadbay tools may return error envelopes ({ error: true, code, ... })
       // rather than throwing. Surface those as MCP isError so the LLM doesn't
