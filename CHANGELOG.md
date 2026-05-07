@@ -5,7 +5,7 @@
 The "make `@leadbay/mcp` the example MCP server" rollout. Closes the
 P1 / P2 / P3 priorities from the comprehensive eval doc.
 
-**Highlights so far (incremental — see iteration log):**
+### Spec primitive coverage
 
 - **Tool annotations on every tool (spec MCP 2025-11-25 §Tools).** Each
   tool now declares `readOnlyHint`, `destructiveHint`, `idempotentHint`,
@@ -17,26 +17,64 @@ P1 / P2 / P3 priorities from the comprehensive eval doc.
   (refine_prompt, answer_clarification, adjust_audience-merging,
   report_outreach). 56 tools total. A vitest drift-catcher prevents
   future regressions.
+- **`outputSchema` + `structuredContent` on top-5 composites**:
+  `pull_leads`, `research_lead`, `account_status`,
+  `bulk_qualify_leads`, `report_outreach` now declare typed output
+  shapes and emit a matching `structuredContent` block on success.
+  Capable clients consume the typed payload without re-parsing the
+  text. Backwards-compatible.
+- **`prompts/*` capability** with 5 canned slash-commands —
+  `leadbay_daily_check_in`, `leadbay_research_a_domain`,
+  `leadbay_refine_audience`, `leadbay_log_outreach`,
+  `leadbay_qualify_top_n`. Each composes 2-3 tool calls and accepts
+  parameterised arguments.
+- **`resources/*` capability** with three URI schemes:
+  `lead://{uuid}/profile`, `lens://{id}/definition`,
+  `org://taste-profile`. Cache-friendly for clients that opt in.
+- **`notifications/progress`** — long-running composites stream
+  per-lead progress when the client passes `_meta.progressToken`.
+  `bulk_qualify_leads` is the first adopter.
+- **`notifications/cancelled` → `ToolContext.signal`** — client
+  cancels now actually abort in-flight composite polling.
+
+### Hardening
+
 - **`additionalProperties: false` on every tool's inputSchema.** Closes
-  the prompt-injection extra-field surface — agents can no longer
-  sneak unknown fields through. **Behavior callout**: any client that
-  was passing extra unrecognized fields will now get a schema rejection.
-  Documented as a deliberate hardening; existing tools never advertised
-  acceptance of those fields.
+  the prompt-injection extra-field surface. **Behavior callout**: any
+  client that was passing extra unrecognized fields will now get a
+  schema rejection. Documented as a deliberate hardening; existing
+  tools never advertised acceptance of those fields.
+- **Security regression suite** — `packages/mcp/test/security.test.ts`
+  covers: extra-field rejection, prototype-pollution payload, type
+  confusion, oversized inputs, nested-additionalProperties on the
+  `verification` field of `report_outreach`.
+
+### Field renames + deprecations
+
 - **`research_lead.qualification[]` boost_score canonical alias.** The
   field was previously labelled `score_0_to_10`; the actual scale is
   the discrete `-10|0|10|20` boost (NOT a 0–10 average). 0.6.0 ships
   `boost_score` as canonical alongside an explicit `score_scale:
   "-10|0|10|20"` field; `score_0_to_10` is kept as a deprecated alias
   for one minor version and removed in 0.7.0. See `MIGRATION.md`.
-- **Security regression suite.** New `packages/mcp/test/security.test.ts`
-  covers: extra-field rejection, prototype-pollution payload, type
-  confusion, oversized inputs, nested-additionalProperties on the
-  `verification` field of `report_outreach`.
 
-(More to come — outputSchema + structuredContent, prompts, resources,
-elicitInput, progress, cancellation, evals harness — see the
-relentless iteration log.)
+### Token economy
+
+- **Pagination metadata**: `pull_leads` and `discover_leads` payloads
+  now include `has_more: boolean` and `next_page: number | null`.
+- **Truncation steering on `research_lead`**: when the response
+  exceeds ~25k characters, `truncated: true` and `truncation_hint`
+  surface, naming the argument that would reduce the payload
+  (`concise: true`).
+
+### Tests
+
+- Total: 328+ unit tests across `@leadbay/core` and `@leadbay/mcp`.
+- New: `annotations.test.ts` (drift catcher), `security.test.ts`
+  (5 hostile-input shapes), `output-schema.test.ts` (top-5 round
+  trip), `cancellation.test.ts` (signal wiring), `progress.test.ts`
+  (event flow), `prompts.test.ts` (5 prompts round-trip),
+  `resources.test.ts` (3 URI schemes round-trip).
 
 ## 0.3.0 — 2026-04-29
 

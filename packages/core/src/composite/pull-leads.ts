@@ -114,6 +114,14 @@ export const pullLeads: Tool<PullLeadsParams> = {
           total: { type: "number" },
         },
       },
+      has_more: {
+        type: "boolean",
+        description: "True if at least one more page exists. Spec-aligned pagination metadata.",
+      },
+      next_page: {
+        type: ["number", "null"],
+        description: "0-indexed next page number, or null on the last page.",
+      },
       computing_wishlist: {
         type: "boolean",
         description: "True if Leadbay is still rebuilding this lens's wishlist.",
@@ -204,6 +212,13 @@ export const pullLeads: Tool<PullLeadsParams> = {
             prospecting_actions_count: lead.prospecting_actions_count ?? 0,
           };
 
+    // Spec-aligned pagination metadata (P3 from the eval doc): the agent
+    // shouldn't have to compute `page < pages - 1` themselves.
+    const totalPages = res.pagination?.pages ?? 0;
+    const currentPage = res.pagination?.page ?? page;
+    const hasMore = currentPage < totalPages - 1;
+    const nextPage = hasMore ? currentPage + 1 : null;
+
     return {
       lens: { id: lensId },
       leads: res.items.map((lead) => ({
@@ -211,6 +226,8 @@ export const pullLeads: Tool<PullLeadsParams> = {
         qualification_summary: summaryMap.get(lead.id) ?? null,
       })),
       pagination: res.pagination,
+      has_more: hasMore,
+      next_page: nextPage,
       computing_wishlist: res.computing_wishlist,
       computing_scores: res.computing_scores,
       _meta: {

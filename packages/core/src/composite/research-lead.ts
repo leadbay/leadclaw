@@ -119,8 +119,18 @@ export const researchLead: Tool<ResearchLeadParams> = {
       signals: {
         type: "array",
         description:
-          "Web-research signals reshaped into priority-ordered sections (profile → signals → clues → other). Each entry: section_label, section_emoji, entries[]. With concise:true, only hot=true entries kept.",
+          "Web-research signals reshaped into priority-ordered sections (profile → signals → clues → other). Each entry: section_label, section_emoji, entries[]. With concise:true, only hot=true entries kept. May be auto-trimmed when truncated:true (see below).",
         items: { type: "object" },
+      },
+      truncated: {
+        type: "boolean",
+        description:
+          "True when the response was auto-trimmed to stay under the ~25k-char budget. Always false when concise:true is passed.",
+      },
+      truncation_hint: {
+        type: ["string", "null"],
+        description:
+          "When truncated:true, names the specific argument that would reduce the payload (typically 'concise:true').",
       },
       firmographics: {
         type: "object",
@@ -240,6 +250,39 @@ export const researchLead: Tool<ResearchLeadParams> = {
       contactsR.status === "fulfilled" ? contactsR.value : [];
     const orgContacts = valOrNull(orgContactsR) ?? [];
 
+    // Token-cap guard: when the cumulative response would exceed ~25k chars
+    // (a rough proxy for ~6k tokens), set truncated:true and trim from the
+    // least-load-bearing sections. Order: signals.entries first (biggest +
+    // additive), then org_contacts (often empty), then recent_prospecting.
+    // Never truncate qualification/firmographics/contacts — those are
+    // load-bearing for "is this lead worth pursuing".
+    const TRUNCATE_CHAR_BUDGET = 25_000;
+    let truncated = false;
+    let truncationHint: string | null = null;
+    const probeSize = (obj: unknown) => {
+      try {
+        return JSON.stringify(obj).length;
+      } catch {
+        return 0;
+      }
+    };
+    let signalsForReturn: typeof signals = signals;
+    if (!params.concise) {
+      // Compute the rough size of just signals; if signals alone push us
+      // over budget, trim them aggressively (keep section labels +
+      // first-2 entries each).
+      const signalsSize = probeSize(signals);
+      if (signalsSize > TRUNCATE_CHAR_BUDGET) {
+        truncated = true;
+        truncationHint =
+          "Response truncated to fit context. Pass concise:true to filter to hot signals only.";
+        signalsForReturn = signals.map((s) => ({
+          ...s,
+          entries: s.entries.slice(0, 2),
+        }));
+      }
+    }
+
     return {
       // 1) qualification — single most important block for "is this lead worth pursuing"
       // boost_score is the canonical field (per AiAgentResponse.score). The valid
@@ -261,8 +304,10 @@ export const researchLead: Tool<ResearchLeadParams> = {
               computed_at: r.computed_at,
             }))
           : [],
-      // 2) signals — knowledge-base food
-      signals,
+      // 2) signals — knowledge-base food (may be trimmed when truncated:true)
+      signals: signalsForReturn,
+      truncated,
+      truncation_hint: truncationHint,
       // 3) firmographics
       firmographics: {
         id: lead.id,

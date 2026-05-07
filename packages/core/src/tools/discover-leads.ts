@@ -49,6 +49,11 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
       `/lenses/${lensId}/leads/wishlist?count=${count}&page=${page}&contacts=true`
     );
 
+    const totalPages = res.pagination?.pages ?? 0;
+    const currentPage = res.pagination?.page ?? page;
+    const hasMore = currentPage < totalPages - 1;
+    const nextPage = hasMore ? currentPage + 1 : null;
+
     return {
       leads: res.items.map((lead) => ({
         id: lead.id,
@@ -69,6 +74,8 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
         recommended_contact: lead.recommended_contact ?? null,
       })),
       pagination: res.pagination,
+      has_more: hasMore,
+      next_page: nextPage,
     };
   },
 };
