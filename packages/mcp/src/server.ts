@@ -98,6 +98,38 @@ function buildRhythmParagraph(has: (name: string) => boolean): string {
   );
 }
 
+function buildSlashCommandsParagraph(has: (name: string) => boolean): string {
+  const commands: string[] = [];
+  // Always-available (read-only chains).
+  commands.push("`/leadbay daily-check-in` (chains account_status → pull_leads → research_lead on the top hit)");
+  if (has("leadbay_import_and_qualify")) {
+    commands.push("`/leadbay research-a-domain {domain}` (import_and_qualify → research_lead)");
+  }
+  if (has("leadbay_refine_prompt")) {
+    commands.push("`/leadbay refine-audience {instruction}` (refine_prompt with clarification handling)");
+  }
+  if (has("leadbay_report_outreach")) {
+    commands.push("`/leadbay log-outreach {lead_id, summary}` (gathers verification then report_outreach)");
+  }
+  if (has("leadbay_bulk_qualify_leads")) {
+    commands.push("`/leadbay qualify-top-n {count}` (bulk_qualify_leads with progress streaming)");
+  }
+  return (
+    "Slash commands (`prompts/*`): the user's MCP client may surface registered prompts as slash commands. " +
+    "Available: " +
+    commands.join(", ") +
+    ". When the user invokes one, the rendered messages tell you which tools to call and in what order — follow them."
+  );
+}
+
+const RESOURCES_PARAGRAPH =
+  "Read-only resources (`resources/*`): three URI schemes are available — " +
+  "`lead://{uuid}/profile` (lead profile by id), " +
+  "`lens://{id}/definition` (filter + scoring config), " +
+  "`org://taste-profile` (qualification questions + intent tags). " +
+  "Capable clients cache these across turns — cheaper than re-running pull_leads / research_lead when the agent " +
+  "already has the id.";
+
 export function buildServerInstructions(exposed: Set<string>): string {
   const has = (name: string) => exposed.has(name);
   const parts: string[] = [];
@@ -110,6 +142,8 @@ export function buildServerInstructions(exposed: Set<string>): string {
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
+  parts.push(buildSlashCommandsParagraph(has));
+  parts.push(RESOURCES_PARAGRAPH);
   return parts.join("\n\n");
 }
 
@@ -195,7 +229,7 @@ export function buildServer(
   // prompt only references tools it can call.
   const exposedNames = new Set(toolByName.keys());
   const server = new Server(
-    { name: "leadbay", version: "0.3.0" },
+    { name: "leadbay", version: "0.6.0" },
     {
       capabilities: { tools: {}, prompts: {}, resources: {} },
       instructions: buildServerInstructions(exposedNames),

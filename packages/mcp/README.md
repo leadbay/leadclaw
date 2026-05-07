@@ -15,12 +15,14 @@ LLM HINT — if you're an AI agent reading this README to install the server:
 
 A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, and any other MCP-compatible agent find, research, and prepare outreach on B2B prospects using your Leadbay account.
 
+> **0.6.0 — what's new** (UNRELEASED): a comprehensive MCP-spec coverage upgrade. Every tool now declares **annotations** (`readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`) so capable clients pick the right confirmation UX. The 5 highest-traffic composites ship **`outputSchema` + `structuredContent`** for typed agent consumption. New surfaces: **`prompts/*`** (5 canned slash-commands), **`resources/*`** (`lead://`, `lens://`, `org://taste-profile`), **`notifications/progress`** (per-lead streaming during `bulk_qualify_leads`), **`notifications/cancelled` → `ToolContext.signal`** (client cancels actually stop polling), **`elicitation/create`** (server can ask the user directly). Schema strictness: every `inputSchema` now declares `additionalProperties: false`. `research_lead.qualification[]` ships `boost_score` (canonical) + `score_scale: "-10|0|10|20"` + a deprecated `score_0_to_10` alias. Pagination payloads include `has_more` + `next_page`. `research_lead` includes a `truncated` + `truncation_hint` budget guard. **Behavior callout**: extra unknown fields in tool inputs are now rejected. See [MIGRATION.md](./MIGRATION.md).
+
 > **0.3.0 behavior change** — composite write tools (`refine_prompt`, `report_outreach`, `adjust_audience`, `bulk_qualify_leads`, `enrich_titles`, `answer_clarification`, `import_leads`) are **ON by default**. Set `LEADBAY_MCP_WRITE=0` (or `--no-write` on `install`) to restore the previous read-only behavior. `leadbay-mcp install` now also registers Claude Code at `--scope user` so Leadbay is visible from any project. See [MIGRATION.md](./MIGRATION.md).
 
 ## 1. Install (one command)
 
 ```bash
-npx -y @leadbay/mcp@0.3 install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@0.6 install --email you@yourcompany.com --region us
 # (you'll be prompted for your password — it's not echoed)
 ```
 
@@ -47,14 +49,14 @@ Claude Desktop 2026 ships the DXT (Desktop Extension) system — the legacy `cla
 
 If you installed Node from the official [nodejs.org](https://nodejs.org) `.pkg`, `/usr/local/lib/node_modules` is root-owned. Any of these works:
 
-- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.3 ...` — no global install needed.
+- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.6 ...` — no global install needed.
 - **`sudo npm install -g @leadbay/mcp`** (enter your macOS password).
 - **Use a Node version manager** — [nvm](https://github.com/nvm-sh/nvm), [volta](https://volta.sh), [fnm](https://github.com/Schniz/fnm). They install Node under your home directory, so `npm install -g` works without sudo.
 
 ### If you'd rather mint a token without auto-install
 
 ```bash
-npx -y @leadbay/mcp@0.3 login \
+npx -y @leadbay/mcp@0.6 login \
   --email you@yourcompany.com \
   --region us
 ```
@@ -72,7 +74,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.3"],
+      "args": ["-y", "@leadbay/mcp@0.6"],
       "env": {
         "LEADBAY_TOKEN": "<paste-token-from-step-1>",
         "LEADBAY_REGION": "us"
@@ -93,7 +95,7 @@ In Cursor settings, add the MCP server:
   "mcp.servers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.3"],
+      "args": ["-y", "@leadbay/mcp@0.6"],
       "env": { "LEADBAY_TOKEN": "<paste-token>", "LEADBAY_REGION": "us" }
     }
   }
@@ -106,7 +108,7 @@ In Cursor settings, add the MCP server:
 claude mcp add leadbay --scope user \
   --env LEADBAY_TOKEN=<paste-token> \
   --env LEADBAY_REGION=us \
-  -- npx -y @leadbay/mcp@0.3
+  -- npx -y @leadbay/mcp@0.6
 ```
 
 > **`--scope user`** registers Leadbay globally for your account (visible from any project). Without it, `claude mcp add` defaults to project-local scope and the server only appears in conversations opened from the directory where you ran the command.
@@ -118,7 +120,7 @@ claude mcp add leadbay --scope user \
 Before starting Claude, run:
 
 ```bash
-LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.3 doctor
+LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.6 doctor
 ```
 
 Expected output:
@@ -148,14 +150,14 @@ Leadbay connection OK.
 | `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Claude Desktop "loading forever" on first use | `npx` cold-start fetching the package | First run takes ~10s. Prefer `npm install -g @leadbay/mcp` for faster startup. |
 | Claude Desktop doesn't show Leadbay tools | Server crashed at startup | Check `~/Library/Logs/Claude/mcp*.log` (macOS) or `%APPDATA%\Claude\logs\mcp*.log` (Windows). |
-| Claude Code can't find Leadbay in a new conversation | MCP server installed at project scope (default before 0.3.0) | Re-run with `--scope user`: `claude mcp remove leadbay && claude mcp add leadbay --scope user --env LEADBAY_TOKEN=… --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.3` |
+| Claude Code can't find Leadbay in a new conversation | MCP server installed at project scope (default before 0.3.0) | Re-run with `--scope user`: `claude mcp remove leadbay && claude mcp add leadbay --scope user --env LEADBAY_TOKEN=… --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.6` |
 | Agent reports "tool not found" for `refine_prompt` / `adjust_audience` etc. | Pre-0.3.0 install with `LEADBAY_MCP_WRITE` unset (writes were off) | Either re-run `npx @leadbay/mcp install` or remove `LEADBAY_MCP_WRITE=0` from your client config (writes are on by default in 0.3.0+) |
 
 ## 5. Upgrade & rotation
 
-**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.3"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
+**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.6"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
 
-**Rotate token**: re-run `npx -y @leadbay/mcp@0.3 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
+**Rotate token**: re-run `npx -y @leadbay/mcp@0.6 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
 
 ## 6. Advanced
 
