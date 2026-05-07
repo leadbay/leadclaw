@@ -11,6 +11,13 @@ interface PrepareOutreachParams {
 
 export const prepareOutreach: Tool<PrepareOutreachParams> = {
   name: "leadbay_prepare_outreach",
+  annotations: {
+    title: "Prepare outreach package for a lead",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Prepare an outreach package for a single lead: recommended contact + enriched contact details + AI summary. " +
     "When to use: when the agent is about to draft outreach for ONE specific lead and needs the contact's email/phone. " +

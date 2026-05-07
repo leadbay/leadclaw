@@ -8,6 +8,16 @@ interface AnswerClarificationParams {
 
 export const answerClarification: Tool<AnswerClarificationParams> = {
   name: "leadbay_answer_clarification",
+  annotations: {
+    title: "Answer pending clarification",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Records a one-time answer that becomes the new user_prompt and
+    // triggers regeneration. Re-calling with a different answer wins;
+    // not idempotent.
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Answer the pending clarification question Leadbay raised after a refine_prompt. The answer is stored as " +
     "the new user_prompt and triggers regeneration. Pass option_id (preferred — pick from the offered options) " +

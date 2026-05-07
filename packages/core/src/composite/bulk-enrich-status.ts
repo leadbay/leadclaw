@@ -35,6 +35,13 @@ async function pMap<T, R>(
 
 export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
   name: "leadbay_bulk_enrich_status",
+  annotations: {
+    title: "Poll bulk-enrichment status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Check status + per-lead contacts for a bulk enrichment you previously launched via leadbay_enrich_titles. " +
     "Returns the bulk_id, progress per lead (done/total enrichable contacts), and overall progress. " +

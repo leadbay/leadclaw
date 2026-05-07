@@ -288,6 +288,16 @@ export const importAndQualify: Tool<
   ImportAndQualifyResult | MappingPreviewResult
 > = {
   name: "leadbay_import_and_qualify",
+  annotations: {
+    title: "Import + qualify leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Composite of import (idempotent against domain hash) + qualify (which
+    // is silent no-op for already-qualified leads). bulk-store + import
+    // hashes return same handles on retry.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Composite: import a list of leads (CSV-shaped records OR a list of domains), then trigger Leadbay's AI " +
     "qualification (web research + per-question scoring) on every imported leadId, and return both the import " +

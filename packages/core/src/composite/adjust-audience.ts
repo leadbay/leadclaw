@@ -145,6 +145,17 @@ function mergeFilter(
 
 export const adjustAudience: Tool<AdjustAudienceParams> = {
   name: "leadbay_adjust_audience",
+  annotations: {
+    title: "Adjust lens audience filters",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Each call MERGES new criteria into the lens config; calling twice
+    // with the same args produces the same final state (last write wins on
+    // overlapping criteria, but the merge is deterministic). Per spec
+    // idempotentHint is about same observable outcome — re-call is safe.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against " +
     "the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. " +

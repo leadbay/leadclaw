@@ -21,6 +21,13 @@ interface TitleStat {
 
 export const recallOrderedTitles: Tool<RecallOrderedTitlesParams> = {
   name: "leadbay_recall_ordered_titles",
+  annotations: {
+    title: "Recall titles previously enriched",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Show job titles the org has previously enriched, so the agent can repeat the same titles for new leads " +
     "(or skip already-saturated ones). Two implementation paths: (1) PREFERRED: a selection-scoped " +

@@ -41,6 +41,57 @@ beforeEach(() => {
   resetHttpMock();
 });
 
+describe("every composite tool has annotations (drift catcher)", () => {
+  it("every default-surface composite (read + write) declares annotations", async () => {
+    const { mcpClient } = await connect();
+    const listed = await mcpClient.listTools();
+    // The default surface (with includeWrite=true) is composite reads
+    // + composite writes. EVERY tool must declare annotations.
+    const missing: string[] = [];
+    for (const t of listed.tools) {
+      if (!t.annotations) {
+        missing.push(t.name);
+      }
+    }
+    expect(missing, `tools missing annotations: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("every annotated tool sets at least one of the four hints", async () => {
+    const { mcpClient } = await connect();
+    const listed = await mcpClient.listTools();
+    const HINT_KEYS = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
+    const missingHints: string[] = [];
+    for (const t of listed.tools) {
+      if (!t.annotations) continue;
+      const hasAny = HINT_KEYS.some((k) => k in (t.annotations as Record<string, unknown>));
+      if (!hasAny) missingHints.push(t.name);
+    }
+    expect(missingHints).toEqual([]);
+  });
+
+  it("destructive tools that mutate state are flagged readOnlyHint:false", async () => {
+    const { mcpClient } = await connect();
+    const listed = await mcpClient.listTools();
+    const destructiveNames = [
+      "leadbay_report_outreach",
+      "leadbay_bulk_qualify_leads",
+      "leadbay_enrich_titles",
+      "leadbay_adjust_audience",
+      "leadbay_refine_prompt",
+      "leadbay_answer_clarification",
+      "leadbay_import_leads",
+      "leadbay_import_and_qualify",
+    ];
+    for (const name of destructiveNames) {
+      const t = listed.tools.find((tool) => tool.name === name);
+      expect(t, `${name} not found`).toBeDefined();
+      expect(t!.annotations).toBeDefined();
+      expect(t!.annotations!.destructiveHint, `${name} destructiveHint`).toBe(true);
+      expect(t!.annotations!.readOnlyHint, `${name} readOnlyHint`).toBe(false);
+    }
+  });
+});
+
 describe("tools/list annotations (MCP spec ToolAnnotations)", () => {
   it("leadbay_pull_leads is annotated readOnly + idempotent + openWorld", async () => {
     const { mcpClient } = await connect();
@@ -70,13 +121,17 @@ describe("tools/list annotations (MCP spec ToolAnnotations)", () => {
     });
   });
 
-  it("a tool without declared annotations omits the field (backwards-compat)", async () => {
+  it("research_lead is annotated readOnly + idempotent + openWorld (extended in iter 2)", async () => {
     const { mcpClient } = await connect();
     const listed = await mcpClient.listTools();
-    // research_lead is not yet annotated in this iteration — should have
-    // no annotations property. (Subsequent iterations annotate it.)
     const t = listed.tools.find((tool) => tool.name === "leadbay_research_lead");
     expect(t).toBeDefined();
-    expect(t!.annotations).toBeUndefined();
+    expect(t!.annotations).toEqual({
+      title: "Research a Leadbay lead in depth",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    });
   });
 });

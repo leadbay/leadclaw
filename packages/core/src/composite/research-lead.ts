@@ -59,6 +59,13 @@ function reshapeWebFetchContent(
 
 export const researchLead: Tool<ResearchLeadParams> = {
   name: "leadbay_research_lead",
+  annotations: {
+    title: "Research a Leadbay lead in depth",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Tell me everything decision-relevant about a single lead. Bundles the lens-scoped lead profile, the AI " +
     "qualification answers (the agent's knowledge-base food), the structured web-research signals (with hot " +

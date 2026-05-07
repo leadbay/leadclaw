@@ -20,6 +20,18 @@ const DEFAULT_CANDIDATE_COUNT = 25;
 
 export const enrichTitles: Tool<EnrichTitlesParams> = {
   name: "leadbay_enrich_titles",
+  annotations: {
+    title: "Enrich contact titles across leads",
+    readOnlyHint: false,
+    // Mode A (no titles): non-destructive preview returning candidates.
+    // Mode B (with titles): launches enrichment job. Net classification is
+    // destructive because the dominant flow mutates state.
+    destructiveHint: true,
+    // Idempotent against the same selection + titles set (same hash → same
+    // bulk_id; backend silently no-ops on already-enriched contacts).
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Order contact enrichments by job title across many leads. Contacts are NOT returned by default with a lead " +
     "(Leadbay keeps enrichment out-of-band to control cost); the agent requests them on demand via this tool when " +

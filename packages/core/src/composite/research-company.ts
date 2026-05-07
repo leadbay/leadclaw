@@ -11,6 +11,13 @@ interface ResearchCompanyParams {
 
 export const researchCompany: Tool<ResearchCompanyParams> = {
   name: "leadbay_research_company",
+  annotations: {
+    title: "Research a company by name",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Deep-dive research on a specific company by NAME (fuzzy match against the active lens's wishlist). " +
     "When to use: when the user references a company by name and you don't yet have its lead_id. " +

@@ -13,6 +13,16 @@ const DEFAULT_POLL_GAP_MS = 5_000;
 
 export const refinePrompt: Tool<RefinePromptParams> = {
   name: "leadbay_refine_prompt",
+  annotations: {
+    title: "Refine the audience prompt",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Sets the org's user_prompt and may trigger a clarification flow. Each
+    // call replaces the prior prompt — a second call with a different
+    // instruction is NOT idempotent (the second prompt wins).
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Refine the kind of leads Leadbay surfaces, beyond firmographics. Free-text instruction (e.g. 'focus on " +
     "hospitals running their own IT'). Sets the org's user_prompt; if the new prompt produces ambiguous criteria, " +

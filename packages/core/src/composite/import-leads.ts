@@ -1071,6 +1071,16 @@ function reconcileOneChunk(
 
 export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
   name: "leadbay_import_leads",
+  annotations: {
+    title: "Import leads from list/file",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Backend dedupes by domain/registry id; same input set ⇒ same lead set
+    // (no duplicate leads are created). bulk-store also keys on the
+    // input-hash → returns the same importId on retry.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Import leads into Leadbay's CRM via the file-import wizard. Returns stable Leadbay leadIds for downstream chaining " +
     "into leadbay_bulk_qualify_leads / leadbay_research_lead.\n\n" +

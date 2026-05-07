@@ -3,6 +3,13 @@ import type { Tool, ToolContext, QuotaStatusPayload } from "../types.js";
 
 export const accountStatus: Tool<Record<string, never>> = {
   name: "leadbay_account_status",
+  annotations: {
+    title: "Show Leadbay account + quota state",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Show the user's account state — admin rights, language, last-active lens, current quota usage across " +
     "daily/weekly/monthly windows for llm_completion / ai_rescore / web_fetch resources, and whether the org's " +

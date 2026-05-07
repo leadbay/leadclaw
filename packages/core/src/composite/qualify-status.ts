@@ -49,6 +49,13 @@ export const qualifyStatus: Tool<
   QualifyStatusResult
 > = {
   name: "leadbay_qualify_status",
+  annotations: {
+    title: "Poll import-and-qualify status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Retrieve the current state of an import_and_qualify launch by `qualify_id`. Returns the same `qualified[]` " +
     "/ `still_running[]` shape as the original composite, refreshed against the backend at call time. The handle " +

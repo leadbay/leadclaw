@@ -37,6 +37,15 @@ interface QualResult {
 
 export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
   name: "leadbay_bulk_qualify_leads",
+  annotations: {
+    title: "Bulk-qualify next N leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Same set of leads + same options ⇒ same backend job (idempotency
+    // hash); already-qualified leads are silent no-ops. Re-call is safe.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Pick the next N unqualified leads in the active lens and qualify them (run AI rescore + web fetch), polling " +
     "until the answers are populated or a budget is exhausted. Already-qualified leads (those with a non-null " +

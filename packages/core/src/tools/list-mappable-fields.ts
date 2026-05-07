@@ -129,6 +129,13 @@ export const listMappableFields: Tool<
   ListMappableFieldsResult
 > = {
   name: "leadbay_list_mappable_fields",
+  annotations: {
+    title: "List CRM-import mappable fields",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "List every CRM field the agent can target when calling leadbay_import_leads or leadbay_import_and_qualify. " +
     "Returns two arrays: `standard_fields` (Leadbay's built-in StandardCrmFieldType enum — LEAD_NAME, LEAD_WEBSITE, " +
