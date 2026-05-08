@@ -246,7 +246,25 @@ export const researchLead: Tool<ResearchLeadParams> = {
       firmographics: {
         type: "object",
         description:
-          "Lead profile basics: id, name, sector_id, size, location, website, description, short_description, plus tags/score/ai_agent_lead_score/social.",
+          "Lead profile basics. iter-30: nested additionalProperties:false closes the output-side strictness frontier — runtime returns must match exactly these keys.",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          sector_id: { type: ["number", "string", "null"] },
+          size: { type: ["string", "null"] },
+          location: { type: ["string", "null"] },
+          website: { type: ["string", "null"] },
+          description: { type: ["string", "null"] },
+          short_description: { type: ["string", "null"] },
+          keywords: { type: "array", items: { type: "string" } },
+          tags: { type: "array", items: { type: "string" } },
+          score: { type: ["number", "null"] },
+          ai_agent_lead_score: { type: ["number", "null"] },
+          social_presence: { type: ["object", "string", "null"] },
+          social_urls: { type: ["object", "array", "null"] },
+          registry_ids: { type: ["object", "array", "null"] },
+        },
+        additionalProperties: false,
       },
       contacts: {
         type: "object",
@@ -256,6 +274,7 @@ export const researchLead: Tool<ResearchLeadParams> = {
           enriched: { type: "array", items: { type: "object" } },
           org: { type: "array", items: { type: "object" } },
         },
+        additionalProperties: false,
       },
       engagement: {
         type: "object",
@@ -274,6 +293,7 @@ export const researchLead: Tool<ResearchLeadParams> = {
           recent_epilogue: { type: "array", items: { type: "object" } },
           recent_prospecting: { type: "array", items: { type: "object" } },
         },
+        additionalProperties: false,
       },
       _meta: {
         type: "object",
@@ -284,6 +304,7 @@ export const researchLead: Tool<ResearchLeadParams> = {
           lens_id: { type: "number" },
           web_fetch_in_progress: { type: "boolean" },
         },
+        additionalProperties: false,
       },
     },
     required: ["qualification", "signals", "firmographics", "contacts", "engagement"],
