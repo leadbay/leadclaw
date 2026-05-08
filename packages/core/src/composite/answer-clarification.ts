@@ -32,6 +32,26 @@ export const answerClarification: Tool<AnswerClarificationParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        description: "'answered' (recorded; intelligence regenerating) or 'no_pending_clarification' (nothing to answer).",
+      },
+      recorded_as_user_prompt: {
+        type: "boolean",
+        description: "True when the answer was stored as the org's new user_prompt.",
+      },
+      message: { type: "string" },
+      hint: {
+        type: "string",
+        description: "Operator-facing next-step (no_pending_clarification path).",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["status"],
+  },
   execute: async (
     client: LeadbayClient,
     params: AnswerClarificationParams,

@@ -41,6 +41,42 @@ export const prepareOutreach: Tool<PrepareOutreachParams> = {
     required: ["leadId"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      lead: {
+        type: ["object", "null"],
+        description:
+          "Short lead summary for outreach context: {name, ai_summary, website}. Null if /lead profile fetch failed.",
+        properties: {
+          name: { type: "string" },
+          ai_summary: { type: ["string", "null"] },
+          website: { type: ["string", "null"] },
+        },
+      },
+      recommended_contact: {
+        type: ["object", "null"],
+        description:
+          "Best contact to outreach to ({id, name, job_title, email, phone_number, linkedin_page}). Null when no contacts known.",
+      },
+      other_contacts_count: {
+        type: "number",
+        description:
+          "How many other contacts exist beyond the recommended one (so the agent knows there's more to discover via leadbay_get_contacts).",
+      },
+      enrichment: {
+        type: "object",
+        description:
+          "Status of opt-in enrichment (only set when enrich:true was passed): {triggered, error, hint}.",
+        properties: {
+          triggered: { type: "boolean" },
+          error: { type: ["string", "null"] },
+          hint: { type: ["string", "null"] },
+        },
+      },
+    },
+    required: ["recommended_contact", "other_contacts_count", "enrichment"],
+  },
   execute: async (
     client: LeadbayClient,
     params: PrepareOutreachParams,

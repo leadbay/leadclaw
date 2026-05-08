@@ -50,6 +50,43 @@ export const refinePrompt: Tool<RefinePromptParams> = {
     required: ["prompt"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    description:
+      "Multiple return shapes by status. dry_run, applied (with optional clarified_via_elicit), or clarification_pending.",
+    properties: {
+      dry_run: { type: "boolean", description: "True when dry_run:true was passed (no state change)." },
+      would_call: {
+        type: "object",
+        description: "Dry-run preview of the POST that would have been issued.",
+      },
+      status: {
+        type: "string",
+        description: "'applied' (prompt set; intelligence regenerating) or 'clarification_pending' (telephone path).",
+      },
+      computing_intelligence: {
+        type: "boolean",
+        description: "True when intelligence is regenerating after the prompt set.",
+      },
+      clarified_via_elicit: {
+        type: "boolean",
+        description: "True when the clarification was answered via the client's elicitation UI (not via telephone).",
+      },
+      message: {
+        type: "string",
+        description: "Operator-facing summary.",
+      },
+      clarification: {
+        type: "object",
+        description: "ClarificationPayload returned by the backend (clarification_pending path).",
+      },
+      next_action: {
+        type: "string",
+        description: "Concrete next-step instruction for the agent.",
+      },
+      _meta: { type: "object" },
+    },
+  },
   execute: async (
     client: LeadbayClient,
     params: RefinePromptParams,

@@ -77,6 +77,71 @@ export const qualifyStatus: Tool<
     required: ["qualify_id"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      qualify_id: { type: "string", description: "Echoed UUIDv4 handle." },
+      launched_at: { type: "string", description: "ISO timestamp of original launch." },
+      status: { type: "string", description: "'launched' on success (other states surface as error envelopes)." },
+      import_ids: {
+        type: "array",
+        description: "Underlying file-import handle ids (one per chunk).",
+        items: { type: "string" },
+      },
+      lens_id: { type: "number", description: "Lens id the qualification ran against." },
+      lead_ids: {
+        type: "array",
+        description: "Lead UUIDs covered by this qualify_id (echoed from launch).",
+        items: { type: "string" },
+      },
+      qualified: {
+        type: "array",
+        description:
+          "Leads whose qualification has settled. Each entry: {lead_id, qualification_summary, signals_count, ...}.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description: "Leads still being qualified at refresh time.",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description:
+          "Per-lead errors observed at refresh (e.g., 404 on /web_fetch + /ai_agent_responses).",
+        items: { type: "object" },
+      },
+      not_in_lens: {
+        type: "array",
+        description:
+          "Lead ids that exist in the org but aren't members of the active lens — backend won't qualify them; agent should stop polling.",
+        items: { type: "string" },
+      },
+      per_lead_budget_ms: {
+        type: "number",
+        description: "Caller-supplied per-lead timeout (informational only at status time).",
+      },
+      total_budget_ms: {
+        type: "number",
+        description: "Caller-supplied total timeout (informational only at status time).",
+      },
+      region: { type: "string" },
+      _meta: { type: "object" },
+    },
+    required: [
+      "qualify_id",
+      "status",
+      "import_ids",
+      "lens_id",
+      "lead_ids",
+      "qualified",
+      "still_running",
+      "failed",
+      "not_in_lens",
+      "region",
+      "_meta",
+    ],
+  },
   execute: async (
     client: LeadbayClient,
     params: QualifyStatusParams,

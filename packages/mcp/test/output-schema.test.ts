@@ -59,11 +59,22 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
     }
   });
 
-  it("tools without outputSchema (other composites) omit the field", async () => {
-    const { mcpClient } = await connect();
+  it("granular tools (advanced surface) omit outputSchema by default (iter-18 added composites only)", async () => {
+    // Advanced mode exposes granular reads — pick one that has not yet been
+    // promoted to outputSchema coverage. This negative-control assertion
+    // catches accidental side-effects when adding outputSchema to a granular
+    // (which would land in iter-19+).
+    const lbClient = new LeadbayClient(BASE, "u.test-token");
+    const server = buildServer(lbClient, { includeWrite: true, includeAdvanced: true });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const mcpClient = new Client({ name: "test", version: "0.0.1" }, {});
+    await Promise.all([
+      server.connect(serverTransport),
+      mcpClient.connect(clientTransport),
+    ]);
     const listed = await mcpClient.listTools();
-    // recallOrderedTitles is NOT in the top-5 — should not yet have outputSchema
-    const t = listed.tools.find((tool) => tool.name === "leadbay_recall_ordered_titles");
+    // get_quota is granular; not slated for outputSchema until iter-19+.
+    const t = listed.tools.find((tool) => tool.name === "leadbay_get_quota");
     expect(t).toBeDefined();
     expect(t!.outputSchema).toBeUndefined();
   });

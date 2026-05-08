@@ -52,6 +52,34 @@ export const recallOrderedTitles: Tool<RecallOrderedTitlesParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      source: {
+        type: "string",
+        description:
+          "'preview_field' (preferred backend path) or 'live_aggregate' (fallback aggregation across each lead's contacts).",
+      },
+      titles: {
+        type: "array",
+        description:
+          "Titles previously enriched. preview_field path: [{title}]. live_aggregate path: [{title, leads_with_enriched, total_enriched_contacts, leads_still_having_unenriched}].",
+        items: { type: "object" },
+      },
+      available_in_selection: {
+        type: "array",
+        description:
+          "Backend-suggested title candidates available for ordering (preview_field path only).",
+        items: { type: "object" },
+      },
+      note: {
+        type: "string",
+        description:
+          "Operator note explaining the chosen path (e.g., empty input set, fallback in use).",
+      },
+    },
+    required: ["source", "titles"],
+  },
   execute: async (
     client: LeadbayClient,
     params: RecallOrderedTitlesParams,

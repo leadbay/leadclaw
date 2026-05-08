@@ -1205,6 +1205,39 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
     // enforced in execute() so we can produce specific error codes.
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      leads: {
+        type: "array",
+        description:
+          "Imported leads. Domains mode: [{domain, leadId, name}]. Records mode: [{rowId, domain?, leadId, name}].",
+        items: { type: "object" },
+      },
+      not_imported: {
+        type: "array",
+        description:
+          "Inputs that did NOT yield a leadId. Each entry has a `reason` ('malformed', 'NO_MATCH', 'TIMEOUT', etc.) plus the input echo.",
+        items: { type: "object" },
+      },
+      importIds: {
+        type: "array",
+        description: "Backend file-import handles (one per chunk of ≤100 rows).",
+        items: { type: "string" },
+      },
+      region: { type: "string" },
+      cancelled: {
+        type: "boolean",
+        description: "True when ctx.signal aborted the call mid-flight.",
+      },
+      dry_run: {
+        type: "boolean",
+        description: "True when dry_run:true was passed (preprocess only, no CRM commit).",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["leads", "not_imported", "importIds", "region", "_meta"],
+  },
   execute: async (
     client: LeadbayClient,
     params: ImportLeadsParams,

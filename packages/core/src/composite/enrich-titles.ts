@@ -76,6 +76,100 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    description:
+      "Branchy return shape; the `mode` (or `status`) field tells the agent which branch it got. Modes: 'discover' (no titles passed), 'preview_only' (no enrichable contacts), 'dry_run', 'already_launched' (idempotent reuse), 'launched_tracker_pending' (rare, soft-fail), 'launched' (happy path). Status: 'quota_exceeded' (429).",
+    properties: {
+      mode: {
+        type: "string",
+        description: "'discover' | 'preview_only' | 'dry_run' | 'already_launched' | 'launched_tracker_pending' | 'launched'.",
+      },
+      status: {
+        type: "string",
+        description: "'quota_exceeded' on 429. Otherwise mode is set instead.",
+      },
+      available_titles: {
+        type: "array",
+        description: "Titles available across the selection (discover/preview_only modes).",
+        items: { type: "string" },
+      },
+      recommendations: {
+        type: "array",
+        description: "Backend's title_suggestions (discover mode).",
+        items: { type: "string" },
+      },
+      auto_included: {
+        type: "array",
+        description: "Backend's auto_included_titles (discover mode).",
+        items: { type: "string" },
+      },
+      previously_enriched: {
+        type: "array",
+        description: "Titles previously enriched on this selection (discover mode).",
+        items: { type: "string" },
+      },
+      enrichable_contacts: {
+        type: "number",
+        description: "Count of enrichable contacts at preview time.",
+      },
+      selected_lead_count: {
+        type: "number",
+        description: "How many leads the selection covers.",
+      },
+      preview: {
+        type: "object",
+        description: "Backend BulkEnrichPreview payload (preview_only/dry_run/launched modes).",
+      },
+      launched: {
+        type: "boolean",
+        description: "True when an enrichment job is in flight on the backend.",
+      },
+      would_launch: {
+        type: "object",
+        description: "What dry_run WOULD have launched (titles, email, phone).",
+      },
+      re_used: {
+        type: "boolean",
+        description: "True when an identical bulk was launched within the idempotency window (already_launched mode).",
+      },
+      bulk_id: {
+        type: "string",
+        description: "UUIDv4 to poll via leadbay_bulk_enrich_status.",
+      },
+      launched_at: {
+        type: "string",
+        description: "ISO timestamp of the (re-used or fresh) launch.",
+      },
+      durability: {
+        type: "string",
+        description: "'file' (persisted bulks.json) or 'memory'.",
+      },
+      seconds_since_original_launch: {
+        type: "number",
+        description: "Age of the re-used bulk record (already_launched mode).",
+      },
+      titles: {
+        type: "array",
+        description: "Titles ordered (echoed at launch).",
+        items: { type: "string" },
+      },
+      email: { type: "boolean" },
+      phone: { type: "boolean" },
+      message: {
+        type: "string",
+        description: "Operator-facing summary of what happened.",
+      },
+      next_action: {
+        type: "string",
+        description: "Concrete next-step instruction for the agent.",
+      },
+      retry_after_seconds: {
+        type: ["number", "null"],
+        description: "Seconds until quota resets (quota_exceeded status).",
+      },
+    },
+  },
   execute: async (
     client: LeadbayClient,
     params: EnrichTitlesParams,

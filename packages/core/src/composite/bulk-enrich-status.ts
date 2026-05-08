@@ -66,6 +66,55 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
     required: ["bulk_id"],
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    properties: {
+      bulk_id: { type: "string", description: "Echoed UUIDv4 handle." },
+      launched_at: { type: "string", description: "ISO timestamp of /enrichment/launch ack." },
+      status: {
+        type: "string",
+        description: "'launched' on success. Errors return error envelopes (handled separately).",
+      },
+      durability: {
+        type: "string",
+        description: "'persistent' (file-backed bulks.json) or 'memory' (LEADBAY_BULK_STORE_ALLOW_MEMORY).",
+      },
+      titles: {
+        type: "array",
+        description: "Titles ordered at launch time (echoed from the original enrich_titles call).",
+        items: { type: "string" },
+      },
+      email: { type: "boolean", description: "True if email enrichment was requested." },
+      phone: { type: "boolean", description: "True if phone enrichment was requested." },
+      lens_id: { type: "number", description: "Lens id used to scope the enrichment." },
+      leads: {
+        type: "array",
+        description:
+          "Per-lead rollup: {lead_id, enrichment_progress:{done,total}, contacts? (when include_contacts=true)}.",
+        items: { type: "object" },
+      },
+      overall_progress: {
+        type: "object",
+        description: "Aggregate progress across all leads.",
+        properties: {
+          done: { type: "number" },
+          total: { type: "number" },
+          done_ratio: { type: "number" },
+        },
+      },
+      all_done: {
+        type: "boolean",
+        description: "True when overall_progress.done === total AND no partial_failures.",
+      },
+      partial_failures: {
+        type: "array",
+        description:
+          "Per-lead errors observed during contacts fan-out (omitted when no failures).",
+        items: { type: "object" },
+      },
+    },
+    required: ["bulk_id", "status", "leads", "overall_progress", "all_done"],
+  },
   execute: async (
     client: LeadbayClient,
     params: BulkEnrichStatusParams,

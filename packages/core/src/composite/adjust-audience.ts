@@ -205,6 +205,35 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    description:
+      "Two return shapes: 'ambiguous_sectors' when free-text sectors matched multiple candidates (agent re-calls with sector_ids), 'applied' on success.",
+    properties: {
+      status: {
+        type: "string",
+        description: "'ambiguous_sectors' or 'applied'.",
+      },
+      sector_ambiguities: {
+        type: "array",
+        description:
+          "Per ambiguous text: {sector_text, matches:[{id, name, score}]}. Agent picks an id and re-calls.",
+        items: { type: "object" },
+      },
+      message: { type: "string" },
+      lens_used: {
+        type: "object",
+        description:
+          "Resolved lens metadata: {id, name, was_draft, was_new, save_for_org}.",
+      },
+      filter_applied: {
+        type: "object",
+        description: "The merged FilterPayload that was POSTed to the lens.",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["status"],
+  },
   execute: async (
     client: LeadbayClient,
     params: AdjustAudienceParams,

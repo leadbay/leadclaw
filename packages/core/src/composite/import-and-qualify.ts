@@ -448,6 +448,104 @@ export const importAndQualify: Tool<
     },
     additionalProperties: false,
   },
+  outputSchema: {
+    type: "object",
+    description:
+      "Two return shapes: kind:'preview' (when dry_run='preview') with mapping hints; kind:'result' (default) with imported + qualified leads + qualify_id handle.",
+    properties: {
+      kind: {
+        type: "string",
+        description: "'result' (full flow) or 'preview' (dry_run='preview' mapping diagnostics).",
+      },
+      // preview-shape keys
+      mapping_hints: {
+        type: "array",
+        description: "Per-column AI-confidence suggestions (preview shape).",
+        items: { type: "object" },
+      },
+      custom_field_candidates: {
+        type: "array",
+        description: "Org custom fields that match unmapped columns (preview shape).",
+        items: { type: "object" },
+      },
+      sample_rows: {
+        type: "array",
+        description: "First few rows of the preprocessed sample (preview shape).",
+        items: { type: "object" },
+      },
+      notes: {
+        type: "array",
+        description: "Operator notes (e.g., catalog fetch errors).",
+        items: { type: "string" },
+      },
+      import_id: {
+        type: "string",
+        description: "Backend file-import handle (preview shape).",
+      },
+      // result-shape keys
+      dry_run: { type: "boolean", description: "True when dry_run:true was passed." },
+      chosen_budgets: {
+        type: "object",
+        description: "Adaptive budgets the composite selected (when caller didn't override): {per_lead_budget_ms, total_budget_ms, per_phase_budget_ms, wall_clock_estimate_ms, strategy}.",
+      },
+      qualify_id: {
+        type: ["string", "null"],
+        description: "UUIDv4 handle for polling via leadbay_qualify_status. Null when no leads were qualified.",
+      },
+      import_ids: {
+        type: "array",
+        description: "Backend file-import handles (one per chunk).",
+        items: { type: "string" },
+      },
+      imported: {
+        type: "array",
+        description: "Leads that landed in CRM. Each: {leadId, domain?, name, rowId?}.",
+        items: { type: "object" },
+      },
+      not_imported: {
+        type: "array",
+        description: "Inputs that didn't land. Each has a `reason` plus the input echo.",
+        items: { type: "object" },
+      },
+      qualified: {
+        type: "array",
+        description: "Leads whose qualification settled within budgets.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description: "Leads still being qualified at deadline; agent calls leadbay_qualify_status with qualify_id.",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description: "Per-lead errors observed during qualification.",
+        items: { type: "object" },
+      },
+      quota_exceeded: { type: "boolean" },
+      skipped_already_qualified: {
+        type: "array",
+        description: "Lead ids skipped because ai_agent_lead_score was already non-null (skip_already_qualified=true).",
+        items: { type: "string" },
+      },
+      not_in_lens: {
+        type: "array",
+        description: "Lead ids that aren't members of the active lens — backend won't qualify them.",
+        items: { type: "string" },
+      },
+      reused: {
+        type: "boolean",
+        description: "True when an identical qualify_id was launched within the idempotency window.",
+      },
+      seconds_since_original: { type: "number" },
+      cancelled: { type: "boolean", description: "True when ctx.signal aborted mid-flight." },
+      budget_exhausted: { type: "boolean", description: "True when total_budget_ms hit before all leads finished." },
+      quota_blocked: { type: "boolean", description: "True when quota was exhausted before launching all leads." },
+      region: { type: "string" },
+      _meta: { type: "object" },
+    },
+    required: ["kind", "region", "_meta"],
+  },
   execute: async (
     client: LeadbayClient,
     params: ImportAndQualifyParams,
