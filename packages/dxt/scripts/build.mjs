@@ -78,7 +78,14 @@ async function main() {
   }
 
   // 4. Zip.
+  // iter-27: Anthropic renamed DXT → MCPB (Model Context Protocol Bundle)
+  // for Claude Desktop. The bundle content is identical (same manifest + same
+  // zip layout); only the filename / extension changed. Emit both for one
+  // cycle so upgrade-path is gentle: clients still scanning for *.dxt keep
+  // working; new clients matching *.mcpb pick up the bundle. The .dxt
+  // filename can be retired in 0.7.0 once downstream clients adopt MCPB.
   const dxtPath = join(DIST_DIR, `leadbay-${version}.dxt`);
+  const mcpbPath = join(DIST_DIR, `leadbay-${version}.mcpb`);
   await new Promise((resolve, reject) => {
     const out = createWriteStream(dxtPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
@@ -90,9 +97,15 @@ async function main() {
     archive.finalize();
   });
 
+  // Copy verbatim — same content under the new extension. Faster + simpler
+  // than re-zipping; identical bytes guarantees both filenames extract to
+  // the same staging tree.
+  copyFileSync(dxtPath, mcpbPath);
+
   const { statSync } = await import("node:fs");
   const bytes = statSync(dxtPath).size;
   console.log(`\n✓ built ${dxtPath} (${(bytes / 1024).toFixed(1)} KB)`);
+  console.log(`✓ built ${mcpbPath} (identical content; new MCPB filename for Claude Desktop)`);
 }
 
 main().catch((err) => {
