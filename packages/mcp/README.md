@@ -140,6 +140,202 @@ Leadbay connection OK.
 
 > *Prepare an outreach package for Acme Corp — include the recommended contact with enriched email if we have credits.*
 
+## 3a. Spec primitives in action
+
+> If you're building or auditing an MCP integration, this section shows what each spec primitive looks like on the wire when calling `@leadbay/mcp`. Every example is the actual JSON-RPC frame your client sends or receives — copy verbatim into a debugger.
+
+### `tools/list` — annotations + outputSchema
+
+Every tool advertises read/write/idempotent/openWorld posture and (for the top declarers) a typed return schema.
+
+Request:
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }
+```
+
+Response (excerpt):
+
+```json
+{
+  "tools": [
+    {
+      "name": "leadbay_account_status",
+      "description": "Show the user's account state — admin rights, language, last-active lens, current quota …",
+      "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "annotations": {
+        "title": "Show Leadbay account + quota state",
+        "readOnlyHint": true, "destructiveHint": false,
+        "idempotentHint": true, "openWorldHint": true
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "object", "properties": { "email": {}, "name": {}, "admin": {}, "manager": {}, "language": {} } },
+          "organization": { "type": "object", "properties": { "id": {}, "name": {}, "ai_agent_enabled": {}, "computing_intelligence": {}, "plan": {} } },
+          "last_requested_lens": {},
+          "quota": {},
+          "_meta": { "type": "object", "properties": { "region": {} } }
+        },
+        "required": ["user", "organization"]
+      }
+    }
+  ]
+}
+```
+
+Capable clients use the annotations to decide auto-approve vs prompt; the `outputSchema` lets them dispatch on shape rather than re-parse the text.
+
+### `tools/call` with `structuredContent`
+
+When the tool declares `outputSchema`, the response carries a typed `structuredContent` block alongside `text` content:
+
+Request:
+
+```json
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+  "params": { "name": "leadbay_account_status", "arguments": {} } }
+```
+
+Response:
+
+```json
+{
+  "content": [
+    { "type": "text", "text": "{\"user\":{...},\"organization\":{...}, ...}" }
+  ],
+  "structuredContent": {
+    "user":  { "email": "you@example.com", "name": "You", "admin": true, "manager": false, "language": "en" },
+    "organization": { "id": "org-1", "name": "Your Co", "ai_agent_enabled": true, "computing_intelligence": false, "plan": "PRO" },
+    "last_requested_lens": 42,
+    "quota": { "plan": "PRO", "windows": [...] },
+    "_meta": { "region": "us" }
+  }
+}
+```
+
+### `prompts/list` and `prompts/get` — slash commands
+
+Request:
+
+```json
+{ "jsonrpc": "2.0", "id": 3, "method": "prompts/list" }
+```
+
+Response (excerpt):
+
+```json
+{
+  "prompts": [
+    { "name": "daily-check-in", "description": "Pull fresh leads, surface auto-qualified top, deepen 1-3 promising ones.", "arguments": [] },
+    { "name": "research-a-domain", "description": "Import a domain → resolve to leadId → research_lead.",
+      "arguments": [{ "name": "domain", "description": "Company domain (e.g., acme.com)", "required": true }] },
+    { "name": "log-outreach", "description": "Gather verification → report_outreach.",
+      "arguments": [{ "name": "lead_id", "required": true }, { "name": "what", "required": true }] }
+  ]
+}
+```
+
+Then `prompts/get` materialises the chosen workflow as a structured `messages` array the agent unfurls:
+
+```json
+{ "jsonrpc": "2.0", "id": 4, "method": "prompts/get",
+  "params": { "name": "research-a-domain", "arguments": { "domain": "acme.com" } } }
+```
+
+### `resources/list` and `resources/read` — URI-addressable read-only data
+
+Three URI schemes are advertised: `lead://{uuid}/profile`, `lens://{id}/definition`, `org://taste-profile`. Capable clients cache them across turns.
+
+Request:
+
+```json
+{ "jsonrpc": "2.0", "id": 5, "method": "resources/templates/list" }
+```
+
+Response (excerpt):
+
+```json
+{
+  "resourceTemplates": [
+    { "uriTemplate": "lead://{uuid}/profile", "name": "Lead profile", "description": "Lead profile by Leadbay UUID — basics + qualifications + contacts.", "mimeType": "application/json" },
+    { "uriTemplate": "lens://{id}/definition", "name": "Lens definition", "description": "Filter + scoring config for a lens.", "mimeType": "application/json" }
+  ]
+}
+```
+
+Read a specific lead:
+
+```json
+{ "jsonrpc": "2.0", "id": 6, "method": "resources/read",
+  "params": { "uri": "lead://0xabcd-…/profile" } }
+```
+
+Response wraps the JSON in a `text` content block with the URI's mime type so clients can render or cache it.
+
+### `notifications/progress` — streaming during long ops
+
+When the agent calls a long-running tool with a `progressToken` in `_meta`, the server streams progress notifications back. Long-runners that emit: `bulk_qualify_leads`, `import_and_qualify`, `enrich_titles`, `bulk_enrich_status`, `qualify_status`.
+
+Request:
+
+```json
+{ "jsonrpc": "2.0", "id": 7, "method": "tools/call",
+  "params": {
+    "name": "leadbay_bulk_qualify_leads",
+    "arguments": { "leadIds": ["lead-1", "lead-2", "lead-3"] },
+    "_meta": { "progressToken": "bq-1" }
+  } }
+```
+
+While the call runs, notifications arrive:
+
+```json
+{ "jsonrpc": "2.0", "method": "notifications/progress",
+  "params": { "progressToken": "bq-1", "progress": 1, "total": 3, "message": "Qualified Acme Corp (1/3)" } }
+{ "jsonrpc": "2.0", "method": "notifications/progress",
+  "params": { "progressToken": "bq-1", "progress": 2, "total": 3, "message": "Qualified Globex (2/3)" } }
+{ "jsonrpc": "2.0", "method": "notifications/progress",
+  "params": { "progressToken": "bq-1", "progress": 3, "total": 3, "message": "Qualified Initech (3/3)" } }
+```
+
+Then the final `tools/call` response.
+
+### `notifications/cancelled` — actually cancelling
+
+Send the cancellation by id; the server's `ToolContext.signal` aborts the polling loop within ≤2 seconds, the bulk-store entry is marked `cancelled`, and the next `bulk_enrich_status` returns `BULK_CANCELLED` so the agent stops polling.
+
+```json
+{ "jsonrpc": "2.0", "method": "notifications/cancelled",
+  "params": { "requestId": 7, "reason": "user clicked cancel" } }
+```
+
+### `elicitation/create` — server asks the user
+
+Used by `refine_prompt` (clarification flow) and `report_outreach` (anti-poisoning user-confirmation). The server sends an `elicitation/create` request to the client; the client renders a form; the user types; the response feeds back into the tool call. The agent never sees the prompt.
+
+Server emits (mid-`tools/call`):
+
+```json
+{ "jsonrpc": "2.0", "id": 99, "method": "elicitation/create",
+  "params": {
+    "message": "An AI agent wants to log outreach on lead-1: 'Called Acme'. The agent claims you confirmed this. Type your literal confirmation to proceed; cancel to reject.",
+    "requestedSchema": {
+      "type": "object",
+      "properties": { "confirmation": { "type": "string", "title": "Your confirmation" } },
+      "required": ["confirmation"]
+    }
+  } }
+```
+
+Client returns:
+
+```json
+{ "jsonrpc": "2.0", "id": 99, "result": { "action": "accept", "content": { "confirmation": "yes I called Acme today" } } }
+```
+
+The user's literal text replaces `verification.ref` in the outreach record, and the response carries `confirmed_via: "elicit"` for the SDR audit trail.
+
 ## 4. Troubleshooting
 
 | Problem | Cause | Fix |
