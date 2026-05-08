@@ -202,6 +202,14 @@ export const qualifyStatus: Tool<
       );
     }
 
+    // Phase 1/3: pull the question order so qualifications come back in
+    // mission-importance order. Surface a tick so the agent can stream
+    // long-poll progress to the user (otherwise the spinner is mute).
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: "Loading qualification questions…",
+    });
     let questionOrder = undefined;
     try {
       const taste = await client.resolveTasteProfile();
@@ -210,11 +218,13 @@ export const qualifyStatus: Tool<
       // best-effort
     }
 
-    // Re-check lens membership at status time — a lead may have been added
-    // to the lens since the original import, so a previously not_in_lens
-    // lead could now be qualifiable. Best-effort; failures fall back to
-    // empty not_in_lens (caller still gets the qualified/still_running
-    // partition correctly).
+    // Phase 2/3: re-check lens membership (a lead may have been added to
+    // the lens since the original import). Best-effort.
+    ctx?.progress?.({
+      progress: 2,
+      total: 3,
+      message: `Checking lens membership for ${record.lead_ids.length} lead${record.lead_ids.length === 1 ? "" : "s"}…`,
+    });
     let notInLensSet = new Set<string>();
     try {
       const pre = await prequalifiedLeads(
@@ -228,6 +238,12 @@ export const qualifyStatus: Tool<
       // best-effort; absence of not_in_lens is the same as "all in lens"
     }
 
+    // Phase 3/3: refresh per-lead state (web_fetch + ai_agent_responses).
+    ctx?.progress?.({
+      progress: 3,
+      total: 3,
+      message: `Refreshing qualification state for ${record.lead_ids.length} lead${record.lead_ids.length === 1 ? "" : "s"}…`,
+    });
     const fresh = await refreshLeadStates(client, record.lead_ids, questionOrder);
     const failed: Array<{ lead_id: string; error: string }> = [];
     const qualified: QualifyResult[] = [];

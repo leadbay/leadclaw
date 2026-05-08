@@ -222,6 +222,12 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       retry_after?: number;
     };
 
+    // Per-lead progress emit so the agent can stream "fetched 3/10 leads"
+    // back to the user during a status poll over many leads. Counter is
+    // incremented inside the worker — JS single-threadedness makes the
+    // increment+emit safe even under STATUS_FETCH_CONCURRENCY=5.
+    let doneSoFar = 0;
+    const totalLeads = record.lead_ids.length;
     const results = await pMap<string, Ok | Fail>(
       record.lead_ids,
       async (leadId) => {
@@ -231,6 +237,12 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
           const enrichable = contacts.filter((c) => c && c.enrichment);
           const done = enrichable.filter((c) => c.enrichment?.done === true).length;
           const total = enrichable.length;
+          doneSoFar += 1;
+          ctx?.progress?.({
+            progress: doneSoFar,
+            total: totalLeads,
+            message: `Fetched contacts for ${leadId} (${doneSoFar}/${totalLeads})`,
+          });
           return {
             kind: "ok",
             lead_id: leadId,
@@ -239,6 +251,12 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
             contacts: includeContacts ? contacts : undefined,
           };
         } catch (err: any) {
+          doneSoFar += 1;
+          ctx?.progress?.({
+            progress: doneSoFar,
+            total: totalLeads,
+            message: `Fetch failed for ${leadId} (${doneSoFar}/${totalLeads}): ${err?.code ?? "UNKNOWN"}`,
+          });
           return {
             kind: "fail",
             lead_id: leadId,

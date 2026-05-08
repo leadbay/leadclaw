@@ -214,6 +214,13 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
       };
     }
 
+    // Phase 1/3: selection lock + select. Surface a tick so the agent can
+    // tell the user the long op is in motion (otherwise the spinner is mute).
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: `Selecting ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"}…`,
+    });
     // Acquire selection lock — global state per token, must serialise.
     await client.acquireSelectionLock();
     try {
@@ -223,6 +230,12 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
       await client.requestVoid("POST", `/leads/selection/select?${qs}`);
 
       try {
+        // Phase 2/3: preview the enrichment (title discovery + counts).
+        ctx?.progress?.({
+          progress: 2,
+          total: 3,
+          message: "Previewing enrichment (titles + counts)…",
+        });
         // Get titles available across this selection.
         const availableTitles = await client.request<string[]>(
           "GET",
@@ -354,6 +367,12 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
           }
         }
 
+        // Phase 3/3: launch the enrichment job on the backend.
+        ctx?.progress?.({
+          progress: 3,
+          total: 3,
+          message: `Launching enrichment for ${params.titles.length} title${params.titles.length === 1 ? "" : "s"}…`,
+        });
         try {
           await client.requestVoid(
             "POST",

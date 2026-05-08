@@ -86,6 +86,81 @@ describe("notifications/progress (P2 progress streaming)", () => {
     expect(received[3].message).toBe("All done");
   });
 
+  it("enrich_titles emits 3 phase progress ticks (iter-20)", async () => {
+    // Mock the selection lifecycle. Branch B (titles given, dry_run skips
+    // launch) so we exercise phase 1 (select) + phase 2 (preview) + phase 3
+    // (launch).
+    const { mockHttp } = await import("./harness.js");
+    mockHttp([
+      // resolveDefaultLens → /me
+      {
+        method: "GET",
+        path: "/1.5/users/me",
+        status: 200,
+        body: {
+          id: "u",
+          organization: { id: "org-1", name: "X" },
+          last_requested_lens: 42,
+        },
+      },
+      // selection select
+      {
+        method: "POST",
+        path: /\/1\.5\/leads\/selection\/select/,
+        status: 200,
+        body: {},
+      },
+      // job_titles
+      {
+        method: "GET",
+        path: "/1.5/leads/selection/enrichment/job_titles",
+        status: 200,
+        body: ["CTO", "CEO"],
+      },
+      // preview (with titles)
+      {
+        method: "POST",
+        path: "/1.5/leads/selection/enrichment/preview",
+        status: 200,
+        body: { enrichable_contacts: 0, title_suggestions: [], auto_included_titles: [] },
+      },
+      // selection clear
+      { method: "POST", path: "/1.5/leads/selection/clear", status: 200, body: {} },
+    ]);
+
+    const lbClient = new LeadbayClient(BASE, "u.test-token");
+    const server = buildServer(lbClient, { includeWrite: true });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const mcpClient = new Client({ name: "test", version: "0.0.1" }, {});
+    await Promise.all([
+      server.connect(serverTransport),
+      mcpClient.connect(clientTransport),
+    ]);
+
+    const received: any[] = [];
+    mcpClient.setNotificationHandler(ProgressNotificationSchema, async (n) => {
+      received.push(n.params);
+    });
+
+    await mcpClient.callTool(
+      {
+        name: "leadbay_enrich_titles",
+        arguments: { titles: ["CTO"], leadIds: ["lead-1"] },
+        _meta: { progressToken: "et-1" },
+      },
+      undefined,
+      { resetTimeoutOnProgress: true }
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    // Expect ≥2 phase ticks (phase 1 + 2; preview_only short-circuits before phase 3).
+    expect(received.length).toBeGreaterThanOrEqual(2);
+    expect(received[0].progressToken).toBe("et-1");
+    expect(received[0].total).toBe(3);
+    expect(received[0].message).toMatch(/select/i);
+    expect(received[1].message).toMatch(/preview/i);
+  });
+
   it("a composite emits NO progress when the client did not request it", async () => {
     const tool: Tool = {
       name: "leadbay_test_silent_progress_tool",
