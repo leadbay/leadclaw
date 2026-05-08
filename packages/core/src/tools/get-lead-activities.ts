@@ -9,6 +9,13 @@ interface GetLeadActivitiesParams {
 
 export const getLeadActivities: Tool<GetLeadActivitiesParams> = {
   name: "leadbay_get_lead_activities",
+  annotations: {
+    title: "Read a lead's activity feed",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get prospecting activity history for a lead (emails sent, calls made, status changes, notes). " +
     "When to use: to avoid redundant outreach and understand where this lead is in the sales process. " +
@@ -26,6 +33,28 @@ export const getLeadActivities: Tool<GetLeadActivitiesParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      activities: {
+        type: "array",
+        description: "Activity entries. Each: {type, date}. Older activities trimmed by `count`.",
+        items: {
+          type: "object",
+          properties: {
+            type: { type: "string" },
+            date: { type: "string" },
+          },
+        },
+      },
+      total: {
+        type: "number",
+        description: "Total activity count for this lead (across all pages).",
+      },
+    },
+    required: ["activities", "total"],
   },
   execute: async (client: LeadbayClient, params: GetLeadActivitiesParams) => {
     const count = Math.min(params.count ?? 50, 100);

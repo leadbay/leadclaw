@@ -1,5 +1,17 @@
 # Changelog — @leadbay/mcp
 
+## 0.6.0 — UNRELEASED
+
+Massive spec-coverage upgrade. Each tool declares **annotations** (`readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`); 17 composites + 12 highest-leverage granulars declare typed `outputSchema` + emit `structuredContent`. New surfaces: `prompts/*` (5 canned slash-commands), `resources/*` (`lead://`, `lens://`, `org://taste-profile`), `notifications/progress` (per-lead streaming on every long-running composite), `notifications/cancelled` → `ToolContext.signal` (bulk-store entries marked `cancelled` so subsequent status polls return `BULK_CANCELLED`), `elicitation/create` (refine_prompt clarification + report_outreach user_confirmed anti-poisoning).
+
+**Hardening**: every `inputSchema` declares `additionalProperties: false`. Runtime conformance test pins `structuredContent` against `outputSchema` for every declarer (drift-catcher). Static-scan audit of every error-hint string asserts each names a recovery action. `report_outreach.verification` rejects extra keys at runtime (closes the SDK's nested-additionalProperties limitation). `score_0_to_10` deprecated alias of `boost_score` removed in 0.7.0.
+
+**Token economy**: pagination payloads carry `has_more` + `next_page`. `research_lead` truncates large payloads with a `truncation_hint`. Per-tool opt-in `response_format: "json" | "markdown"` lets chat-rendering agents pick the cheaper render (research_lead first; pattern reusable). `LEADBAY_DEBUG=1` enables a per-tools/call observability line on stderr.
+
+**DXT → MCPB**: bundle now publishes both `leadbay-X.Y.Z.dxt` (legacy) and `leadbay-X.Y.Z.mcpb` (new Claude Desktop format) for one cycle. Manifest `dxt_version` field stays for backwards-compat with current installers; field rename will follow Anthropic's spec when finalised. The two filenames have identical content; downstream installers can match either glob.
+
+**Versioning + docs**: 0.4.0 / 0.6.0 bumps; README §3a "Spec primitives in action" adds wire-level JSON-RPC transcripts for every primitive; MIGRATION.md 0.5 → 0.6 walkthrough.
+
 ## 0.5.0 — 2026-05-04
 
 ### `leadbay_import_and_qualify` — new composite

@@ -49,6 +49,13 @@ export const qualifyStatus: Tool<
   QualifyStatusResult
 > = {
   name: "leadbay_qualify_status",
+  annotations: {
+    title: "Poll import-and-qualify status",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Retrieve the current state of an import_and_qualify launch by `qualify_id`. Returns the same `qualified[]` " +
     "/ `still_running[]` shape as the original composite, refreshed against the backend at call time. The handle " +
@@ -68,6 +75,72 @@ export const qualifyStatus: Tool<
       },
     },
     required: ["qualify_id"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      qualify_id: { type: "string", description: "Echoed UUIDv4 handle." },
+      launched_at: { type: "string", description: "ISO timestamp of original launch." },
+      status: { type: "string", description: "'launched' on success (other states surface as error envelopes)." },
+      import_ids: {
+        type: "array",
+        description: "Underlying file-import handle ids (one per chunk).",
+        items: { type: "string" },
+      },
+      lens_id: { type: "number", description: "Lens id the qualification ran against." },
+      lead_ids: {
+        type: "array",
+        description: "Lead UUIDs covered by this qualify_id (echoed from launch).",
+        items: { type: "string" },
+      },
+      qualified: {
+        type: "array",
+        description:
+          "Leads whose qualification has settled. Each entry: {lead_id, qualification_summary, signals_count, ...}.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description: "Leads still being qualified at refresh time.",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description:
+          "Per-lead errors observed at refresh (e.g., 404 on /web_fetch + /ai_agent_responses).",
+        items: { type: "object" },
+      },
+      not_in_lens: {
+        type: "array",
+        description:
+          "Lead ids that exist in the org but aren't members of the active lens — backend won't qualify them; agent should stop polling.",
+        items: { type: "string" },
+      },
+      per_lead_budget_ms: {
+        type: "number",
+        description: "Caller-supplied per-lead timeout (informational only at status time).",
+      },
+      total_budget_ms: {
+        type: "number",
+        description: "Caller-supplied total timeout (informational only at status time).",
+      },
+      region: { type: "string" },
+      _meta: { type: "object" },
+    },
+    required: [
+      "qualify_id",
+      "status",
+      "import_ids",
+      "lens_id",
+      "lead_ids",
+      "qualified",
+      "still_running",
+      "failed",
+      "not_in_lens",
+      "region",
+      "_meta",
+    ],
   },
   execute: async (
     client: LeadbayClient,
@@ -129,6 +202,23 @@ export const qualifyStatus: Tool<
       );
     }
 
+    if (record.status === "cancelled") {
+      throw client.makeError(
+        "BULK_CANCELLED",
+        "The qualify run was cancelled (ctx.signal aborted by the client mid-flight); no further qualifications are in flight",
+        "Call leadbay_import_and_qualify again with the same input to relaunch — the cancelled record won't block a fresh launch.",
+        ""
+      );
+    }
+
+    // Phase 1/3: pull the question order so qualifications come back in
+    // mission-importance order. Surface a tick so the agent can stream
+    // long-poll progress to the user (otherwise the spinner is mute).
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: "Loading qualification questions…",
+    });
     let questionOrder = undefined;
     try {
       const taste = await client.resolveTasteProfile();
@@ -137,11 +227,13 @@ export const qualifyStatus: Tool<
       // best-effort
     }
 
-    // Re-check lens membership at status time — a lead may have been added
-    // to the lens since the original import, so a previously not_in_lens
-    // lead could now be qualifiable. Best-effort; failures fall back to
-    // empty not_in_lens (caller still gets the qualified/still_running
-    // partition correctly).
+    // Phase 2/3: re-check lens membership (a lead may have been added to
+    // the lens since the original import). Best-effort.
+    ctx?.progress?.({
+      progress: 2,
+      total: 3,
+      message: `Checking lens membership for ${record.lead_ids.length} lead${record.lead_ids.length === 1 ? "" : "s"}…`,
+    });
     let notInLensSet = new Set<string>();
     try {
       const pre = await prequalifiedLeads(
@@ -155,6 +247,12 @@ export const qualifyStatus: Tool<
       // best-effort; absence of not_in_lens is the same as "all in lens"
     }
 
+    // Phase 3/3: refresh per-lead state (web_fetch + ai_agent_responses).
+    ctx?.progress?.({
+      progress: 3,
+      total: 3,
+      message: `Refreshing qualification state for ${record.lead_ids.length} lead${record.lead_ids.length === 1 ? "" : "s"}…`,
+    });
     const fresh = await refreshLeadStates(client, record.lead_ids, questionOrder);
     const failed: Array<{ lead_id: string; error: string }> = [];
     const qualified: QualifyResult[] = [];

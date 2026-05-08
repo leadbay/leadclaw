@@ -9,6 +9,13 @@ interface UpdateLensFilterParams {
 
 export const updateLensFilter: Tool<UpdateLensFilterParams> = {
   name: "leadbay_update_lens_filter",
+  annotations: {
+    title: "Update lens filter",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Replace the audience filter (sectors, sizes, locations) on a lens. Body is the full Filter object — " +
     "this is a REPLACE, not a merge. Returns 400 'default_lens' if applied to the org default lens (clone it first). " +
@@ -32,6 +39,7 @@ export const updateLensFilter: Tool<UpdateLensFilterParams> = {
       },
     },
     required: ["lensId", "filter"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

@@ -37,6 +37,13 @@ function formatNoteWithVerification(
 
 export const reportOutreach: Tool<ReportOutreachParams> = {
   name: "leadbay_report_outreach",
+  annotations: {
+    title: "Report outreach to Leadbay",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Log an outreach action (email, call, message, meeting) on a lead so the human team using Leadbay sees the " +
     "progress in their UI. Writes a NOTE on the lead and (optionally) sets an EPILOGUE status (still chasing, " +
@@ -78,6 +85,11 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
           ref: { type: "string" },
         },
         required: ["source", "ref"],
+        // Security-load-bearing: the verification field prevents the agent from
+        // poisoning the SDR pipeline with hallucinated outreach. Extra keys here
+        // would create an injection vector (e.g., agent passes
+        // verification.bypass="true"). Hard-rejected per second-opinion #3.
+        additionalProperties: false,
       },
       dry_run: {
         type: "boolean",
@@ -85,6 +97,69 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
       },
     },
     required: ["note", "verification"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Either the dry_run shape (dry_run:true with would_write_notes / would_set_epilogue) OR the live result (notes:{succeeded,failed} + epilogue:{status,applied,error?} + verification + _meta). Schema declares both shapes; the dry_run discriminator picks which sub-shape applies.",
+    properties: {
+      // dry_run discriminator + dry_run subshape (from before iter 13)
+      dry_run: { type: "boolean" },
+      would_write_notes: {
+        type: "array",
+        description: "On dry_run: the per-lead POST shapes that WOULD be issued.",
+        items: { type: "object" },
+      },
+      would_set_epilogue: {
+        type: ["object", "null"],
+        description: "On dry_run: the epilogue POST shape that WOULD be issued.",
+      },
+      // Live subshape — what execute() actually returns when dry_run is false.
+      notes: {
+        type: "object",
+        description: "Per-lead note-write outcome (split into succeeded / failed sub-arrays).",
+        properties: {
+          succeeded: {
+            type: "array",
+            items: { type: "object" },
+          },
+          failed: {
+            type: "array",
+            items: { type: "object" },
+          },
+        },
+      },
+      epilogue: {
+        type: "object",
+        description:
+          "Epilogue status outcome: status (the wire-format string written to /leads/epilogue, or null when not requested), applied (true/false), error (when applied=false).",
+        properties: {
+          status: { type: ["string", "null"] },
+          applied: { type: "boolean" },
+          error: { type: "string" },
+        },
+      },
+      verification: {
+        type: "object",
+        description:
+          "Effective verification used (after elicit override). Useful for the client UI to render \"logged with proof X\". When source=user_confirmed AND ctx.elicit was available, ref is the user's literal text typed into the client; otherwise it's the agent-supplied ref.",
+        properties: {
+          source: { type: "string" },
+          ref: { type: "string" },
+        },
+      },
+      confirmed_via: {
+        type: "string",
+        description:
+          "Audit trail of how verification was obtained: 'elicit' (user typed into client UI — anti-poisoning), 'agent_supplied' (legacy path; user_confirmed source with no elicit), 'non_user_confirmed' (gmail_message_id or calendar_event_id — agent can't fabricate these).",
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region.",
+        properties: { region: { type: "string" } },
+      },
+    },
   },
   execute: async (
     client: LeadbayClient,
@@ -101,6 +176,23 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
           "Provide verification.source as one of: gmail_message_id (the Gmail message id from sending), calendar_event_id (the event id from booking), or user_confirmed (set verification.ref to the user's literal confirmation in chat).",
       };
     }
+    // Hard-reject extra keys on verification (security-load-bearing). The
+    // MCP SDK does NOT enforce additionalProperties:false on nested input
+    // schemas, so we validate at runtime per second-opinion #3 (iter 12).
+    // Closes the injection vector "agent passes verification.bypass=true".
+    const verificationKeys = Object.keys(params.verification);
+    const extraKeys = verificationKeys.filter(
+      (k) => k !== "source" && k !== "ref"
+    );
+    if (extraKeys.length > 0) {
+      return {
+        error: true,
+        code: "VERIFICATION_EXTRA_KEYS",
+        message: `verification accepts only {source, ref}; rejected extra key(s): ${extraKeys.join(", ")}`,
+        hint:
+          "Drop the extra key(s). Verification is security-sensitive — extra fields are not silently accepted.",
+      };
+    }
     if (!VALID_SOURCES.has(params.verification.source)) {
       return {
         error: true,
@@ -115,11 +207,98 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
         error: true,
         code: "BAD_INPUT",
         message: "Provide lead_id (single) or lead_ids (bulk)",
-        hint: "lead_id for one lead; lead_ids: [uuid, ...] for many",
+        hint: "Set lead_id to one UUID for a single-lead call, or pass lead_ids: [uuid, ...] for a bulk call. Use leadbay_pull_leads to discover candidate IDs.",
       };
     }
 
-    const noteBody = formatNoteWithVerification(params.note, params.verification);
+    // iter-22: server-elicits-user-confirmation flow. When the agent passes
+    // verification.source="user_confirmed" AND the client supports
+    // elicitation, ask the user directly through the client UI rather than
+    // trusting the agent-supplied ref. The agent never sees the elicit
+    // prompt; the user types into the client; the response replaces
+    // verification.ref. This closes the pipeline-poisoning vector where an
+    // agent supplies its own "ref" prose and claims the user said it.
+    //
+    // Backwards-compat: legacy clients (no ctx.elicit) keep the existing
+    // agent-supplied flow but the response carries confirmed_via:
+    // "agent_supplied" so the SDR audit trail is honest.
+    let confirmedVia: "elicit" | "agent_supplied" | "non_user_confirmed" =
+      params.verification.source === "user_confirmed"
+        ? "agent_supplied"
+        : "non_user_confirmed";
+
+    let effectiveVerification: Verification = params.verification;
+
+    if (
+      !params.dry_run &&
+      params.verification.source === "user_confirmed" &&
+      typeof ctx?.elicit === "function"
+    ) {
+      try {
+        const targetIds = params.lead_ids ?? [params.lead_id!];
+        const leadCount = targetIds.length;
+        const elicitMsg =
+          leadCount === 1
+            ? `An AI agent wants to log outreach on lead ${targetIds[0]}: "${params.note}". The agent claims you confirmed this. Type your literal confirmation to proceed; cancel to reject.`
+            : `An AI agent wants to log outreach on ${leadCount} leads: "${params.note}". The agent claims you confirmed this. Type your literal confirmation to proceed; cancel to reject.`;
+        const result = await ctx.elicit({
+          message: elicitMsg,
+          requestedSchema: {
+            type: "object",
+            properties: {
+              confirmation: {
+                type: "string",
+                title: "Your confirmation",
+                description:
+                  "Type a few words confirming the outreach actually happened. This text becomes the audit-trail entry.",
+              },
+            },
+            required: ["confirmation"],
+          },
+        });
+        if (result.action === "accept") {
+          const userText = String(
+            (result.content as any)?.confirmation ?? ""
+          ).trim();
+          if (userText.length > 0) {
+            effectiveVerification = {
+              source: "user_confirmed",
+              ref: userText,
+            };
+            confirmedVia = "elicit";
+          } else {
+            // Empty/whitespace confirmation == decline.
+            return {
+              error: true,
+              code: "OUTREACH_USER_CANCELLED",
+              message:
+                "User confirmation was empty; outreach not logged.",
+              hint:
+                "Re-call leadbay_report_outreach after the user types a non-empty confirmation, or use a gmail_message_id / calendar_event_id source instead.",
+            };
+          }
+        } else {
+          // action === "decline" || "cancel"
+          return {
+            error: true,
+            code: "OUTREACH_USER_CANCELLED",
+            message: `User ${result.action === "decline" ? "declined" : "cancelled"} the outreach confirmation; nothing was logged.`,
+            hint:
+              "Re-call leadbay_report_outreach with verification.source set to gmail_message_id or calendar_event_id when the user is unwilling to type a confirmation.",
+          };
+        }
+      } catch (err: any) {
+        // Client capability mismatch / transport drop / SDK unsupported —
+        // fall through to agent-supplied flow with the existing ref. The
+        // confirmedVia tag preserves audit honesty.
+        ctx?.logger?.warn?.(
+          `report_outreach: ctx.elicit failed (${err?.code ?? err?.message ?? err}) — falling back to agent-supplied verification`
+        );
+        // confirmedVia stays "agent_supplied".
+      }
+    }
+
+    const noteBody = formatNoteWithVerification(params.note, effectiveVerification);
 
     let epilogueWire: string | null = null;
     if (params.epilogue_status) {
@@ -206,7 +385,17 @@ export const reportOutreach: Tool<ReportOutreachParams> = {
         status: epilogueWire,
         ...epilogueResult,
       },
-      verification: params.verification,
+      verification: effectiveVerification,
+      // iter-22: audit-trail field. Tells the SDR team which path was taken
+      // for this call:
+      //   "elicit" = the user typed the confirmation directly via the
+      //              client UI (anti-poisoning shape).
+      //   "agent_supplied" = source was user_confirmed but ctx.elicit was
+      //              unavailable / failed; agent's ref was accepted.
+      //   "non_user_confirmed" = source was gmail_message_id or
+      //              calendar_event_id (agent doesn't get to fabricate
+      //              these — they're external ids).
+      confirmed_via: confirmedVia,
       _meta: { region: client.region },
     };
   },

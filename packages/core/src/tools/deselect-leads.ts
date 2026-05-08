@@ -10,6 +10,13 @@ interface DeselectLeadsParams {
 
 export const deselectLeads: Tool<DeselectLeadsParams> = {
   name: "leadbay_deselect_leads",
+  annotations: {
+    title: "Deselect leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Remove leads from the user's transient selection. " +
     "When to use: when narrowing a previously-built selection without clearing it entirely. " +
@@ -27,6 +34,7 @@ export const deselectLeads: Tool<DeselectLeadsParams> = {
       },
     },
     required: ["leadIds"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: DeselectLeadsParams) => {
     const qs = params.leadIds

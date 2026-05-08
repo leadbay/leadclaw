@@ -7,6 +7,13 @@ interface PreviewBulkEnrichmentParams {
 
 export const previewBulkEnrichment: Tool<PreviewBulkEnrichmentParams> = {
   name: "leadbay_preview_bulk_enrichment",
+  annotations: {
+    title: "Preview bulk enrichment cost",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Preview a bulk-enrichment cost given a set of job titles applied to the current selection. Returns " +
     "{selected_leads, enriched_contacts, enrichable_contacts, title_suggestions, auto_included_titles, previously_enriched_titles}. " +
@@ -26,6 +33,7 @@ export const previewBulkEnrichment: Tool<PreviewBulkEnrichmentParams> = {
       },
     },
     required: ["titles"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

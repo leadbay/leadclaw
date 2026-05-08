@@ -53,6 +53,13 @@ function summarise(responses: AiAgentResponse[]): QualificationSummary {
 
 export const pullLeads: Tool<PullLeadsParams> = {
   name: "leadbay_pull_leads",
+  annotations: {
+    title: "Pull fresh Leadbay leads",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Pull up new leads from the user's last-active lens — the canonical 'show me today's prospects' tool. " +
     "Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how " +
@@ -82,6 +89,57 @@ export const pullLeads: Tool<PullLeadsParams> = {
           "If true, include the full set of lead-summary fields. Default false: returns the trimmed agent-friendly form.",
       },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      lens: {
+        type: "object",
+        description: "Lens metadata (id of the lens that was queried).",
+        properties: { id: { type: "number" } },
+      },
+      leads: {
+        type: "array",
+        description:
+          "The page of leads. In default mode (verbose:false) each lead is the trimmed agent-friendly shape; in verbose:true the full LeadPayload.",
+        items: { type: "object" },
+      },
+      pagination: {
+        type: "object",
+        description: "page (0-indexed), pages (total), total (item count).",
+        properties: {
+          page: { type: "number" },
+          pages: { type: "number" },
+          total: { type: "number" },
+        },
+      },
+      has_more: {
+        type: "boolean",
+        description: "True if at least one more page exists. Spec-aligned pagination metadata.",
+      },
+      next_page: {
+        type: ["number", "null"],
+        description: "0-indexed next page number, or null on the last page.",
+      },
+      computing_wishlist: {
+        type: "boolean",
+        description: "True if Leadbay is still rebuilding this lens's wishlist.",
+      },
+      computing_scores: {
+        type: "boolean",
+        description: "True if scoring is still running.",
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region + last-call latency.",
+        properties: {
+          region: { type: "string" },
+          latency_ms: { type: ["number", "null"] },
+        },
+      },
+    },
+    required: ["lens", "leads", "pagination"],
   },
   execute: async (
     client: LeadbayClient,
@@ -154,6 +212,13 @@ export const pullLeads: Tool<PullLeadsParams> = {
             prospecting_actions_count: lead.prospecting_actions_count ?? 0,
           };
 
+    // Spec-aligned pagination metadata (P3 from the eval doc): the agent
+    // shouldn't have to compute `page < pages - 1` themselves.
+    const totalPages = res.pagination?.pages ?? 0;
+    const currentPage = res.pagination?.page ?? page;
+    const hasMore = currentPage < totalPages - 1;
+    const nextPage = hasMore ? currentPage + 1 : null;
+
     return {
       lens: { id: lensId },
       leads: res.items.map((lead) => ({
@@ -161,6 +226,8 @@ export const pullLeads: Tool<PullLeadsParams> = {
         qualification_summary: summaryMap.get(lead.id) ?? null,
       })),
       pagination: res.pagination,
+      has_more: hasMore,
+      next_page: nextPage,
       computing_wishlist: res.computing_wishlist,
       computing_scores: res.computing_scores,
       _meta: {

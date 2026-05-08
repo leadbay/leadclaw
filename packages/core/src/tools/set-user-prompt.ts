@@ -8,6 +8,13 @@ interface SetUserPromptParams {
 
 export const setUserPrompt: Tool<SetUserPromptParams> = {
   name: "leadbay_set_user_prompt",
+  annotations: {
+    title: "Set the user prompt",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Set the org's intelligence-refinement prompt — free-text instruction that steers Leadbay's lead " +
     "recommendations beyond firmographics. Admin-only. Setting this clears any pending clarification and " +
@@ -27,6 +34,7 @@ export const setUserPrompt: Tool<SetUserPromptParams> = {
       },
     },
     required: ["prompt"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetUserPromptParams) => {
     const orgId = await client.resolveOrgId();

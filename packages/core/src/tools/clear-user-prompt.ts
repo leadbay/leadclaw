@@ -3,6 +3,13 @@ import type { Tool } from "../types.js";
 
 export const clearUserPrompt: Tool<Record<string, never>> = {
   name: "leadbay_clear_user_prompt",
+  annotations: {
+    title: "Clear the user prompt",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Remove the org's intelligence-refinement prompt (revert to AI-only generation). Admin-only. " +
     "Triggers full intelligence regeneration. " +
@@ -10,7 +17,7 @@ export const clearUserPrompt: Tool<Record<string, never>> = {
     "When NOT to use: to replace with a different prompt — just call leadbay_refine_prompt; that overwrites.",
   optional: true,
   write: true,
-  inputSchema: { type: "object", properties: {} },
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
   execute: async (client: LeadbayClient) => {
     const orgId = await client.resolveOrgId();
     await client.requestVoid("DELETE", `/organizations/${orgId}/user_prompt`);

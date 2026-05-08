@@ -31,6 +31,7 @@ export const findProspects: Tool<FindProspectsParams> = {
         description: "Number of prospects to return, max 50 (default: 20)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

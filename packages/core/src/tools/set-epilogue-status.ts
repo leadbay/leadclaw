@@ -23,6 +23,13 @@ interface SetEpilogueStatusParams {
 
 export const setEpilogueStatus: Tool<SetEpilogueStatusParams> = {
   name: "leadbay_set_epilogue_status",
+  annotations: {
+    title: "Set lead epilogue status",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Bulk-set the outreach progress (epilogue) status across a set of leads. Status values: STILL_CHASING, " +
     "COULD_NOT_REACH_STILL_TRYING, INTEREST_VALIDATED_OR_MEETING_PLANED ('meeting booked'), NOT_INTERESTED_LOST " +
@@ -47,6 +54,7 @@ export const setEpilogueStatus: Tool<SetEpilogueStatusParams> = {
       },
     },
     required: ["lead_ids", "status"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetEpilogueStatusParams) => {
     const wire = EPILOGUE_LABEL_MAP[params.status];

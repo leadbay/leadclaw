@@ -20,6 +20,18 @@ const DEFAULT_CANDIDATE_COUNT = 25;
 
 export const enrichTitles: Tool<EnrichTitlesParams> = {
   name: "leadbay_enrich_titles",
+  annotations: {
+    title: "Enrich contact titles across leads",
+    readOnlyHint: false,
+    // Mode A (no titles): non-destructive preview returning candidates.
+    // Mode B (with titles): launches enrichment job. Net classification is
+    // destructive because the dominant flow mutates state.
+    destructiveHint: true,
+    // Idempotent against the same selection + titles set (same hash → same
+    // bulk_id; backend silently no-ops on already-enriched contacts).
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Order contact enrichments by job title across many leads. Contacts are NOT returned by default with a lead " +
     "(Leadbay keeps enrichment out-of-band to control cost); the agent requests them on demand via this tool when " +
@@ -60,6 +72,101 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
       dry_run: {
         type: "boolean",
         description: "If true, don't launch — only preview.",
+      },
+    },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Branchy return shape; the `mode` (or `status`) field tells the agent which branch it got. Modes: 'discover' (no titles passed), 'preview_only' (no enrichable contacts), 'dry_run', 'already_launched' (idempotent reuse), 'launched_tracker_pending' (rare, soft-fail), 'launched' (happy path). Status: 'quota_exceeded' (429).",
+    properties: {
+      mode: {
+        type: "string",
+        description: "'discover' | 'preview_only' | 'dry_run' | 'already_launched' | 'launched_tracker_pending' | 'launched'.",
+      },
+      status: {
+        type: "string",
+        description: "'quota_exceeded' on 429. Otherwise mode is set instead.",
+      },
+      available_titles: {
+        type: "array",
+        description: "Titles available across the selection (discover/preview_only modes).",
+        items: { type: "string" },
+      },
+      recommendations: {
+        type: "array",
+        description: "Backend's title_suggestions (discover mode).",
+        items: { type: "string" },
+      },
+      auto_included: {
+        type: "array",
+        description: "Backend's auto_included_titles (discover mode).",
+        items: { type: "string" },
+      },
+      previously_enriched: {
+        type: "array",
+        description: "Titles previously enriched on this selection (discover mode).",
+        items: { type: "string" },
+      },
+      enrichable_contacts: {
+        type: "number",
+        description: "Count of enrichable contacts at preview time.",
+      },
+      selected_lead_count: {
+        type: "number",
+        description: "How many leads the selection covers.",
+      },
+      preview: {
+        type: "object",
+        description: "Backend BulkEnrichPreview payload (preview_only/dry_run/launched modes).",
+      },
+      launched: {
+        type: "boolean",
+        description: "True when an enrichment job is in flight on the backend.",
+      },
+      would_launch: {
+        type: "object",
+        description: "What dry_run WOULD have launched (titles, email, phone).",
+      },
+      re_used: {
+        type: "boolean",
+        description: "True when an identical bulk was launched within the idempotency window (already_launched mode).",
+      },
+      bulk_id: {
+        type: "string",
+        description: "UUIDv4 to poll via leadbay_bulk_enrich_status.",
+      },
+      launched_at: {
+        type: "string",
+        description: "ISO timestamp of the (re-used or fresh) launch.",
+      },
+      durability: {
+        type: "string",
+        description: "'file' (persisted bulks.json) or 'memory'.",
+      },
+      seconds_since_original_launch: {
+        type: "number",
+        description: "Age of the re-used bulk record (already_launched mode).",
+      },
+      titles: {
+        type: "array",
+        description: "Titles ordered (echoed at launch).",
+        items: { type: "string" },
+      },
+      email: { type: "boolean" },
+      phone: { type: "boolean" },
+      message: {
+        type: "string",
+        description: "Operator-facing summary of what happened.",
+      },
+      next_action: {
+        type: "string",
+        description: "Concrete next-step instruction for the agent.",
+      },
+      retry_after_seconds: {
+        type: ["number", "null"],
+        description: "Seconds until quota resets (quota_exceeded status).",
       },
     },
   },
@@ -107,6 +214,13 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
       };
     }
 
+    // Phase 1/3: selection lock + select. Surface a tick so the agent can
+    // tell the user the long op is in motion (otherwise the spinner is mute).
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: `Selecting ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"}…`,
+    });
     // Acquire selection lock — global state per token, must serialise.
     await client.acquireSelectionLock();
     try {
@@ -116,6 +230,12 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
       await client.requestVoid("POST", `/leads/selection/select?${qs}`);
 
       try {
+        // Phase 2/3: preview the enrichment (title discovery + counts).
+        ctx?.progress?.({
+          progress: 2,
+          total: 3,
+          message: "Previewing enrichment (titles + counts)…",
+        });
         // Get titles available across this selection.
         const availableTitles = await client.request<string[]>(
           "GET",
@@ -247,6 +367,12 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
           }
         }
 
+        // Phase 3/3: launch the enrichment job on the backend.
+        ctx?.progress?.({
+          progress: 3,
+          total: 3,
+          message: `Launching enrichment for ${params.titles.length} title${params.titles.length === 1 ? "" : "s"}…`,
+        });
         try {
           await client.requestVoid(
             "POST",
@@ -254,12 +380,23 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
             { titles: params.titles, email, phone }
           );
         } catch (err: any) {
+          // iter-21: ctx.signal abort during launch → mark the pending
+          // record cancelled so subsequent bulk_enrich_status returns
+          // BULK_CANCELLED instead of "still launched". AbortError surfaces
+          // as either err.name === "AbortError" or signal.aborted at catch
+          // time; both are handled.
+          const aborted =
+            err?.name === "AbortError" || ctx?.signal?.aborted === true;
           if (bulkRecord && tracker) {
             try {
-              await tracker.markFailed(bulkRecord.bulk_id);
+              if (aborted) {
+                await tracker.markCancelled(bulkRecord.bulk_id);
+              } else {
+                await tracker.markFailed(bulkRecord.bulk_id);
+              }
             } catch (e: any) {
               ctx?.logger?.warn?.(
-                `enrich_titles: tracker.markFailed failed: ${e?.message ?? e}`
+                `enrich_titles: tracker.${aborted ? "markCancelled" : "markFailed"} failed: ${e?.message ?? e}`
               );
             }
           }

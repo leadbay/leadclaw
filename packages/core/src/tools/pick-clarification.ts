@@ -8,6 +8,13 @@ interface PickClarificationParams {
 
 export const pickClarification: Tool<PickClarificationParams> = {
   name: "leadbay_pick_clarification",
+  annotations: {
+    title: "Pick a clarification answer",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Answer the pending clarification question — either by picking one of the offered options (option_id) " +
     "or by typing a free-text answer. The answer is stored as the new user_prompt and triggers regeneration. " +
@@ -22,6 +29,17 @@ export const pickClarification: Tool<PickClarificationParams> = {
       option_id: { type: "string", description: "Id of one of the clarification's options" },
       text_answer: { type: "string", description: "Free-text answer (overrides option_id if both are set)" },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      answered: {
+        type: "boolean",
+        description: "True when the answer was recorded; intelligence regeneration begins.",
+      },
+    },
+    required: ["answered"],
   },
   execute: async (
     client: LeadbayClient,

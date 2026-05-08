@@ -9,6 +9,13 @@ interface CreateLensParams {
 
 export const createLens: Tool<CreateLensParams> = {
   name: "leadbay_create_lens",
+  annotations: {
+    title: "Create a new lens",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Create a new user-level lens by cloning an existing lens's filter/scoring as the starting point. " +
     "When to use: when adjust_audience determined the current lens cannot be edited (e.g. it's the org default). " +
@@ -23,6 +30,21 @@ export const createLens: Tool<CreateLensParams> = {
       description: { type: "string" },
     },
     required: ["base", "name"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Full LensPayload as returned by the backend. Permissive shape — backend may add fields over time.",
+    properties: {
+      id: { type: "number", description: "New lens id." },
+      name: { type: "string" },
+      description: { type: ["string", "null"] },
+      is_default: { type: "boolean" },
+      is_last_active: { type: "boolean" },
+      user_id: { type: ["string", "number", "null"] },
+    },
+    required: ["id", "name"],
   },
   execute: async (client: LeadbayClient, params: CreateLensParams) => {
     const lens = await client.request<LensPayload>("POST", "/lenses", {

@@ -13,6 +13,16 @@ const DEFAULT_POLL_GAP_MS = 5_000;
 
 export const refinePrompt: Tool<RefinePromptParams> = {
   name: "leadbay_refine_prompt",
+  annotations: {
+    title: "Refine the audience prompt",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Sets the org's user_prompt and may trigger a clarification flow. Each
+    // call replaces the prior prompt — a second call with a different
+    // instruction is NOT idempotent (the second prompt wins).
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Refine the kind of leads Leadbay surfaces, beyond firmographics. Free-text instruction (e.g. 'focus on " +
     "hospitals running their own IT'). Sets the org's user_prompt; if the new prompt produces ambiguous criteria, " +
@@ -38,6 +48,44 @@ export const refinePrompt: Tool<RefinePromptParams> = {
       },
     },
     required: ["prompt"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Multiple return shapes by status. dry_run, applied (with optional clarified_via_elicit), or clarification_pending.",
+    properties: {
+      dry_run: { type: "boolean", description: "True when dry_run:true was passed (no state change)." },
+      would_call: {
+        type: "object",
+        description: "Dry-run preview of the POST that would have been issued.",
+      },
+      status: {
+        type: "string",
+        description: "'applied' (prompt set; intelligence regenerating) or 'clarification_pending' (telephone path).",
+      },
+      computing_intelligence: {
+        type: "boolean",
+        description: "True when intelligence is regenerating after the prompt set.",
+      },
+      clarified_via_elicit: {
+        type: "boolean",
+        description: "True when the clarification was answered via the client's elicitation UI (not via telephone).",
+      },
+      message: {
+        type: "string",
+        description: "Operator-facing summary.",
+      },
+      clarification: {
+        type: "object",
+        description: "ClarificationPayload returned by the backend (clarification_pending path).",
+      },
+      next_action: {
+        type: "string",
+        description: "Concrete next-step instruction for the agent.",
+      },
+      _meta: { type: "object" },
+    },
   },
   execute: async (
     client: LeadbayClient,
@@ -113,6 +161,89 @@ export const refinePrompt: Tool<RefinePromptParams> = {
     }
 
     if (clarification) {
+      // Iter 14 (per second-opinion #2): if the client supports
+      // elicitation, ask the user the clarification directly via
+      // elicitation/create — the spec's "no telephone" pattern. The
+      // server pulls the answer and POSTs to /pick_clarification, then
+      // returns "applied" without bouncing through the agent.
+      if (ctx?.elicit) {
+        const opts = clarification.options ?? [];
+        const requestedSchema =
+          opts.length > 0
+            ? {
+                type: "object",
+                properties: {
+                  option_id: {
+                    type: "string",
+                    title: "Pick one",
+                    description: "Choose the option that best matches your intent.",
+                    enum: opts
+                      .filter((o) => o.id)
+                      .map((o) => o.id as string),
+                    enumNames: opts
+                      .filter((o) => o.id)
+                      .map((o) => o.label),
+                  },
+                },
+                required: ["option_id"],
+              }
+            : {
+                type: "object",
+                properties: {
+                  text_answer: {
+                    type: "string",
+                    title: "Answer",
+                    description:
+                      "Free-text answer to the clarification. Plain English.",
+                  },
+                },
+                required: ["text_answer"],
+              };
+        try {
+          const elicited = await ctx.elicit({
+            message: clarification.question,
+            requestedSchema,
+          });
+          if (elicited.action === "accept" && elicited.content) {
+            const body =
+              typeof elicited.content.option_id === "string"
+                ? { option_id: elicited.content.option_id }
+                : typeof elicited.content.text_answer === "string"
+                ? { text_answer: elicited.content.text_answer }
+                : null;
+            if (body) {
+              try {
+                await client.requestVoid(
+                  "POST",
+                  `/organizations/${orgId}/pick_clarification`,
+                  body
+                );
+                client.invalidateMe();
+                return {
+                  status: "applied",
+                  clarified_via_elicit: true,
+                  computing_intelligence: true,
+                  message:
+                    "Prompt set + clarification answered via the client's elicitation UI. Leadbay is regenerating intelligence.",
+                  _meta: { region: client.region },
+                };
+              } catch (err: any) {
+                ctx?.logger?.warn?.(
+                  `refine_prompt: pick_clarification POST failed after elicit: ${err?.message ?? err?.code ?? err}`
+                );
+                // Fall through to telephone path; let the agent retry via
+                // answer_clarification.
+              }
+            }
+          }
+          // action=decline or cancel: surface to the agent so it can
+          // ask the user another way (or abandon).
+        } catch (err: any) {
+          ctx?.logger?.warn?.(
+            `refine_prompt: elicit failed: ${err?.message ?? err?.code ?? err} — falling back to telephone path`
+          );
+        }
+      }
       return {
         status: "clarification_pending",
         clarification,

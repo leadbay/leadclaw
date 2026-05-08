@@ -19,6 +19,13 @@ interface LaunchBulkEnrichmentParams {
 
 export const launchBulkEnrichment: Tool<LaunchBulkEnrichmentParams> = {
   name: "leadbay_launch_bulk_enrichment",
+  annotations: {
+    title: "Launch bulk enrichment",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Launch a bulk-enrichment job against the current selection. The backend requires email=true OR phone=true " +
     "(both can be true). Returns 204 with no body — there is no bulk_id and no per-job status endpoint. " +
@@ -40,6 +47,7 @@ export const launchBulkEnrichment: Tool<LaunchBulkEnrichmentParams> = {
       },
     },
     required: ["titles"],
+    additionalProperties: false,
   },
   execute: async (
     client: LeadbayClient,

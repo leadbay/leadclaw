@@ -21,6 +21,13 @@ interface TitleStat {
 
 export const recallOrderedTitles: Tool<RecallOrderedTitlesParams> = {
   name: "leadbay_recall_ordered_titles",
+  annotations: {
+    title: "Recall titles previously enriched",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Show job titles the org has previously enriched, so the agent can repeat the same titles for new leads " +
     "(or skip already-saturated ones). Two implementation paths: (1) PREFERRED: a selection-scoped " +
@@ -43,6 +50,35 @@ export const recallOrderedTitles: Tool<RecallOrderedTitlesParams> = {
           "Override the auto-resolved last-active lens when omitting leadIds (escape hatch)",
       },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      source: {
+        type: "string",
+        description:
+          "'preview_field' (preferred backend path) or 'live_aggregate' (fallback aggregation across each lead's contacts).",
+      },
+      titles: {
+        type: "array",
+        description:
+          "Titles previously enriched. preview_field path: [{title}]. live_aggregate path: [{title, leads_with_enriched, total_enriched_contacts, leads_still_having_unenriched}].",
+        items: { type: "object" },
+      },
+      available_in_selection: {
+        type: "array",
+        description:
+          "Backend-suggested title candidates available for ordering (preview_field path only).",
+        items: { type: "object" },
+      },
+      note: {
+        type: "string",
+        description:
+          "Operator note explaining the chosen path (e.g., empty input set, fallback in use).",
+      },
+    },
+    required: ["source", "titles"],
   },
   execute: async (
     client: LeadbayClient,

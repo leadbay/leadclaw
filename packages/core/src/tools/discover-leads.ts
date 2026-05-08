@@ -10,6 +10,13 @@ interface DiscoverLeadsParams {
 
 export const discoverLeads: Tool<DiscoverLeadsParams> = {
   name: "leadbay_discover_leads",
+  annotations: {
+    title: "Discover leads in a lens",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get AI-recommended leads from Leadbay. Returns paginated lead summaries with scores, AI summaries, tags, and recommended contacts. " +
     "When to use: low-level when you need raw paginated wishlist access without the qualification_summary attached by leadbay_pull_leads. " +
@@ -30,6 +37,7 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
         description: "Results per page, max 50 (default: 20)",
       },
     },
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: DiscoverLeadsParams) => {
     const lensId = params.lensId ?? (await client.resolveDefaultLens());
@@ -40,6 +48,11 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
       "GET",
       `/lenses/${lensId}/leads/wishlist?count=${count}&page=${page}&contacts=true`
     );
+
+    const totalPages = res.pagination?.pages ?? 0;
+    const currentPage = res.pagination?.page ?? page;
+    const hasMore = currentPage < totalPages - 1;
+    const nextPage = hasMore ? currentPage + 1 : null;
 
     return {
       leads: res.items.map((lead) => ({
@@ -61,6 +74,8 @@ export const discoverLeads: Tool<DiscoverLeadsParams> = {
         recommended_contact: lead.recommended_contact ?? null,
       })),
       pagination: res.pagination,
+      has_more: hasMore,
+      next_page: nextPage,
     };
   },
 };

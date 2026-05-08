@@ -145,6 +145,17 @@ function mergeFilter(
 
 export const adjustAudience: Tool<AdjustAudienceParams> = {
   name: "leadbay_adjust_audience",
+  annotations: {
+    title: "Adjust lens audience filters",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Each call MERGES new criteria into the lens config; calling twice
+    // with the same args produces the same final state (last write wins on
+    // overlapping criteria, but the merge is deterministic). Per spec
+    // idempotentHint is about same observable outcome — re-call is safe.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against " +
     "the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. " +
@@ -192,6 +203,36 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           "Name to use when this composite has to clone the default lens (otherwise auto-named)",
       },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Two return shapes: 'ambiguous_sectors' when free-text sectors matched multiple candidates (agent re-calls with sector_ids), 'applied' on success.",
+    properties: {
+      status: {
+        type: "string",
+        description: "'ambiguous_sectors' or 'applied'.",
+      },
+      sector_ambiguities: {
+        type: "array",
+        description:
+          "Per ambiguous text: {sector_text, matches:[{id, name, score}]}. Agent picks an id and re-calls.",
+        items: { type: "object" },
+      },
+      message: { type: "string" },
+      lens_used: {
+        type: "object",
+        description:
+          "Resolved lens metadata: {id, name, was_draft, was_new, save_for_org}.",
+      },
+      filter_applied: {
+        type: "object",
+        description: "The merged FilterPayload that was POSTed to the lens.",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["status"],
   },
   execute: async (
     client: LeadbayClient,
@@ -326,7 +367,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
               error: true,
               code: "ORPHAN_DRAFT",
               message: `Draft ${targetLensId} created but filter update failed; draft cleanup also failed`,
-              hint: `Manually delete draft lens ${targetLensId} via the Leadbay UI`,
+              hint: `Use leadbay_promote_lens or leadbay_update_lens to recover, or open https://leadbay.app/lenses to manually delete draft lens ${targetLensId}.`,
               orphan_draft_id: targetLensId,
             };
           }

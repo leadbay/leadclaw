@@ -37,6 +37,15 @@ interface QualResult {
 
 export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
   name: "leadbay_bulk_qualify_leads",
+  annotations: {
+    title: "Bulk-qualify next N leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Same set of leads + same options ⇒ same backend job (idempotency
+    // hash); already-qualified leads are silent no-ops. Re-call is safe.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Pick the next N unqualified leads in the active lens and qualify them (run AI rescore + web fetch), polling " +
     "until the answers are populated or a budget is exhausted. Already-qualified leads (those with a non-null " +
@@ -74,6 +83,51 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
         description: `Total polling budget in ms (default ${DEFAULT_TOTAL_BUDGET_MS})`,
       },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      qualified: {
+        type: "array",
+        description:
+          "Leads whose qualification finished within budget. Each entry: lead_id, qualification_summary{answered,total,avg_qualification_boost}, signals_count.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description:
+          "Leads launched but whose qualification did not complete within budget. Re-poll via leadbay_qualify_status with the bulk_id (when present).",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description: "Leads whose web_fetch launch failed (per-lead error).",
+        items: { type: "object" },
+      },
+      quota_exceeded: {
+        type: "boolean",
+        description:
+          "True if 429 was hit mid-fanout. Already-launched leads keep polling; further launches stopped.",
+      },
+      exhausted: {
+        type: "boolean",
+        description: "True if the lens's wishlist had no more unqualified leads to qualify.",
+      },
+      total_unqualified_found: { type: "number" },
+      message: { type: "string", description: "Human-readable summary; absent on the happy path." },
+      lens_id: {
+        type: "number",
+        description:
+          "The lens id the qualification ran against. Present on every successful return.",
+      },
+      _meta: {
+        type: "object",
+        description: "Operator context: region.",
+        properties: { region: { type: "string" } },
+      },
+    },
+    required: ["qualified", "still_running", "failed", "quota_exceeded"],
   },
   execute: async (
     client: LeadbayClient,
@@ -168,14 +222,51 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
       }
     }
 
+    // Per-lead progress counter for the spec notifications/progress stream.
+    // Composite-level: doneCount increments on each lead transition; emit on
+    // each transition so the agent's UI reflects "qualified Acme Corp 3/10".
+    let progressDone = 0;
+    const progressTotal = launched.length;
+    // Initial progress event (0/total) so the client knows the workload size.
+    if (progressTotal > 0) {
+      ctx?.progress?.({
+        progress: 0,
+        total: progressTotal,
+        message: `Starting qualification for ${progressTotal} lead${progressTotal === 1 ? "" : "s"}`,
+      });
+    }
+
+    // Signal-aware sleep helper. The polling loops below await a 5s gap
+    // between API hits; without observing ctx.signal the user's cancel is
+    // ignored until the natural budget exhaustion. With this helper, abort
+    // resolves immediately and the loop's next iteration sees aborted=true
+    // and breaks. (Per second-opinion #5 in iter 12.)
+    const sleepWithSignal = (ms: number) =>
+      new Promise<void>((resolve) => {
+        if (ctx?.signal?.aborted) {
+          resolve();
+          return;
+        }
+        const t = setTimeout(resolve, ms);
+        ctx?.signal?.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true }
+        );
+      });
+
     // Poll each launched lead in parallel until web_fetch.in_progress=false AND
-    // ai_agent_responses is populated, OR budget exhausted.
+    // ai_agent_responses is populated, OR budget exhausted, OR client cancelled.
     const results = await Promise.all(
       launched.map(async (leadId): Promise<QualResult & { _stillRunning: boolean }> => {
         const leadDeadline = Math.min(Date.now() + perLeadBudget, totalDeadline);
         let lastQual: AiAgentResponse[] | null = null;
         let lastWf: LeadWebFetchPayload | null = null;
         while (Date.now() < leadDeadline) {
+          if (ctx?.signal?.aborted) break;
           try {
             const [wfR, qualR] = await Promise.allSettled([
               client.request<LeadWebFetchPayload>(
@@ -195,11 +286,20 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
               Array.isArray(lastQual) &&
               lastQual.length > 0 &&
               lastQual.every((r) => r.score != null);
-            if (done) break;
+            if (done) {
+              progressDone += 1;
+              ctx?.progress?.({
+                progress: progressDone,
+                total: progressTotal,
+                message: `Qualified lead ${leadId} (${progressDone}/${progressTotal})`,
+              });
+              break;
+            }
           } catch {
             // ignore — try again on next tick
           }
-          await new Promise((r) => setTimeout(r, 5_000));
+          if (ctx?.signal?.aborted) break;
+          await sleepWithSignal(5_000);
         }
 
         const stillRunning =

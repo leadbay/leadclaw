@@ -288,6 +288,16 @@ export const importAndQualify: Tool<
   ImportAndQualifyResult | MappingPreviewResult
 > = {
   name: "leadbay_import_and_qualify",
+  annotations: {
+    title: "Import + qualify leads",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Composite of import (idempotent against domain hash) + qualify (which
+    // is silent no-op for already-qualified leads). bulk-store + import
+    // hashes return same handles on retry.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Composite: import a list of leads (CSV-shaped records OR a list of domains), then trigger Leadbay's AI " +
     "qualification (web research + per-question scoring) on every imported leadId, and return both the import " +
@@ -357,6 +367,10 @@ export const importAndQualify: Tool<
             },
           },
           required: ["domain"],
+          // Closed shape — extra keys silently no-op, so reject explicitly.
+          // Parallel surface to import_leads.domains[] (iter 13). Per second-
+          // opinion #2 finding #3.
+          additionalProperties: false,
         },
       },
       records: {
@@ -392,6 +406,10 @@ export const importAndQualify: Tool<
           statuses: { type: "object", description: "Optional status string mapping." },
           default_status: { type: ["string", "null"], description: "Optional default status." },
         },
+        // mappings has a closed shape (fields/custom_fields/statuses/default_status).
+        // Inner objects (fields, custom_fields, statuses) keep open shapes
+        // because their keys are user-defined CSV column names.
+        additionalProperties: false,
       },
       per_lead_budget_ms: {
         type: "number",
@@ -428,6 +446,105 @@ export const importAndQualify: Tool<
           "to force fresh re-qualification.",
       },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    description:
+      "Two return shapes: kind:'preview' (when dry_run='preview') with mapping hints; kind:'result' (default) with imported + qualified leads + qualify_id handle.",
+    properties: {
+      kind: {
+        type: "string",
+        description: "'result' (full flow) or 'preview' (dry_run='preview' mapping diagnostics).",
+      },
+      // preview-shape keys
+      mapping_hints: {
+        type: "array",
+        description: "Per-column AI-confidence suggestions (preview shape).",
+        items: { type: "object" },
+      },
+      custom_field_candidates: {
+        type: "array",
+        description: "Org custom fields that match unmapped columns (preview shape).",
+        items: { type: "object" },
+      },
+      sample_rows: {
+        type: "array",
+        description: "First few rows of the preprocessed sample (preview shape).",
+        items: { type: "object" },
+      },
+      notes: {
+        type: "array",
+        description: "Operator notes (e.g., catalog fetch errors).",
+        items: { type: "string" },
+      },
+      import_id: {
+        type: "string",
+        description: "Backend file-import handle (preview shape).",
+      },
+      // result-shape keys
+      dry_run: { type: "boolean", description: "True when dry_run:true was passed." },
+      chosen_budgets: {
+        type: "object",
+        description: "Adaptive budgets the composite selected (when caller didn't override): {per_lead_budget_ms, total_budget_ms, per_phase_budget_ms, wall_clock_estimate_ms, strategy}.",
+      },
+      qualify_id: {
+        type: ["string", "null"],
+        description: "UUIDv4 handle for polling via leadbay_qualify_status. Null when no leads were qualified.",
+      },
+      import_ids: {
+        type: "array",
+        description: "Backend file-import handles (one per chunk).",
+        items: { type: "string" },
+      },
+      imported: {
+        type: "array",
+        description: "Leads that landed in CRM. Each: {leadId, domain?, name, rowId?}.",
+        items: { type: "object" },
+      },
+      not_imported: {
+        type: "array",
+        description: "Inputs that didn't land. Each has a `reason` plus the input echo.",
+        items: { type: "object" },
+      },
+      qualified: {
+        type: "array",
+        description: "Leads whose qualification settled within budgets.",
+        items: { type: "object" },
+      },
+      still_running: {
+        type: "array",
+        description: "Leads still being qualified at deadline; agent calls leadbay_qualify_status with qualify_id.",
+        items: { type: "object" },
+      },
+      failed: {
+        type: "array",
+        description: "Per-lead errors observed during qualification.",
+        items: { type: "object" },
+      },
+      quota_exceeded: { type: "boolean" },
+      skipped_already_qualified: {
+        type: "array",
+        description: "Lead ids skipped because ai_agent_lead_score was already non-null (skip_already_qualified=true).",
+        items: { type: "string" },
+      },
+      not_in_lens: {
+        type: "array",
+        description: "Lead ids that aren't members of the active lens — backend won't qualify them.",
+        items: { type: "string" },
+      },
+      reused: {
+        type: "boolean",
+        description: "True when an identical qualify_id was launched within the idempotency window.",
+      },
+      seconds_since_original: { type: "number" },
+      cancelled: { type: "boolean", description: "True when ctx.signal aborted mid-flight." },
+      budget_exhausted: { type: "boolean", description: "True when total_budget_ms hit before all leads finished." },
+      quota_blocked: { type: "boolean", description: "True when quota was exhausted before launching all leads." },
+      region: { type: "string" },
+      _meta: { type: "object" },
+    },
+    required: ["kind", "region", "_meta"],
   },
   execute: async (
     client: LeadbayClient,
@@ -473,6 +590,14 @@ export const importAndQualify: Tool<
 
     // Phase 1 — IMPORT. Re-uses the existing composite end-to-end (chunking,
     // mapping preflight, custom-field validation, polling, AbortSignal).
+    // Per second-opinion #2 finding #2: progress emit lifted from runPreview
+    // (preview-only branch) to the live main path so users get the full
+    // 3-phase stream during real imports.
+    ctx?.progress?.({
+      progress: 1,
+      total: 3,
+      message: "Importing leads (phase 1/3 — preprocess + commit)",
+    });
     const importResult = await importLeads.execute(
       client,
       {
@@ -555,6 +680,11 @@ export const importAndQualify: Tool<
 
     // Phase 2 — register the qualify handle BEFORE launching web_fetch so the
     // bulk record exists on disk if the launch fans out and crashes.
+    ctx?.progress?.({
+      progress: 2,
+      total: 3,
+      message: "Import committed; preparing qualification (phase 2/3)",
+    });
     const lensId = params.lensId ?? (await client.resolveDefaultLens());
 
     // Source-of-truth for "leads to qualify": GET /imports/{id}/leads (added
@@ -657,6 +787,11 @@ export const importAndQualify: Tool<
     // ALSO uses it to detect not_in_lens leads — backend won't qualify those.
     // The separate `skipAlreadyQualifiedLaunch` flag controls whether
     // already-qualified leads bypass the web_fetch POST.
+    ctx?.progress?.({
+      progress: 3,
+      total: 3,
+      message: `Qualifying ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"} (phase 3/3)`,
+    });
     const fanOut = await fanOutWebFetchAndPoll(client, leadIds, {
       perLeadBudgetMs: perLeadBudget,
       totalDeadlineMs: totalDeadline,
@@ -666,6 +801,20 @@ export const importAndQualify: Tool<
       skipAlreadyQualifiedLaunch: skipAlreadyQualified,
       ...(questionOrder ? { questionOrder } : {}),
     });
+
+    // iter-21: when the qualify fan-out was cancelled (ctx.signal aborted),
+    // mark the bulk-store record cancelled so a subsequent qualify_status
+    // returns BULK_CANCELLED instead of "still launched". Best-effort —
+    // the operational cancel already happened; only the record needs the bit.
+    if (fanOut.cancelled) {
+      try {
+        await ctx.bulkTracker.markCancelled(reservation.record.bulk_id);
+      } catch (err: any) {
+        ctx?.logger?.warn?.(
+          `import_and_qualify: tracker.markCancelled failed: ${err?.message ?? err}`
+        );
+      }
+    }
 
     const qualified = fanOut.results
       .filter((r) => !r._stillRunning)
@@ -800,7 +949,16 @@ async function runPreview(
 
   // Poll preprocess. Honors ctx.signal so a caller-issued abort lands within
   // 2s instead of holding the call open for the full per_phase_budget.
+  // Streams a phase-1 progress event ("preprocessing") to capable clients.
   const signal = ctx?.signal;
+  // The composite has 3 phases the user can perceive: preprocess (this loop),
+  // commit, qualify. Two of those can be slow under queue load — emit at
+  // phase entry so the UI shows movement.
+  ctx?.progress?.({
+    progress: 1,
+    total: 3,
+    message: "Preprocessing import (phase 1/3)",
+  });
   const deadline = Date.now() + perPhaseBudget;
   let fileImport: FileImportPayloadV15 | null = null;
   while (Date.now() < deadline) {
@@ -813,6 +971,11 @@ async function runPreview(
     );
     if (r.pre_processing?.finished) {
       fileImport = r;
+      ctx?.progress?.({
+        progress: 2,
+        total: 3,
+        message: "Preprocess complete; committing import (phase 2/3)",
+      });
       break;
     }
     await new Promise<void>((res) => {

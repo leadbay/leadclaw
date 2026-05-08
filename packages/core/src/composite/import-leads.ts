@@ -1071,6 +1071,16 @@ function reconcileOneChunk(
 
 export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
   name: "leadbay_import_leads",
+  annotations: {
+    title: "Import leads from list/file",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Backend dedupes by domain/registry id; same input set ⇒ same lead set
+    // (no duplicate leads are created). bulk-store also keys on the
+    // input-hash → returns the same importId on retry.
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Import leads into Leadbay's CRM via the file-import wizard. Returns stable Leadbay leadIds for downstream chaining " +
     "into leadbay_bulk_qualify_leads / leadbay_research_lead.\n\n" +
@@ -1125,6 +1135,9 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
             },
           },
           required: ["domain"],
+          // Domain entries are a closed shape — agents passing extra keys
+          // (e.g., `leadId: "..."`) would silently no-op. Reject explicitly.
+          additionalProperties: false,
         },
       },
       records: {
@@ -1190,6 +1203,40 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
     },
     // Neither field is "required" at the schema level; xor + presence is
     // enforced in execute() so we can produce specific error codes.
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      leads: {
+        type: "array",
+        description:
+          "Imported leads. Domains mode: [{domain, leadId, name}]. Records mode: [{rowId, domain?, leadId, name}].",
+        items: { type: "object" },
+      },
+      not_imported: {
+        type: "array",
+        description:
+          "Inputs that did NOT yield a leadId. Each entry has a `reason` ('malformed', 'NO_MATCH', 'TIMEOUT', etc.) plus the input echo.",
+        items: { type: "object" },
+      },
+      importIds: {
+        type: "array",
+        description: "Backend file-import handles (one per chunk of ≤100 rows).",
+        items: { type: "string" },
+      },
+      region: { type: "string" },
+      cancelled: {
+        type: "boolean",
+        description: "True when ctx.signal aborted the call mid-flight.",
+      },
+      dry_run: {
+        type: "boolean",
+        description: "True when dry_run:true was passed (preprocess only, no CRM commit).",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["leads", "not_imported", "importIds", "region", "_meta"],
   },
   execute: async (
     client: LeadbayClient,

@@ -11,6 +11,13 @@ interface UpdateLensParams {
 
 export const updateLens: Tool<UpdateLensParams> = {
   name: "leadbay_update_lens",
+  annotations: {
+    title: "Update a lens",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Update lens metadata (name, description, mode flags). Does NOT change the audience filter — use " +
     "leadbay_update_lens_filter for that. " +
@@ -28,6 +35,7 @@ export const updateLens: Tool<UpdateLensParams> = {
       use_hq_only: { type: "boolean" },
     },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: UpdateLensParams) => {
     const { lensId, ...body } = params;

@@ -129,6 +129,13 @@ export const listMappableFields: Tool<
   ListMappableFieldsResult
 > = {
   name: "leadbay_list_mappable_fields",
+  annotations: {
+    title: "List CRM-import mappable fields",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "List every CRM field the agent can target when calling leadbay_import_leads or leadbay_import_and_qualify. " +
     "Returns two arrays: `standard_fields` (Leadbay's built-in StandardCrmFieldType enum — LEAD_NAME, LEAD_WEBSITE, " +
@@ -155,6 +162,48 @@ export const listMappableFields: Tool<
       },
     },
     additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      standard_fields: {
+        type: "array",
+        description:
+          "Built-in StandardCrmFieldType entries (LEAD_NAME, LEAD_WEBSITE, contact + location + sector). Each: {name, description, mapping_value}.",
+        items: { type: "object" },
+      },
+      custom_fields: {
+        type: "array",
+        description:
+          "Org-defined custom fields. Each: {id, name, type, description, mapping_value:'CUSTOM.<id>'}.",
+        items: { type: "object" },
+      },
+      mapping_hints: {
+        type: "array",
+        description:
+          "Per-column AI-confidence suggestions (only when for_records was passed). Each: {column, target, confidence, reason}.",
+        items: { type: "object" },
+      },
+      custom_field_candidates: {
+        type: "array",
+        description:
+          "Custom fields matching unmapped columns by exact / case-insensitive / fuzzy name (only when for_records was passed).",
+        items: { type: "object" },
+      },
+      sample_rows: {
+        type: "array",
+        description: "First few rows of the preprocessed sample (only when for_records was passed).",
+        items: { type: "object" },
+      },
+      notes: {
+        type: "array",
+        description: "Operator notes (e.g., preprocess timeout, sample-size truncation).",
+        items: { type: "string" },
+      },
+      region: { type: "string" },
+      _meta: { type: "object" },
+    },
+    required: ["standard_fields", "custom_fields", "region", "_meta"],
   },
   execute: async (
     client: LeadbayClient,

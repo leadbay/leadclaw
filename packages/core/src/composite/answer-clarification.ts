@@ -8,6 +8,16 @@ interface AnswerClarificationParams {
 
 export const answerClarification: Tool<AnswerClarificationParams> = {
   name: "leadbay_answer_clarification",
+  annotations: {
+    title: "Answer pending clarification",
+    readOnlyHint: false,
+    destructiveHint: true,
+    // Records a one-time answer that becomes the new user_prompt and
+    // triggers regeneration. Re-calling with a different answer wins;
+    // not idempotent.
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Answer the pending clarification question Leadbay raised after a refine_prompt. The answer is stored as " +
     "the new user_prompt and triggers regeneration. Pass option_id (preferred — pick from the offered options) " +
@@ -20,6 +30,27 @@ export const answerClarification: Tool<AnswerClarificationParams> = {
       option_id: { type: "string", description: "Id of one of the clarification's options" },
       text_answer: { type: "string", description: "Free-text answer (overrides option_id)" },
     },
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      status: {
+        type: "string",
+        description: "'answered' (recorded; intelligence regenerating) or 'no_pending_clarification' (nothing to answer).",
+      },
+      recorded_as_user_prompt: {
+        type: "boolean",
+        description: "True when the answer was stored as the org's new user_prompt.",
+      },
+      message: { type: "string" },
+      hint: {
+        type: "string",
+        description: "Operator-facing next-step (no_pending_clarification path).",
+      },
+      _meta: { type: "object" },
+    },
+    required: ["status"],
   },
   execute: async (
     client: LeadbayClient,

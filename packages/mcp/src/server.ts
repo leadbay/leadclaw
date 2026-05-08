@@ -2,7 +2,23 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ReadResourceRequestSchema,
+  ElicitRequestSchema,
+  ElicitResultSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+  CompleteRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { listPrompts, getPrompt } from "./prompts.js";
+import {
+  listResources,
+  listResourceTemplates,
+  readResource,
+} from "./resources.js";
 import {
   compositeReadTools,
   compositeWriteTools,
@@ -11,6 +27,7 @@ import {
   type BulkTracker,
   type LeadbayClient,
   type Tool,
+  type ToolContext,
   type ToolLogger,
 } from "@leadbay/core";
 
@@ -84,6 +101,108 @@ function buildRhythmParagraph(has: (name: string) => boolean): string {
   );
 }
 
+function buildSlashCommandsParagraph(has: (name: string) => boolean): string {
+  const commands: string[] = [];
+  // Always-available (read-only chains).
+  commands.push("`/leadbay daily-check-in` (chains account_status → pull_leads → research_lead on the top hit)");
+  if (has("leadbay_import_and_qualify")) {
+    commands.push("`/leadbay research-a-domain {domain}` (import_and_qualify → research_lead)");
+  }
+  if (has("leadbay_refine_prompt")) {
+    commands.push("`/leadbay refine-audience {instruction}` (refine_prompt with clarification handling)");
+  }
+  if (has("leadbay_report_outreach")) {
+    commands.push("`/leadbay log-outreach {lead_id, summary}` (gathers verification then report_outreach)");
+  }
+  if (has("leadbay_bulk_qualify_leads")) {
+    commands.push("`/leadbay qualify-top-n {count}` (bulk_qualify_leads with progress streaming)");
+  }
+  return (
+    "Slash commands (`prompts/*`): the user's MCP client may surface registered prompts as slash commands. " +
+    "Available: " +
+    commands.join(", ") +
+    ". When the user invokes one, the rendered messages tell you which tools to call and in what order — follow them."
+  );
+}
+
+const RESOURCES_PARAGRAPH =
+  "Read-only resources (`resources/*`): three URI schemes are available — " +
+  "`lead://{uuid}/profile` (lead profile by id), " +
+  "`lens://{id}/definition` (filter + scoring config), " +
+  "`org://taste-profile` (qualification questions + intent tags). " +
+  "Capable clients cache these across turns — cheaper than re-running pull_leads / research_lead when the agent " +
+  "already has the id. Capable clients can also call `resources/subscribe` (the server stores the subscription; " +
+  "Leadbay's backend doesn't push deltas yet so notifications are not currently emitted) and " +
+  "`completion/complete` for URI auto-complete on the templates.";
+
+// iter-29: protocol-level primitives don't strictly need user-facing
+// guidance text (a capable client handles them via SDK), but a brilliant
+// human ships it because (a) some MCP hosts surface server-instructions to
+// the agent verbatim and (b) the agent's mental model improves when it
+// understands the *why* of the cancel/progress/elicit shapes rather than
+// only the *what*.
+//
+// Tool-specific examples are conditional on the exposed set — we only
+// reference tools the agent can actually call (preserves the iter-12
+// invariant that buildServerInstructions never names unavailable tools).
+function buildProtocolPrimitivesParagraph(has: (name: string) => boolean): string {
+  const longRunners = [
+    "bulk_qualify_leads",
+    "import_and_qualify",
+    "enrich_titles",
+    "bulk_enrich_status",
+    "qualify_status",
+  ].filter((n) => has(`leadbay_${n}`));
+  const elicitTools = [
+    "refine_prompt clarifications",
+    "report_outreach.user_confirmed",
+  ].filter((label) => {
+    if (label.startsWith("refine_prompt")) return has("leadbay_refine_prompt");
+    if (label.startsWith("report_outreach")) return has("leadbay_report_outreach");
+    return false;
+  });
+
+  const parts: string[] = ["Protocol primitives the server supports:"];
+
+  if (longRunners.length > 0) {
+    parts.push(
+      "(1) `notifications/progress` — when you pass `_meta.progressToken` on a tools/call, long-running " +
+        "composites stream per-unit-of-work progress with `progress`, `total`, and human-readable `message` " +
+        `(e.g. 'Qualified Acme Corp (3/10)'). Pass a progressToken on ${longRunners
+          .map((n) => `leadbay_${n}`)
+          .join(", ")}.`
+    );
+  } else {
+    parts.push(
+      "(1) `notifications/progress` — when you pass `_meta.progressToken` on a tools/call, long-running " +
+        "composites stream per-unit-of-work progress (none of the long-runners are currently exposed in " +
+        "this configuration)."
+    );
+  }
+
+  if (longRunners.length > 0) {
+    parts.push(
+      "(2) `notifications/cancelled` — when the user clicks Cancel in the host UI, the polling loop exits " +
+        "within ≤2 seconds AND the bulk-store entry transitions to 'cancelled'; subsequent status polls " +
+        "return `BULK_CANCELLED` so the agent stops polling."
+    );
+  } else {
+    parts.push(
+      "(2) `notifications/cancelled` — supported (no long-runners exposed in this configuration)."
+    );
+  }
+
+  if (elicitTools.length > 0) {
+    parts.push(
+      `(3) \`elicitation/create\` — for ${elicitTools.join(
+        " and "
+      )} the SERVER asks the user via the client UI. The agent doesn't author the prompt or fabricate the response — the user types directly. The response carries \`confirmed_via: 'elicit' | 'agent_supplied' | 'non_user_confirmed'\` so the audit trail records which path was actually taken.`
+    );
+  }
+
+  return parts.join(" ");
+}
+
 export function buildServerInstructions(exposed: Set<string>): string {
   const has = (name: string) => exposed.has(name);
   const parts: string[] = [];
@@ -96,6 +215,9 @@ export function buildServerInstructions(exposed: Set<string>): string {
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
+  parts.push(buildSlashCommandsParagraph(has));
+  parts.push(RESOURCES_PARAGRAPH);
+  parts.push(buildProtocolPrimitivesParagraph(has));
   return parts.join("\n\n");
 }
 
@@ -104,6 +226,11 @@ interface BuildServerOptions {
   includeWrite?: boolean;
   logger?: ToolLogger;
   bulkTracker?: BulkTracker;
+  // Test-only escape hatch: extra tools to register alongside the
+  // production catalog. Lets unit tests exercise signal/progress
+  // wiring without depending on long-running real composites.
+  // Production code does not pass this.
+  extraTools?: Tool[];
 }
 
 function formatErrorForLLM(err: any): string {
@@ -125,11 +252,16 @@ function formatErrorForLLM(err: any): string {
 }
 
 function toolsListPayload(tools: Tool[]) {
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: t.inputSchema,
-  }));
+  return tools.map((t) => {
+    const out: Record<string, unknown> = {
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    };
+    if (t.annotations) out.annotations = t.annotations;
+    if (t.outputSchema) out.outputSchema = t.outputSchema;
+    return out;
+  });
 }
 
 export function buildServer(
@@ -151,6 +283,10 @@ export function buildServer(
       exposedTools.push(...granularWriteTools);
     }
   }
+  // Test-only injection point.
+  if (opts.extraTools) {
+    exposedTools.push(...opts.extraTools);
+  }
 
   // UC-3: leadbay_login is NEVER registered on MCP (prompt-injection vector).
   // It remains available only in the OpenClaw adapter.
@@ -167,9 +303,16 @@ export function buildServer(
   // prompt only references tools it can call.
   const exposedNames = new Set(toolByName.keys());
   const server = new Server(
-    { name: "leadbay", version: "0.3.0" },
+    { name: "leadbay", version: "0.6.0" },
     {
-      capabilities: { tools: {} },
+      capabilities: {
+        tools: {},
+        prompts: {},
+        // iter-28: advertise subscribe + listChanged on resources, plus
+        // completions provider for URI auto-complete.
+        resources: { subscribe: true, listChanged: true },
+        completions: {},
+      },
       instructions: buildServerInstructions(exposedNames),
     }
   );
@@ -178,7 +321,105 @@ export function buildServer(
     tools: toolsListPayload([...toolByName.values()]),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  // Prompts: pull-based slash commands the user can invoke directly.
+  // See packages/mcp/src/prompts.ts for the catalog.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: listPrompts(),
+  }));
+  server.setRequestHandler(GetPromptRequestSchema, async (req) => {
+    return getPrompt(req.params.name, (req.params.arguments ?? {}) as Record<string, string | undefined>);
+  });
+
+  // Resources: URI-addressable read-only payloads (lead://, lens://, org://).
+  // See packages/mcp/src/resources.ts.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: listResources(),
+  }));
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+    resourceTemplates: listResourceTemplates(),
+  }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    return readResource(req.params.uri, client);
+  });
+
+  // iter-28: resources/subscribe + resources/unsubscribe.
+  // The Leadbay backend has no push-update channel for lead profiles or
+  // lenses, so the server's contract is "we accept the subscription and
+  // *may* emit notifications/resources/updated when we know the
+  // underlying state has changed." Today we never emit (no push); the
+  // capability advertisement still lets clients build cache strategies
+  // around it without needing a fallback. When the backend gains a
+  // change-feed, this is the wire-up point.
+  const subscribers = new Set<string>();
+  server.setRequestHandler(SubscribeRequestSchema, async (req) => {
+    subscribers.add(req.params.uri);
+    opts.logger?.info?.(`resources.subscribe uri=${req.params.uri} subs=${subscribers.size}`);
+    return {};
+  });
+  server.setRequestHandler(UnsubscribeRequestSchema, async (req) => {
+    subscribers.delete(req.params.uri);
+    opts.logger?.info?.(`resources.unsubscribe uri=${req.params.uri} subs=${subscribers.size}`);
+    return {};
+  });
+
+  // iter-28: completion provider for resource templates (URI auto-complete).
+  // When the agent is composing a `lead://{uuid}/profile` URI in a client UI,
+  // the client can call completion/complete with the partial value; we offer
+  // matching UUIDs from the user's last-active lens (best-effort, capped).
+  server.setRequestHandler(CompleteRequestSchema, async (req) => {
+    const ref = req.params.ref;
+    const argName = req.params.argument?.name;
+    const argValue = String(req.params.argument?.value ?? "");
+    // Only resource templates supported (no prompt completions yet).
+    if (ref.type !== "ref/resource") {
+      return { completion: { values: [], total: 0, hasMore: false } };
+    }
+    try {
+      // For lead URIs: surface up to 20 lead UUIDs from the active lens'
+      // wishlist matching the partial value. Cheap fan-out.
+      if (ref.uri === "lead://{uuid}/profile" && argName === "uuid") {
+        const lensId = await client.resolveDefaultLens();
+        const wish: any = await client.request<any>(
+          "GET",
+          `/lenses/${lensId}/leads/wishlist?count=50&page=0`
+        );
+        const ids = ((wish?.items ?? []) as Array<{ id: string }>)
+          .map((i) => i.id)
+          .filter((id) => id.toLowerCase().startsWith(argValue.toLowerCase()))
+          .slice(0, 20);
+        return {
+          completion: { values: ids, total: ids.length, hasMore: false },
+        };
+      }
+      // For lens URIs: surface lens ids matching the partial value.
+      if (ref.uri === "lens://{id}/definition" && argName === "id") {
+        const lenses: any = await client.request<any>("GET", "/lenses");
+        const ids = ((lenses ?? []) as Array<{ id: number }>)
+          .map((l) => String(l.id))
+          .filter((id) => id.startsWith(argValue))
+          .slice(0, 20);
+        return {
+          completion: { values: ids, total: ids.length, hasMore: false },
+        };
+      }
+    } catch (err: any) {
+      opts.logger?.warn?.(
+        `completion provider error: ${err?.message ?? err?.code ?? err}`
+      );
+    }
+    return { completion: { values: [], total: 0, hasMore: false } };
+  });
+
+  // iter-26: per-tool-call observability hook. Off by default; enabled via
+  // LEADBAY_DEBUG=1 (or "true"). Emits one stderr line per CallTool with
+  // tool name + duration + success flag + result-bytes. stderr keeps the
+  // stdio JSON-RPC stream (stdout) clean; cost when disabled is one truthy
+  // env var read per call.
+  const DEBUG_RAW = process.env.LEADBAY_DEBUG ?? "";
+  const DEBUG_ON = DEBUG_RAW === "1" || DEBUG_RAW.toLowerCase() === "true";
+
+  server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
+    const debugStart = DEBUG_ON ? Date.now() : 0;
     const name = req.params.name;
     const tool = toolByName.get(name);
     if (!tool) {
@@ -194,10 +435,66 @@ export function buildServer(
     }
 
     const args = (req.params.arguments ?? {}) as any;
+    // MCP 2025-11-25 §Progress: when the client passes a progressToken
+    // in _meta, capable composites can stream notifications/progress
+    // updates back. Cheap default: progress is undefined when the client
+    // didn't request it. Errors swallowed (log to stderr) so a flaky
+    // transport never bubbles up as a tool failure.
+    const progressToken = (req.params as any)?._meta?.progressToken;
+    const progress: ToolContext["progress"] = progressToken !== undefined
+      ? (params) => {
+          extra
+            .sendNotification({
+              method: "notifications/progress",
+              params: {
+                progressToken,
+                progress: params.progress,
+                ...(params.total !== undefined ? { total: params.total } : {}),
+                ...(params.message !== undefined ? { message: params.message } : {}),
+              },
+            })
+            .catch((err: any) => {
+              opts.logger?.warn?.(
+                `progress emit failed: ${err?.message ?? err?.code ?? String(err)}`
+              );
+            });
+        }
+      : undefined;
+    // MCP 2025-11-25 §Elicitation: composites that need a one-off user
+    // answer (refine_prompt's clarification, report_outreach's
+    // user_confirmed) can call ctx.elicit instead of returning a
+    // "please call answer_X" telephone payload. Calls extra.sendRequest
+    // with the spec form-based ElicitRequestSchema. Errors propagate
+    // (composite null-checks ctx.elicit before calling, and any
+    // capability-mismatch reject is surfaced).
+    const elicit: ToolContext["elicit"] = async (params) => {
+      const result = await extra.sendRequest(
+        {
+          method: "elicitation/create",
+          params: {
+            message: params.message,
+            requestedSchema: params.requestedSchema as any,
+          },
+        },
+        ElicitResultSchema
+      );
+      return {
+        action: result.action,
+        content: result.content as Record<string, unknown> | undefined,
+      };
+    };
     try {
+      // MCP 2025-11-25 §Cancellation: extra.signal is aborted by the SDK
+      // when the client sends `notifications/cancelled`. Plumbing it to
+      // ToolContext.signal lets long-running composites (bulk_qualify_leads,
+      // enrich_titles, import_and_qualify) actually stop polling when the
+      // user clicks Cancel in Claude Desktop / Cursor.
       const result = await tool.execute(client, args, {
         logger: opts.logger,
         bulkTracker: opts.bulkTracker,
+        signal: extra.signal,
+        progress,
+        elicit,
       });
       // Leadbay tools may return error envelopes ({ error: true, code, ... })
       // rather than throwing. Surface those as MCP isError so the LLM doesn't
@@ -214,12 +511,77 @@ export function buildServer(
           isError: true,
         };
       }
-      return {
+
+      // iter-25: MarkdownEnvelope from response_format='markdown' — the
+      // composite-side opt-in for chat-rendering agents. The text content
+      // becomes the rendered markdown; structuredContent stays as the
+      // typed payload so capable clients still get type-safe access.
+      const isMarkdownEnvelope =
+        result &&
+        typeof result === "object" &&
+        (result as any).__markdown_envelope === true &&
+        typeof (result as any).markdown === "string";
+      if (isMarkdownEnvelope) {
+        const env = result as { markdown: string; structured: Record<string, unknown> };
+        const out: Record<string, unknown> = {
+          content: [{ type: "text", text: env.markdown }],
+        };
+        // Emit the structured payload via structuredContent if the tool
+        // declared outputSchema (so capable clients still see the typed
+        // shape they expect).
+        if (
+          tool.outputSchema &&
+          env.structured !== null &&
+          typeof env.structured === "object" &&
+          !Array.isArray(env.structured)
+        ) {
+          out.structuredContent = env.structured;
+        }
+        if (DEBUG_ON) {
+          const dur = Date.now() - debugStart;
+          const bytes = env.markdown.length;
+          process.stderr.write(
+            `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes} format=markdown\n`
+          );
+        }
+        return out;
+      }
+
+      const response: Record<string, unknown> = {
         content: [
           { type: "text", text: JSON.stringify(result, null, 2) },
         ],
       };
+      // MCP 2025-11-25 §Tools: when the tool declares outputSchema, send a
+      // matching `structuredContent` block alongside the text so capable
+      // clients can consume the typed payload without re-parsing. Only emit
+      // for plain-object results (the spec requires structuredContent to be
+      // an object). Arrays and primitives stay text-only.
+      if (
+        tool.outputSchema &&
+        result !== null &&
+        typeof result === "object" &&
+        !Array.isArray(result)
+      ) {
+        response.structuredContent = result;
+      }
+      if (DEBUG_ON) {
+        const dur = Date.now() - debugStart;
+        const text = (response.content as any)[0]?.text ?? "";
+        const bytes = typeof text === "string" ? text.length : 0;
+        process.stderr.write(
+          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes}\n`
+        );
+      }
+      return response;
     } catch (err: any) {
+      if (DEBUG_ON) {
+        const dur = Date.now() - debugStart;
+        const code = err?.code ?? err?.name ?? "Error";
+        process.stderr.write(
+          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=false code=${code}\n`
+        );
+      }
       return {
         content: [
           { type: "text", text: formatErrorForLLM(err) },

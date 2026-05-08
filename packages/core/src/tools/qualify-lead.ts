@@ -8,6 +8,13 @@ interface QualifyLeadParams {
 
 export const qualifyLead: Tool<QualifyLeadParams> = {
   name: "leadbay_qualify_lead",
+  annotations: {
+    title: "Qualify a single lead",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Trigger AI qualification for a single lead (web fetch + AI rescore). The operation is asynchronous — " +
     "results take ~60s. " +
@@ -29,6 +36,7 @@ export const qualifyLead: Tool<QualifyLeadParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: QualifyLeadParams) => {
     const force = params.forceFetch ?? false;

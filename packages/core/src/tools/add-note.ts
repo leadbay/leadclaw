@@ -9,6 +9,13 @@ interface AddNoteParams {
 
 export const addNote: Tool<AddNoteParams> = {
   name: "leadbay_add_note",
+  annotations: {
+    title: "Add a note on a lead",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   description:
     "Add a note to a lead. Notes are visible to the whole organization in Leadbay. " +
     "When to use: low-level — for free-form notes not tied to outreach actions. " +
@@ -28,6 +35,16 @@ export const addNote: Tool<AddNoteParams> = {
       },
     },
     required: ["leadId", "note"],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Note id assigned by the backend." },
+      note: { type: "string", description: "Echoed note text (truncated to 4095 chars)." },
+      created_at: { type: "string", description: "ISO timestamp of creation." },
+    },
+    required: ["id", "note", "created_at"],
   },
   execute: async (client: LeadbayClient, params: AddNoteParams) => {
     if (!params.note || params.note.trim().length === 0) {

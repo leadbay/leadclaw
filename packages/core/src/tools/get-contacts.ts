@@ -8,6 +8,13 @@ interface GetContactsParams {
 
 export const getContacts: Tool<GetContactsParams> = {
   name: "leadbay_get_contacts",
+  annotations: {
+    title: "Read enriched contacts",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Get contacts for a lead, including enriched email and phone data. Returns both organization contacts and enrichable contacts with IDs. " +
     "When to use: to check enrichment status (contact.enrichment.done) on individual leads after a bulk enrichment was launched, " +
@@ -22,6 +29,7 @@ export const getContacts: Tool<GetContactsParams> = {
       },
     },
     required: ["leadId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: GetContactsParams) => {
     const [orgResult, paidResult] = await Promise.allSettled([

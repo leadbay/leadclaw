@@ -7,6 +7,13 @@ interface SetActiveLensParams {
 
 export const setActiveLens: Tool<SetActiveLensParams> = {
   name: "leadbay_set_active_lens",
+  annotations: {
+    title: "Set active lens",
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   description:
     "Mark a lens as last-used. Subsequent /me reads return it as last_requested_lens, so all composite " +
     "tools default to it. " +
@@ -18,6 +25,7 @@ export const setActiveLens: Tool<SetActiveLensParams> = {
     type: "object",
     properties: { lensId: { type: "number", description: "Lens id (required)" } },
     required: ["lensId"],
+    additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: SetActiveLensParams) => {
     await client.requestVoid(

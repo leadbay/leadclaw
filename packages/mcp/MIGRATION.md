@@ -1,3 +1,99 @@
+# Migration: leadbay-mcp 0.5.x → 0.6.0 (UNRELEASED)
+
+The "MCP best-practice" upgrade. Five behaviour additions and ONE
+softer-than-it-looks behavior callout. All changes are MCP-spec
+aligned (2025-11-25).
+
+## 1. Tool annotations on every tool
+
+Every tool now declares `annotations: { readOnlyHint, destructiveHint,
+idempotentHint, openWorldHint, title }` in the `tools/list` payload.
+Capable clients (Claude Desktop, Cursor) use these hints to decide
+whether to auto-approve a call or prompt for confirmation. No agent-
+side change required.
+
+## 2. `additionalProperties: false` on every tool's inputSchema
+
+**Behavior callout**: any client that was passing extra unrecognized
+fields will now get a schema rejection. This was a deliberate
+hardening — extra fields were never documented, and the rejection
+closes a prompt-injection surface (the eval doc explicitly endorsed
+this). To migrate: drop the unknown field. The error message names
+the rejected field.
+
+If you discover an unknown field in your call shape, double-check the
+relevant tool's documented `inputSchema`; if you believe a field
+should exist, file an issue.
+
+## 3. `outputSchema` + `structuredContent` on top-5 composites
+
+`leadbay_pull_leads`, `leadbay_research_lead`, `leadbay_account_status`,
+`leadbay_bulk_qualify_leads`, `leadbay_report_outreach` now declare
+`outputSchema` AND emit `structuredContent` on success alongside the
+existing text content. Clients that read structuredContent get the
+typed payload without re-parsing through the LLM. Backwards-compat:
+text content is unchanged.
+
+## 4. `boost_score` on `research_lead.qualification[]`
+
+The qualification entry was previously labelled `score_0_to_10`. The
+actual scale is the discrete `-10|0|10|20` boost (per
+`AiAgentResponse.score`), NOT a 0-10 average. 0.6.0 introduces:
+
+```json
+{
+  "question": "...",
+  "boost_score": 10,
+  "score_scale": "-10|0|10|20",
+  "score_0_to_10": 10,    // DEPRECATED — same value as boost_score
+  "response": "...",
+  "computed_at": "..."
+}
+```
+
+`score_0_to_10` is kept as a deprecated alias for one minor version
+and removed in 0.7.0. Switch to `boost_score` now.
+
+## 5. New spec primitives
+
+The server now advertises and serves:
+
+- **`prompts/*`** — 5 canned slash-commands (`leadbay_daily_check_in`,
+  `leadbay_research_a_domain`, `leadbay_refine_audience`,
+  `leadbay_log_outreach`, `leadbay_qualify_top_n`). Use these from
+  the client UI; agents that read prompts compose workflows
+  automatically.
+- **`resources/*`** — three URI schemes addressable by client:
+  `lead://{uuid}/profile`, `lens://{id}/definition`,
+  `org://taste-profile`. Cache-friendly for capable clients.
+- **`notifications/progress`** — long-running composites (today:
+  `leadbay_bulk_qualify_leads`) stream per-lead progress updates
+  when the client opts in via `_meta.progressToken`.
+- **`notifications/cancelled`** → `ToolContext.signal` — clients
+  that send cancellation now actually stop in-flight work in
+  composites that observe `ctx.signal` (`leadbay_import_and_qualify`,
+  `leadbay_import_leads`, etc.).
+
+Clients without these capabilities negotiate away — backwards-compat
+is preserved.
+
+## 6. Pagination metadata: `has_more` + `next_page`
+
+`leadbay_pull_leads` and `leadbay_discover_leads` payloads now
+include `has_more: boolean` and `next_page: number | null` next to
+the existing `pagination` object. Spec-aligned; agents no longer
+need to compute `page < pages - 1`.
+
+## 7. Truncation steering on `research_lead`
+
+When the response would exceed ~25k characters, the composite now
+emits `truncated: true` plus `truncation_hint: "Pass concise:true to
+filter to hot signals only."`. Load-bearing fields (qualification,
+firmographics, contacts) are never trimmed; only signals.entries get
+trimmed first.
+
+---
+
 # Migration: leadbay-mcp 0.2.x → 0.3.0
 
 This release fixes [product#3504](https://github.com/leadbay/product/issues/3504): the default-installed MCP server's system prompt told the agent to call tools that the server didn't actually expose. Three behavior changes you need to know about.
