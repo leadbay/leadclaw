@@ -32,7 +32,7 @@ MCPB release URL:
 
 SHA-256:
 
-`TODO: fill after CI publishes the GitHub Release asset`
+`83addea0b480e3edf1e1175542a7ff5988500f484156251ab60f9d45388fd4f7`
 
 Compute after release:
 
