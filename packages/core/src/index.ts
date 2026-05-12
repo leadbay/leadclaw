@@ -72,6 +72,7 @@ import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
 import { importLeads } from "./composite/import-leads.js";
 import { importAndQualify } from "./composite/import-and-qualify.js";
+import { importStatus } from "./composite/import-status.js";
 import { qualifyStatus } from "./composite/qualify-status.js";
 import { enrichTitles } from "./composite/enrich-titles.js";
 import { bulkEnrichStatus } from "./composite/bulk-enrich-status.js";
@@ -93,6 +94,7 @@ export type {
   BulkTracker,
   BulkRecord,
   FindOrCreatePendingArgs,
+  FindOrCreatePendingImportArgs,
   LocalBulkStoreOpts,
   CreateDefaultBulkStoreOpts,
 } from "./jobs/bulk-store.js";
@@ -116,7 +118,7 @@ export {
   researchCompany, prepareOutreach,
   // new composite reads
   pullLeads, researchLead, recallOrderedTitles, accountStatus,
-  bulkEnrichStatus, qualifyStatus,
+  bulkEnrichStatus, qualifyStatus, importStatus,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
   answerClarification, reportOutreach, importLeads, importAndQualify,
@@ -191,6 +193,7 @@ export const compositeReadTools: Tool[] = [
   accountStatus,
   bulkEnrichStatus,
   qualifyStatus,
+  importStatus,
   // listMappableFields is granular-shaped but the import composites depend on
   // it for discoverability; expose it always-on so agents can find custom fields
   // without needing LEADBAY_MCP_ADVANCED=1.

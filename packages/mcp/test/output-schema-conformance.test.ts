@@ -436,6 +436,40 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
+    toolName: "leadbay_import_status",
+    arguments: { importIds: ["imp-1"] },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: "/1.5/imports/imp-1",
+          status: 200,
+          body: {
+            id: "imp-1",
+            date: "2026-05-12T00:00:00Z",
+            file_name: "mcp-import.csv",
+            imported_records: 1,
+            pending_imported_records: 0,
+            total_records: 1,
+            mappings: null,
+            pre_processing: {
+              finished: true,
+              error: null,
+              hints: null,
+              samples: [],
+              status_samples: null,
+            },
+            processing: {
+              progress: 1,
+              finished: true,
+              error: null,
+            },
+          },
+        },
+      ]);
+    },
+  },
+  {
     toolName: "leadbay_research_company",
     arguments: { leadId: "lead-1" },
     setupMocks: () => {

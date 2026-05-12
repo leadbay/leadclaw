@@ -8,7 +8,11 @@ import type {
   FileImportPayloadV15,
   ImportLeadsResponse,
 } from "../types.js";
-import { importLeads, escapeCsvCell } from "./import-leads.js";
+import {
+  importLeads,
+  escapeCsvCell,
+  isImportLeadsRunningResult,
+} from "./import-leads.js";
 import {
   fanOutWebFetchAndPoll,
   fingerprintMapping,
@@ -64,6 +68,7 @@ interface ImportAndQualifyParams {
   per_lead_budget_ms?: number;
   total_budget_ms?: number;
   per_phase_budget_ms?: number;
+  wait_for_completion?: boolean;
   // Lens id (for downstream wishlist / lead fetches). Defaults to active.
   lensId?: number;
   // When true (default), skip launching web_fetch on leads whose
@@ -89,6 +94,8 @@ interface ChosenBudgets {
 
 interface ImportAndQualifyResult {
   kind: "result";
+  status?: "running";
+  handle_id?: string;
   // True when the call was a dry_run input-validation (`dry_run: true`).
   // Top-level signal so the agent doesn't have to decode `not_imported[].reason`.
   dry_run?: boolean;
@@ -302,6 +309,8 @@ export const importAndQualify: Tool<
     "Composite: import a list of leads (CSV-shaped records OR a list of domains), then trigger Leadbay's AI " +
     "qualification (web research + per-question scoring) on every imported leadId, and return both the import " +
     "outcome and the per-lead qualification answers — in one call. " +
+    "For MCP clients with short transport timeouts, pass `wait_for_completion:false`; the tool returns quickly " +
+    "with an import `handle_id` that can be polled with leadbay_import_status before continuing qualification. " +
     "Honours a total wall-clock budget; when the budget is exhausted before all leads finish qualifying, returns " +
     "a `qualify_id` UUID handle that survives MCP restart and can be passed to leadbay_qualify_status to " +
     "retrieve the rest of the answers later.\n\n" +
@@ -427,6 +436,11 @@ export const importAndQualify: Tool<
           `Per-phase budget for the import wizard (default ${DEFAULT_PER_PHASE_BUDGET_MS}); ` +
           `mirrors leadbay_import_leads.`,
       },
+      wait_for_completion: {
+        type: "boolean",
+        description:
+          "When false, enqueue the import phase and return `{kind:'result', status:'running', handle_id}` immediately. Poll leadbay_import_status. Default is true for 0.6.x backwards compatibility.",
+      },
       lensId: {
         type: "number",
         description: "Lens id (escape hatch — defaults to active).",
@@ -456,6 +470,14 @@ export const importAndQualify: Tool<
       kind: {
         type: "string",
         description: "'result' (full flow) or 'preview' (dry_run='preview' mapping diagnostics).",
+      },
+      status: {
+        type: "string",
+        description: "`running` when wait_for_completion=false.",
+      },
+      handle_id: {
+        type: "string",
+        description: "Import handle to pass to leadbay_import_status when wait_for_completion=false.",
       },
       // preview-shape keys
       mapping_hints: {
@@ -588,6 +610,63 @@ export const importAndQualify: Tool<
       );
     }
 
+    if (params.wait_for_completion === false) {
+      const queued = await importLeads.execute(
+        client,
+        {
+          domains: params.domains,
+          records: params.records,
+          mappings: params.mappings,
+          per_phase_budget_ms: perPhaseBudget,
+          total_budget_ms: totalBudget,
+          ...(params.dry_run === true ? { dry_run: true } : {}),
+          wait_for_completion: false,
+        },
+        ctx
+      );
+      if (!isImportLeadsRunningResult(queued)) {
+        return {
+          kind: "result",
+          ...(chosenBudgets ? { chosen_budgets: chosenBudgets } : {}),
+          qualify_id: null,
+          import_ids: queued.importIds,
+          imported: queued.leads.map((l: any) => ({
+            leadId: l.leadId,
+            ...(l.domain ? { domain: l.domain } : {}),
+            name: l.name ?? null,
+            ...(l.rowId ? { rowId: l.rowId } : {}),
+          })),
+          not_imported: queued.not_imported.map(toNotImportedEntry),
+          qualified: [],
+          still_running: [],
+          failed: [],
+          quota_exceeded: false,
+          skipped_already_qualified: [],
+          not_in_lens: [],
+          region: client.region,
+          _meta: queued._meta,
+        };
+      }
+      return {
+        kind: "result",
+        status: "running",
+        handle_id: queued.handle_id,
+        ...(chosenBudgets ? { chosen_budgets: chosenBudgets } : {}),
+        qualify_id: null,
+        import_ids: queued.importIds,
+        imported: [],
+        not_imported: [],
+        qualified: [],
+        still_running: [],
+        failed: [],
+        quota_exceeded: false,
+        skipped_already_qualified: [],
+        not_in_lens: [],
+        region: client.region,
+        _meta: queued._meta,
+      };
+    }
+
     // Phase 1 — IMPORT. Re-uses the existing composite end-to-end (chunking,
     // mapping preflight, custom-field validation, polling, AbortSignal).
     // Per second-opinion #2 finding #2: progress emit lifted from runPreview
@@ -598,7 +677,7 @@ export const importAndQualify: Tool<
       total: 3,
       message: "Importing leads (phase 1/3 — preprocess + commit)",
     });
-    const importResult = await importLeads.execute(
+    const importResultRaw = await importLeads.execute(
       client,
       {
         domains: params.domains,
@@ -607,9 +686,19 @@ export const importAndQualify: Tool<
         per_phase_budget_ms: perPhaseBudget,
         total_budget_ms: totalBudget,
         ...(params.dry_run === true ? { dry_run: true } : {}),
+        wait_for_completion: true,
       },
       ctx
     );
+    if (isImportLeadsRunningResult(importResultRaw)) {
+      throw client.makeError(
+        "IMPORT_ASYNC_UNEXPECTED",
+        "Import returned an async handle while import_and_qualify was waiting for completion",
+        "Retry with wait_for_completion=false and poll leadbay_import_status, or retry the blocking call.",
+        "POST /imports"
+      );
+    }
+    const importResult = importResultRaw;
 
     if (importResult.cancelled) {
       // import phase aborted before producing leadIds — surface immediately.

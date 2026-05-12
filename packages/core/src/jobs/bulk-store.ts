@@ -39,7 +39,7 @@ import type { ToolLogger } from "../types.js";
 // Two record kinds today: enrich (legacy, default if `kind` absent on disk)
 // and qualify (new in 0.4.x for import_and_qualify). Both share the same
 // state machine and storage backing — only the payload-shape differs.
-export type BulkRecordKind = "enrich" | "qualify";
+export type BulkRecordKind = "enrich" | "qualify" | "import";
 
 // Common spine across kinds. Concrete shapes extend this with kind-specific
 // fields. `kind` is optional on disk for backward-compat with rows written
@@ -53,7 +53,7 @@ interface BulkRecordCommon {
   // cancelled = ctx.signal aborted mid-flight (iter-21); the bulk was
   // either never launched OR the polling loop exited; readers (status
   // tools) should surface BULK_CANCELLED so the agent stops polling.
-  status: "pending" | "launched" | "failed" | "cancelled";
+  status: "pending" | "launched" | "complete" | "failed" | "cancelled";
   idempotency_key: string; // sha256 over sorted inputs
   durability: "file" | "memory";
 }
@@ -79,7 +79,26 @@ export interface QualifyBulkRecord extends BulkRecordCommon {
   total_budget_ms?: number;
 }
 
-export type BulkRecord = EnrichBulkRecord | QualifyBulkRecord;
+export interface ImportBulkRecord extends BulkRecordCommon {
+  kind: "import";
+  import_ids: string[];
+  mode: "domains" | "records";
+  dry_run: boolean;
+  records_total: number;
+  result?: {
+    leads: unknown[];
+    not_imported: unknown[];
+    importIds: string[];
+  };
+  progress?: {
+    phase: string;
+    records_processed: number;
+    records_total: number;
+  };
+  error?: string;
+}
+
+export type BulkRecord = EnrichBulkRecord | QualifyBulkRecord | ImportBulkRecord;
 
 export interface FindOrCreatePendingArgs {
   lead_ids: string[];
@@ -104,6 +123,14 @@ export interface FindOrCreatePendingQualifyArgs {
   idempotency_window_ms?: number;
 }
 
+export interface FindOrCreatePendingImportArgs {
+  import_fingerprint: string;
+  mode: "domains" | "records";
+  dry_run: boolean;
+  records_total: number;
+  idempotency_window_ms?: number;
+}
+
 export interface BulkTracker {
   findOrCreatePending(args: FindOrCreatePendingArgs): Promise<{
     record: EnrichBulkRecord;
@@ -112,6 +139,11 @@ export interface BulkTracker {
   }>;
   findOrCreatePendingQualify(args: FindOrCreatePendingQualifyArgs): Promise<{
     record: QualifyBulkRecord;
+    reused: boolean;
+    seconds_since_original?: number;
+  }>;
+  findOrCreatePendingImport(args: FindOrCreatePendingImportArgs): Promise<{
+    record: ImportBulkRecord;
     reused: boolean;
     seconds_since_original?: number;
   }>;
@@ -127,6 +159,17 @@ export interface BulkTracker {
   // Typed accessor — returns undefined when the record exists but is the
   // wrong kind. Saves callers from repeating the type narrowing.
   getQualify(bulk_id: string): Promise<QualifyBulkRecord | undefined>;
+  getImport(bulk_id: string): Promise<ImportBulkRecord | undefined>;
+  setImportIds(bulk_id: string, import_ids: string[]): Promise<ImportBulkRecord>;
+  setImportProgress(
+    bulk_id: string,
+    progress: ImportBulkRecord["progress"]
+  ): Promise<ImportBulkRecord>;
+  markImportComplete(
+    bulk_id: string,
+    result: NonNullable<ImportBulkRecord["result"]>
+  ): Promise<ImportBulkRecord>;
+  markImportFailed(bulk_id: string, error: string): Promise<void>;
   list(): Promise<BulkRecord[]>;
 }
 
@@ -172,6 +215,20 @@ function computeQualifyIdempotencyKey(args: {
     [...args.import_ids].sort().join(","),
     `l${args.lens_id}`,
     args.mapping_fingerprint,
+  ];
+  return createHash("sha256").update(parts.join("|")).digest("hex");
+}
+
+function computeImportIdempotencyKey(args: {
+  import_fingerprint: string;
+  mode: "domains" | "records";
+  dry_run: boolean;
+}): string {
+  const parts = [
+    "import",
+    args.mode,
+    args.dry_run ? "dry1" : "dry0",
+    args.import_fingerprint,
   ];
   return createHash("sha256").update(parts.join("|")).digest("hex");
 }
@@ -347,7 +404,13 @@ export class LocalBulkStore implements BulkTracker {
     if (typeof r.launched_at !== "string") throw new Error("missing launched_at");
     if (!Array.isArray(r.lead_ids) || !r.lead_ids.every((x) => typeof x === "string"))
       throw new Error("invalid lead_ids");
-    if (r.status !== "pending" && r.status !== "launched" && r.status !== "failed")
+    if (
+      r.status !== "pending" &&
+      r.status !== "launched" &&
+      r.status !== "complete" &&
+      r.status !== "failed" &&
+      r.status !== "cancelled"
+    )
       throw new Error("invalid status");
     if (typeof r.idempotency_key !== "string") throw new Error("invalid idempotency_key");
 
@@ -371,6 +434,57 @@ export class LocalBulkStore implements BulkTracker {
       };
       if (typeof r.per_lead_budget_ms === "number") out.per_lead_budget_ms = r.per_lead_budget_ms;
       if (typeof r.total_budget_ms === "number") out.total_budget_ms = r.total_budget_ms;
+      return out;
+    }
+    if (kind === "import") {
+      if (!Array.isArray(r.import_ids) || !r.import_ids.every((x) => typeof x === "string"))
+        throw new Error("invalid import_ids");
+      if (r.mode !== "domains" && r.mode !== "records") throw new Error("invalid mode");
+      if (typeof r.dry_run !== "boolean") throw new Error("invalid dry_run");
+      if (typeof r.records_total !== "number") throw new Error("invalid records_total");
+      const out: ImportBulkRecord = {
+        kind: "import",
+        bulk_id: r.bulk_id,
+        launched_at: r.launched_at,
+        lead_ids: r.lead_ids as string[],
+        import_ids: r.import_ids as string[],
+        mode: r.mode,
+        dry_run: r.dry_run,
+        records_total: r.records_total,
+        status: r.status,
+        idempotency_key: r.idempotency_key,
+        durability: this.backend,
+      };
+      if (r.result && typeof r.result === "object") {
+        const result = r.result as Record<string, unknown>;
+        if (
+          Array.isArray(result.leads) &&
+          Array.isArray(result.not_imported) &&
+          Array.isArray(result.importIds) &&
+          result.importIds.every((x) => typeof x === "string")
+        ) {
+          out.result = {
+            leads: result.leads,
+            not_imported: result.not_imported,
+            importIds: result.importIds as string[],
+          };
+        }
+      }
+      if (r.progress && typeof r.progress === "object") {
+        const p = r.progress as Record<string, unknown>;
+        if (
+          typeof p.phase === "string" &&
+          typeof p.records_processed === "number" &&
+          typeof p.records_total === "number"
+        ) {
+          out.progress = {
+            phase: p.phase,
+            records_processed: p.records_processed,
+            records_total: p.records_total,
+          };
+        }
+      }
+      if (typeof r.error === "string") out.error = r.error;
       return out;
     }
     if (kind === "enrich") {
@@ -588,9 +702,145 @@ export class LocalBulkStore implements BulkTracker {
     });
   }
 
+  async findOrCreatePendingImport(
+    args: FindOrCreatePendingImportArgs
+  ): Promise<{ record: ImportBulkRecord; reused: boolean; seconds_since_original?: number }> {
+    const idempotency_key = computeImportIdempotencyKey({
+      import_fingerprint: args.import_fingerprint,
+      mode: args.mode,
+      dry_run: args.dry_run,
+    });
+    const window = args.idempotency_window_ms ?? DEFAULT_IDEMPOTENCY_WINDOW_MS;
+
+    return this.mutex.run(async () => {
+      const all = this.prune(await this.readAll());
+      const nowMs = this.now();
+      const existing = all.find(
+        (r): r is ImportBulkRecord =>
+          r.kind === "import" &&
+          r.idempotency_key === idempotency_key &&
+          r.status !== "failed" &&
+          r.status !== "cancelled" &&
+          nowMs - Date.parse(r.launched_at) < window
+      );
+      if (existing) {
+        this.logger?.info?.(
+          `bulk.reused kind=import bulk_id=${existing.bulk_id} seconds_since_original=${
+            Math.round((nowMs - Date.parse(existing.launched_at)) / 1000)
+          }`
+        );
+        return {
+          record: existing,
+          reused: true,
+          seconds_since_original: Math.round(
+            (nowMs - Date.parse(existing.launched_at)) / 1000
+          ),
+        };
+      }
+      const record: ImportBulkRecord = {
+        kind: "import",
+        bulk_id: randomUUID(),
+        launched_at: new Date(nowMs).toISOString(),
+        lead_ids: [],
+        import_ids: [],
+        mode: args.mode,
+        dry_run: args.dry_run,
+        records_total: args.records_total,
+        progress: {
+          phase: "queued",
+          records_processed: 0,
+          records_total: args.records_total,
+        },
+        status: "pending",
+        idempotency_key,
+        durability: this.backend,
+      };
+      all.push(record);
+      await this.writeAll(all);
+      this.logger?.info?.(
+        `bulk.registered kind=import bulk_id=${record.bulk_id} mode=${record.mode} ` +
+          `records_total=${record.records_total} durability=${record.durability}`
+      );
+      return { record, reused: false };
+    });
+  }
+
   async getQualify(bulk_id: string): Promise<QualifyBulkRecord | undefined> {
     const r = await this.get(bulk_id);
     return r && r.kind === "qualify" ? r : undefined;
+  }
+
+  async getImport(bulk_id: string): Promise<ImportBulkRecord | undefined> {
+    const r = await this.get(bulk_id);
+    return r && r.kind === "import" ? r : undefined;
+  }
+
+  async setImportIds(bulk_id: string, import_ids: string[]): Promise<ImportBulkRecord> {
+    return this.mutex.run(async () => {
+      const all = this.prune(await this.readAll());
+      const idx = all.findIndex((r) => r.bulk_id === bulk_id && r.kind === "import");
+      if (idx < 0) throw new Error(`import bulk_id not found: ${bulk_id}`);
+      const record = all[idx] as ImportBulkRecord;
+      all[idx] = {
+        ...record,
+        import_ids: [...new Set(import_ids)].sort(),
+        status: record.status === "pending" ? "launched" : record.status,
+      };
+      await this.writeAll(all);
+      return all[idx] as ImportBulkRecord;
+    });
+  }
+
+  async setImportProgress(
+    bulk_id: string,
+    progress: ImportBulkRecord["progress"]
+  ): Promise<ImportBulkRecord> {
+    return this.mutex.run(async () => {
+      const all = this.prune(await this.readAll());
+      const idx = all.findIndex((r) => r.bulk_id === bulk_id && r.kind === "import");
+      if (idx < 0) throw new Error(`import bulk_id not found: ${bulk_id}`);
+      const record = all[idx] as ImportBulkRecord;
+      all[idx] = { ...record, progress };
+      await this.writeAll(all);
+      return all[idx] as ImportBulkRecord;
+    });
+  }
+
+  async markImportComplete(
+    bulk_id: string,
+    result: NonNullable<ImportBulkRecord["result"]>
+  ): Promise<ImportBulkRecord> {
+    return this.mutex.run(async () => {
+      const all = this.prune(await this.readAll());
+      const idx = all.findIndex((r) => r.bulk_id === bulk_id && r.kind === "import");
+      if (idx < 0) throw new Error(`import bulk_id not found: ${bulk_id}`);
+      const record = all[idx] as ImportBulkRecord;
+      all[idx] = {
+        ...record,
+        import_ids: [...new Set(result.importIds)].sort(),
+        result,
+        progress: {
+          phase: "complete",
+          records_processed: record.records_total,
+          records_total: record.records_total,
+        },
+        status: "complete",
+      };
+      await this.writeAll(all);
+      this.logger?.info?.(`bulk.import_complete bulk_id=${bulk_id}`);
+      return all[idx] as ImportBulkRecord;
+    });
+  }
+
+  async markImportFailed(bulk_id: string, error: string): Promise<void> {
+    return this.mutex.run(async () => {
+      const all = this.prune(await this.readAll());
+      const idx = all.findIndex((r) => r.bulk_id === bulk_id && r.kind === "import");
+      if (idx < 0) return;
+      all[idx] = { ...(all[idx] as ImportBulkRecord), status: "failed", error };
+      await this.writeAll(all);
+      this.logger?.info?.(`bulk.import_failed bulk_id=${bulk_id}`);
+    });
   }
 
   async markLaunched(bulk_id: string): Promise<BulkRecord> {

@@ -13,6 +13,7 @@ interface BulkQualifyLeadsParams {
   lensId?: number;
   per_lead_budget_ms?: number;
   total_budget_ms?: number;
+  wait_for_completion?: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -35,7 +36,19 @@ interface QualResult {
   signals_count: number | null;
 }
 
-export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
+interface BulkQualifyRunningResult {
+  status: "running";
+  handle_id: string;
+  qualify_id: string;
+  lead_ids: string[];
+  launched_count: number;
+  failed: Array<{ lead_id: string; error: string }>;
+  quota_exceeded: boolean;
+  lens_id: number;
+  _meta: { region: "us" | "fr" | "custom" };
+}
+
+export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams, any> = {
   name: "leadbay_bulk_qualify_leads",
   annotations: {
     title: "Bulk-qualify next N leads",
@@ -47,7 +60,9 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
     openWorldHint: true,
   },
   description:
-    "Pick the next N unqualified leads in the active lens and qualify them (run AI rescore + web fetch), polling " +
+    "Pick the next N unqualified leads in the active lens and qualify them (run AI rescore + web fetch). " +
+    "Pass `wait_for_completion:false` to return quickly with `{status:'running', qualify_id}`; poll " +
+    "leadbay_qualify_status with that id. With wait_for_completion omitted/true, the legacy behavior polls " +
     "until the answers are populated or a budget is exhausted. Already-qualified leads (those with a non-null " +
     "ai_agent_lead_score) are silently no-ops on the backend, so this composite paginates past them to find " +
     "fresh candidates. On 429 mid-fanout, stops launching but keeps polling already-launched leads. " +
@@ -82,6 +97,11 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
         type: "number",
         description: `Total polling budget in ms (default ${DEFAULT_TOTAL_BUDGET_MS})`,
       },
+      wait_for_completion: {
+        type: "boolean",
+        description:
+          "When false, launch qualification and return `{status:'running', qualify_id}` immediately. Poll leadbay_qualify_status. Default is true for 0.6.x backwards compatibility.",
+      },
     },
     additionalProperties: false,
   },
@@ -94,6 +114,14 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
           "Leads whose qualification finished within budget. Each entry: lead_id, qualification_summary{answered,total,avg_qualification_boost}, signals_count.",
         items: { type: "object" },
       },
+      status: {
+        type: "string",
+        description: "`running` when wait_for_completion=false; absent on the legacy blocking result.",
+      },
+      handle_id: { type: "string", description: "Alias of qualify_id for handle-oriented callers." },
+      qualify_id: { type: "string", description: "UUIDv4 to poll via leadbay_qualify_status." },
+      lead_ids: { type: "array", items: { type: "string" } },
+      launched_count: { type: "number" },
       still_running: {
         type: "array",
         description:
@@ -138,6 +166,7 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
     const perLeadBudget = params.per_lead_budget_ms ?? DEFAULT_PER_LEAD_BUDGET_MS;
     const totalBudget = params.total_budget_ms ?? DEFAULT_TOTAL_BUDGET_MS;
     const totalDeadline = Date.now() + totalBudget;
+    const waitForCompletion = params.wait_for_completion ?? true;
 
     let candidates: string[];
     let exhausted = false;
@@ -189,6 +218,66 @@ export const bulkQualifyLeads: Tool<BulkQualifyLeadsParams> = {
           "No unqualified leads found in this lens — either all leads have been qualified, or the wishlist is " +
           "still computing (check leadbay_account_status for computing_wishlist).",
       };
+    }
+
+    if (!waitForCompletion) {
+      if (!ctx?.bulkTracker) {
+        throw client.makeError(
+          "BULK_TRACKER_UNAVAILABLE",
+          "No BulkTracker configured on this MCP instance",
+          "leadbay_bulk_qualify_leads wait_for_completion=false needs a BulkTracker so qualify_id survives restart.",
+          ""
+        );
+      }
+      const reservation = await ctx.bulkTracker.findOrCreatePendingQualify({
+        lead_ids: candidates,
+        import_ids: [],
+        lens_id: lensId,
+        mapping_fingerprint: "bulk_qualify_leads",
+        per_lead_budget_ms: perLeadBudget,
+        total_budget_ms: totalBudget,
+      });
+      const launched: string[] = [];
+      const failed: Array<{ lead_id: string; error: string }> = [];
+      let quotaExceeded = false;
+      if (!reservation.reused) {
+        for (const leadId of candidates) {
+          if (quotaExceeded) break;
+          try {
+            await client.requestVoid(
+              "POST",
+              `/leads/${leadId}/web_fetch?force_fetch=false`
+            );
+            launched.push(leadId);
+          } catch (err: any) {
+            if (err?.code === "QUOTA_EXCEEDED") {
+              quotaExceeded = true;
+            } else if (err?.code === "NOT_FOUND") {
+              failed.push({ lead_id: leadId, error: "lead not found" });
+            } else {
+              failed.push({
+                lead_id: leadId,
+                error: err?.message ?? err?.code ?? "unknown",
+              });
+            }
+          }
+        }
+        if (failed.length === candidates.length || launched.length > 0 || quotaExceeded) {
+          await ctx.bulkTracker.markLaunched(reservation.record.bulk_id);
+        }
+      }
+      const out: BulkQualifyRunningResult = {
+        status: "running",
+        handle_id: reservation.record.bulk_id,
+        qualify_id: reservation.record.bulk_id,
+        lead_ids: candidates,
+        launched_count: reservation.reused ? reservation.record.lead_ids.length : launched.length,
+        failed,
+        quota_exceeded: quotaExceeded,
+        lens_id: lensId,
+        _meta: { region: client.region },
+      };
+      return out;
     }
 
     // Fan-out web_fetch triggers. On 429, stop launching further but let the
