@@ -169,10 +169,14 @@ export const qualifyStatus: Tool<
       // Could be wrong kind, expired (TTL), missing, or never existed.
       const any = await ctx.bulkTracker.get(params.qualify_id);
       if (any && any.kind !== "qualify") {
+        const hint =
+          any.kind === "import"
+            ? "Call leadbay_import_status with this id instead."
+            : "Call leadbay_bulk_enrich_status with this id instead.";
         throw client.makeError(
           "BULK_WRONG_KIND",
-          "This bulk_id was created by leadbay_enrich_titles, not leadbay_import_and_qualify",
-          "Call leadbay_bulk_enrich_status with this id instead.",
+          `This bulk_id was created by ${any.kind}, not leadbay_import_and_qualify`,
+          hint,
           ""
         );
       }
@@ -278,7 +282,7 @@ export const qualifyStatus: Tool<
     const out: QualifyStatusResult = {
       qualify_id: record.bulk_id,
       launched_at: record.launched_at,
-      status: record.status,
+      status: record.status === "complete" ? "launched" : record.status,
       import_ids: record.import_ids,
       lens_id: record.lens_id,
       lead_ids: record.lead_ids,

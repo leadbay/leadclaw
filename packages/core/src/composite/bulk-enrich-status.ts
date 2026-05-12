@@ -169,14 +169,16 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       };
     }
 
-    if (record.kind === "qualify") {
+    if (record.kind !== "enrich") {
       return {
         error: true,
         code: "BULK_WRONG_KIND",
         message:
-          "This bulk_id was created by leadbay_import_and_qualify, not leadbay_enrich_titles.",
+          `This bulk_id was created by ${record.kind === "qualify" ? "leadbay_import_and_qualify" : "leadbay_import_leads"}, not leadbay_enrich_titles.`,
         hint:
-          "Call leadbay_qualify_status with this id instead.",
+          record.kind === "qualify"
+            ? "Call leadbay_qualify_status with this id instead."
+            : "Call leadbay_import_status with this id instead.",
         bulk_id: record.bulk_id,
       };
     }

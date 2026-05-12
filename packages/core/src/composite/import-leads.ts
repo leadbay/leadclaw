@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { LeadbayClient } from "../client.js";
 import type {
   Tool,
@@ -48,6 +48,7 @@ interface ImportLeadsParams {
   dry_run?: boolean;
   per_phase_budget_ms?: number;
   total_budget_ms?: number;
+  wait_for_completion?: boolean;
 }
 
 type NotImportedReason =
@@ -83,7 +84,7 @@ interface RecordsNotImportedEntry {
   reason: NotImportedReason;
 }
 
-interface ImportLeadsResult {
+export interface ImportLeadsResult {
   leads: Array<DomainsLeadEntry | RecordsLeadEntry>;
   not_imported: Array<DomainsNotImportedEntry | RecordsNotImportedEntry>;
   importIds: string[];
@@ -91,6 +92,25 @@ interface ImportLeadsResult {
   cancelled?: boolean;
   dry_run?: boolean;
   _meta: RequestMeta;
+}
+
+export interface ImportLeadsRunningResult {
+  status: "running";
+  handle_id: string;
+  importIds: string[];
+  progress: { phase: string; records_processed: number; records_total: number };
+  region: "us" | "fr" | "custom";
+  reused?: boolean;
+  seconds_since_original?: number;
+  _meta: RequestMeta;
+}
+
+export type ImportLeadsToolResult = ImportLeadsResult | ImportLeadsRunningResult;
+
+export function isImportLeadsRunningResult(
+  result: ImportLeadsToolResult
+): result is ImportLeadsRunningResult {
+  return "status" in result && result.status === "running";
 }
 
 const CHUNK_SIZE = 100;
@@ -216,6 +236,32 @@ function chunkAt100<T>(items: T[]): T[][] {
     chunks.push(items.slice(i, i + CHUNK_SIZE));
   }
   return chunks;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const obj = value as Record<string, unknown>;
+  return `{${Object.keys(obj)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
+    .join(",")}}`;
+}
+
+function importFingerprint(params: ImportLeadsParams, prep: PreparedImport): string {
+  const payload = {
+    mode: prep.mode,
+    rows: prep.validInputs.map((i) => ({
+      domain: i.domain,
+      outputDomain: i.outputDomain,
+      row: i.row,
+    })),
+    malformed: prep.malformedDomains,
+    header: prep.header,
+    mappings: prep.mappings,
+    dry_run: Boolean(params.dry_run),
+  };
+  return createHash("sha256").update(stableStringify(payload)).digest("hex");
 }
 
 function checkAborted(signal?: AbortSignal): void {
@@ -741,6 +787,13 @@ interface ChunkRunOutput {
   records: ImportRecordPayload[];
 }
 
+interface UploadedChunk {
+  importId: string;
+  chunk: ValidInput[];
+  chunkIdx: number;
+  totalChunks: number;
+}
+
 async function pollUntil<T>(
   fn: () => Promise<T>,
   done: (r: T) => boolean,
@@ -937,6 +990,36 @@ async function runOneChunk(
   // budget, etc.) the caller still has the importId for diagnostics + retry.
   onImportId: (id: string) => void
 ): Promise<ChunkRunOutput> {
+  const upload = await uploadOneChunk(
+    client,
+    chunk,
+    chunkIdx,
+    totalChunks,
+    header,
+    ctx,
+    onImportId
+  );
+  return completeUploadedChunk(
+    client,
+    upload,
+    mappings,
+    dryRun,
+    perPhaseBudgetMs,
+    totalDeadline,
+    ctx,
+    signal
+  );
+}
+
+async function uploadOneChunk(
+  client: LeadbayClient,
+  chunk: ValidInput[],
+  chunkIdx: number,
+  totalChunks: number,
+  header: string[],
+  ctx: ToolContext | undefined,
+  onImportId: (id: string) => void
+): Promise<UploadedChunk> {
   const csv = synthesizeCsv(
     header,
     chunk.map((c) => c.row)
@@ -955,6 +1038,20 @@ async function runOneChunk(
   );
   const importId = upload.id;
   onImportId(importId);
+  return { importId, chunk, chunkIdx, totalChunks };
+}
+
+async function completeUploadedChunk(
+  client: LeadbayClient,
+  upload: UploadedChunk,
+  mappings: MappingsPayload,
+  dryRun: boolean,
+  perPhaseBudgetMs: number,
+  totalDeadline: number,
+  ctx: ToolContext | undefined,
+  signal: AbortSignal | undefined
+): Promise<ChunkRunOutput> {
+  const { importId, chunk } = upload;
   const phaseBudget = Math.min(perPhaseBudgetMs, Math.max(1, totalDeadline - Date.now()));
 
   await pollPreprocess(client, importId, phaseBudget, ctx, signal);
@@ -1069,7 +1166,90 @@ function reconcileOneChunk(
   }
 }
 
-export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
+function buildImportLeadsResult(
+  client: LeadbayClient,
+  prep: PreparedImport,
+  importIds: string[],
+  matched: Map<number, MatchEntry>,
+  notImported: Map<number, NotImportedEntry>,
+  dryRun: boolean,
+  cancelled: boolean
+): ImportLeadsResult {
+  const leads: Array<DomainsLeadEntry | RecordsLeadEntry> = [];
+  const not_imported: Array<DomainsNotImportedEntry | RecordsNotImportedEntry> = [];
+  if (dryRun) {
+    for (const inp of prep.validInputs) {
+      if (prep.mode === "domains") {
+        not_imported.push({ domain: inp.outputDomain!, reason: "dry_run" });
+      } else {
+        const entry: RecordsNotImportedEntry = { rowId: inp.rowId, reason: "dry_run" };
+        if (inp.outputDomain) entry.domain = inp.outputDomain;
+        not_imported.push(entry);
+      }
+    }
+  } else {
+    for (const inp of prep.validInputs) {
+      const m = matched.get(inp.index);
+      if (m) {
+        if (prep.mode === "domains") {
+          leads.push({
+            domain: inp.outputDomain!,
+            leadId: m.leadId,
+            name: m.name,
+          });
+        } else {
+          const e: RecordsLeadEntry = {
+            rowId: inp.rowId,
+            leadId: m.leadId,
+            name: m.name,
+          };
+          if (m.domain ?? inp.outputDomain) e.domain = m.domain ?? inp.outputDomain;
+          leads.push(e);
+        }
+        continue;
+      }
+      const ni = notImported.get(inp.index);
+      if (ni) {
+        if (prep.mode === "domains") {
+          not_imported.push({ domain: inp.outputDomain!, reason: ni.reason });
+        } else {
+          const e: RecordsNotImportedEntry = { rowId: inp.rowId, reason: ni.reason };
+          if (ni.domain ?? inp.outputDomain) e.domain = ni.domain ?? inp.outputDomain;
+          not_imported.push(e);
+        }
+        continue;
+      }
+      if (prep.mode === "domains") {
+        not_imported.push({ domain: inp.outputDomain!, reason: "internal_error" });
+      } else {
+        const e: RecordsNotImportedEntry = { rowId: inp.rowId, reason: "internal_error" };
+        if (inp.outputDomain) e.domain = inp.outputDomain;
+        not_imported.push(e);
+      }
+    }
+  }
+  // Domains-mode malformed entries (rejected before the wizard saw them).
+  for (const m of prep.malformedDomains) {
+    not_imported.push({ domain: m, reason: "malformed" } as DomainsNotImportedEntry);
+  }
+
+  return {
+    leads,
+    not_imported,
+    importIds,
+    region: client.region,
+    cancelled: cancelled || undefined,
+    dry_run: dryRun || undefined,
+    _meta: client.lastMeta ?? {
+      region: client.region,
+      endpoint: "POST /imports",
+      latency_ms: null,
+      retry_after: null,
+    },
+  };
+}
+
+export const importLeads: Tool<ImportLeadsParams, ImportLeadsToolResult> = {
   name: "leadbay_import_leads",
   annotations: {
     title: "Import leads from list/file",
@@ -1083,7 +1263,9 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
   },
   description:
     "Import leads into Leadbay's CRM via the file-import wizard. Returns stable Leadbay leadIds for downstream chaining " +
-    "into leadbay_bulk_qualify_leads / leadbay_research_lead.\n\n" +
+    "into leadbay_bulk_qualify_leads / leadbay_research_lead. For MCP clients with short transport timeouts, pass " +
+    "`wait_for_completion:false` to return quickly with `{status:'running', handle_id}`; poll `leadbay_import_status` " +
+    "with that handle for progress and the final `{leads, not_imported, importIds}` result.\n\n" +
     "TWO MODES:\n" +
     "  A) Domain-list shortcut — pass `domains: [{domain, name?}]`. The tool builds a 2-column CSV " +
     "(LEAD_NAME, LEAD_WEBSITE) and imports with the default mapping. Output: { leads: [{domain, leadId, name}], " +
@@ -1200,6 +1382,12 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
         type: "number",
         description: `Overall cap across all phases (default ${DEFAULT_TOTAL_BUDGET_MS}ms).`,
       },
+      wait_for_completion: {
+        type: "boolean",
+        description:
+          "When false, validate and enqueue the import in the background, then return `{status:'running', handle_id}` immediately. " +
+          "Poll leadbay_import_status(handle_id). Default is true for 0.6.x backwards compatibility.",
+      },
     },
     // Neither field is "required" at the schema level; xor + presence is
     // enforced in execute() so we can produce specific error codes.
@@ -1213,6 +1401,18 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
         description:
           "Imported leads. Domains mode: [{domain, leadId, name}]. Records mode: [{rowId, domain?, leadId, name}].",
         items: { type: "object" },
+      },
+      status: {
+        type: "string",
+        description: "`running` when wait_for_completion=false; absent on the legacy blocking result.",
+      },
+      handle_id: {
+        type: "string",
+        description: "Persisted UUID handle to pass to leadbay_import_status.",
+      },
+      progress: {
+        type: "object",
+        description: "Current async import progress when wait_for_completion=false.",
       },
       not_imported: {
         type: "array",
@@ -1242,12 +1442,13 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
     client: LeadbayClient,
     params: ImportLeadsParams,
     ctx?: ToolContext
-  ): Promise<ImportLeadsResult> => {
+  ): Promise<ImportLeadsToolResult> => {
     const signal = ctx?.signal;
     const dryRun = Boolean(params.dry_run);
     const perPhaseBudget = params.per_phase_budget_ms ?? DEFAULT_PER_PHASE_BUDGET_MS;
     const totalBudget = params.total_budget_ms ?? DEFAULT_TOTAL_BUDGET_MS;
     const totalDeadline = Date.now() + totalBudget;
+    const waitForCompletion = params.wait_for_completion ?? true;
 
     const hasDomains = Array.isArray(params.domains) && params.domains.length > 0;
     const hasRecords = Array.isArray(params.records) && params.records.length > 0;
@@ -1340,6 +1541,101 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
     }
 
     const chunks = chunkAt100(prep.validInputs);
+
+    if (!waitForCompletion) {
+      if (!ctx?.bulkTracker) {
+        throw client.makeError(
+          "BULK_TRACKER_UNAVAILABLE",
+          "No BulkTracker configured on this MCP instance",
+          "leadbay_import_leads wait_for_completion=false needs a BulkTracker so the handle survives restart.",
+          ""
+        );
+      }
+      const reservation = await ctx.bulkTracker.findOrCreatePendingImport({
+        import_fingerprint: importFingerprint(params, prep),
+        mode: prep.mode,
+        dry_run: dryRun,
+        records_total: prep.validInputs.length,
+      });
+      const importIds = [...reservation.record.import_ids];
+      const uploadedChunks: UploadedChunk[] = [];
+      if (!reservation.reused || reservation.record.import_ids.length === 0) {
+        try {
+          for (let i = 0; i < chunks.length; i++) {
+            const upload = await uploadOneChunk(
+              client,
+              chunks[i],
+              i,
+              chunks.length,
+              prep.header,
+              ctx,
+              (id) => {
+                if (!importIds.includes(id)) importIds.push(id);
+              }
+            );
+            uploadedChunks.push(upload);
+            await ctx.bulkTracker.setImportIds(reservation.record.bulk_id, importIds);
+          }
+          await ctx.bulkTracker.setImportProgress(reservation.record.bulk_id, {
+            phase: "preprocess",
+            records_processed: 0,
+            records_total: prep.validInputs.length,
+          });
+        } catch (err: any) {
+          await ctx.bulkTracker.markImportFailed(
+            reservation.record.bulk_id,
+            err?.message ?? err?.code ?? "unknown"
+          );
+          throw err;
+        }
+      }
+      if (uploadedChunks.length > 0) {
+        void runImportInBackground(
+          client,
+          prep,
+          uploadedChunks,
+          {
+            dryRun,
+            perPhaseBudget,
+            totalBudget,
+          },
+          ctx,
+          reservation.record.bulk_id
+        );
+      }
+      return {
+        status: "running",
+        handle_id: reservation.record.bulk_id,
+        importIds,
+        progress: {
+          phase:
+            reservation.record.status === "complete"
+              ? "complete"
+              : importIds.length > 0
+              ? "preprocess"
+              : "queued",
+          records_processed:
+            reservation.record.status === "complete"
+              ? reservation.record.records_total
+              : 0,
+          records_total: reservation.record.records_total,
+        },
+        region: client.region,
+        ...(reservation.reused
+          ? {
+              reused: true,
+              seconds_since_original: reservation.seconds_since_original,
+            }
+          : {}),
+        _meta: client.lastMeta ?? {
+          region: client.region,
+          endpoint: "POST /imports",
+          latency_ms: null,
+          retry_after: null,
+        },
+      };
+    }
+
     ctx?.logger?.info?.(
       `import-leads(${prep.mode}): ${prep.validInputs.length} rows → ${chunks.length} chunk(s); ` +
         `dry_run=${dryRun}, totalBudgetMs=${totalBudget}`
@@ -1401,77 +1697,82 @@ export const importLeads: Tool<ImportLeadsParams, ImportLeadsResult> = {
       }
     }
 
-    const leads: Array<DomainsLeadEntry | RecordsLeadEntry> = [];
-    const not_imported: Array<DomainsNotImportedEntry | RecordsNotImportedEntry> = [];
-    if (dryRun) {
-      for (const inp of prep.validInputs) {
-        if (prep.mode === "domains") {
-          not_imported.push({ domain: inp.outputDomain!, reason: "dry_run" });
-        } else {
-          const entry: RecordsNotImportedEntry = { rowId: inp.rowId, reason: "dry_run" };
-          if (inp.outputDomain) entry.domain = inp.outputDomain;
-          not_imported.push(entry);
-        }
-      }
-    } else {
-      for (const inp of prep.validInputs) {
-        const m = matched.get(inp.index);
-        if (m) {
-          if (prep.mode === "domains") {
-            leads.push({
-              domain: inp.outputDomain!,
-              leadId: m.leadId,
-              name: m.name,
-            });
-          } else {
-            const e: RecordsLeadEntry = {
-              rowId: inp.rowId,
-              leadId: m.leadId,
-              name: m.name,
-            };
-            if (m.domain ?? inp.outputDomain) e.domain = m.domain ?? inp.outputDomain;
-            leads.push(e);
-          }
-          continue;
-        }
-        const ni = notImported.get(inp.index);
-        if (ni) {
-          if (prep.mode === "domains") {
-            not_imported.push({ domain: inp.outputDomain!, reason: ni.reason });
-          } else {
-            const e: RecordsNotImportedEntry = { rowId: inp.rowId, reason: ni.reason };
-            if (ni.domain ?? inp.outputDomain) e.domain = ni.domain ?? inp.outputDomain;
-            not_imported.push(e);
-          }
-          continue;
-        }
-        if (prep.mode === "domains") {
-          not_imported.push({ domain: inp.outputDomain!, reason: "internal_error" });
-        } else {
-          const e: RecordsNotImportedEntry = { rowId: inp.rowId, reason: "internal_error" };
-          if (inp.outputDomain) e.domain = inp.outputDomain;
-          not_imported.push(e);
-        }
-      }
-    }
-    // Domains-mode malformed entries (rejected before the wizard saw them).
-    for (const m of prep.malformedDomains) {
-      not_imported.push({ domain: m, reason: "malformed" } as DomainsNotImportedEntry);
-    }
-
-    return {
-      leads,
-      not_imported,
+    return buildImportLeadsResult(
+      client,
+      prep,
       importIds,
-      region: client.region,
-      cancelled: cancelled || undefined,
-      dry_run: dryRun || undefined,
-      _meta: client.lastMeta ?? {
-        region: client.region,
-        endpoint: "POST /imports",
-        latency_ms: null,
-        retry_after: null,
-      },
-    };
+      matched,
+      notImported,
+      dryRun,
+      cancelled
+    );
   },
 };
+
+async function runImportInBackground(
+  client: LeadbayClient,
+  prep: PreparedImport,
+  uploadedChunks: UploadedChunk[],
+  opts: {
+    dryRun: boolean;
+    perPhaseBudget: number;
+    totalBudget: number;
+  },
+  ctx: ToolContext,
+  handleId: string
+): Promise<void> {
+  const tracker = ctx.bulkTracker;
+  if (!tracker) return;
+  void tracker
+    .setImportProgress(handleId, {
+      phase: "preprocess",
+      records_processed: 0,
+      records_total: prep.validInputs.length,
+    })
+    .catch(() => {});
+  setTimeout(() => {
+    void (async () => {
+      const bgCtx: ToolContext = { logger: ctx.logger, bulkTracker: tracker };
+      const importIds = uploadedChunks.map((chunk) => chunk.importId);
+      const matched = new Map<number, MatchEntry>();
+      const notImported = new Map<number, NotImportedEntry>();
+      try {
+        const totalDeadline = Date.now() + opts.totalBudget;
+        for (const upload of uploadedChunks) {
+          const out = await completeUploadedChunk(
+            client,
+            upload,
+            prep.mappings,
+            opts.dryRun,
+            opts.perPhaseBudget,
+            totalDeadline,
+            bgCtx,
+            undefined
+          );
+          if (!opts.dryRun) {
+            reconcileOneChunk(prep, out, matched, notImported);
+          }
+        }
+        const result = buildImportLeadsResult(
+          client,
+          prep,
+          importIds,
+          matched,
+          notImported,
+          opts.dryRun,
+          false
+        );
+        await tracker.markImportComplete(handleId, {
+          leads: result.leads,
+          not_imported: result.not_imported,
+          importIds: result.importIds,
+        });
+      } catch (err: any) {
+        await tracker.markImportFailed(
+          handleId,
+          err?.message ?? err?.code ?? "unknown"
+        );
+      }
+    })();
+  }, 0);
+}

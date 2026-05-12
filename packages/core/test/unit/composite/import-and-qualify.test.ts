@@ -48,6 +48,68 @@ beforeEach(() => {
   resetHttpMock();
 });
 
+function importPayload(opts: {
+  id: string;
+  preFinished: boolean;
+  procFinished?: boolean;
+}) {
+  return {
+    id: opts.id,
+    date: "2026-05-04T00:00:00Z",
+    file_name: "mcp-import.csv",
+    imported_records: opts.procFinished ? 1 : 0,
+    pending_imported_records: opts.procFinished ? 0 : 1,
+    total_records: 1,
+    mappings: null,
+    pre_processing: {
+      finished: opts.preFinished,
+      error: null,
+      hints: null,
+      samples: [],
+      status_samples: null,
+    },
+    processing:
+      opts.procFinished === undefined
+        ? null
+        : {
+            progress: opts.procFinished ? 1 : 0,
+            finished: opts.procFinished,
+            error: null,
+          },
+  };
+}
+
+function importedAppleRecordsPage() {
+  return {
+    items: [
+      {
+        id: 1,
+        records: [
+          { column_name: "LEAD_WEBSITE", value: "apple.com" },
+          { column_name: "LEAD_NAME", value: "Apple" },
+        ],
+        match_type: "AUTOMATIC_MATCH",
+        status: "IMPORTED",
+        lead: { id: "lead-apple", name: "Apple Inc.", website: "apple.com" },
+      },
+    ],
+    pagination: { page: 0, pages: 1, total: 1 },
+  };
+}
+
+async function waitForImportRecord(
+  tracker: InMemoryBulkStore,
+  handleId: string,
+  status: string
+) {
+  for (let i = 0; i < 400; i++) {
+    const record = await tracker.getImport(handleId);
+    if (record?.status === status) return record;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return tracker.getImport(handleId);
+}
+
 describe("leadbay_import_and_qualify — preflight errors", () => {
   it("missing bulkTracker → BULK_TRACKER_UNAVAILABLE", async () => {
     mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
@@ -62,6 +124,78 @@ describe("leadbay_import_and_qualify — preflight errors", () => {
     await expect(
       importAndQualify.execute(newClient(), {}, { bulkTracker: tracker })
     ).rejects.toMatchObject({ code: "IMPORT_EMPTY_INPUT" });
+  });
+});
+
+describe("leadbay_import_and_qualify — async import handle", () => {
+  it("wait_for_completion=false returns an import handle before qualification starts", async () => {
+    const tracker = new InMemoryBulkStore();
+    mockHttp([
+      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      {
+        method: "POST",
+        path: /^\/1\.5\/imports\?file_name=/,
+        status: 200,
+        body: importPayload({ id: "imp-async", preFinished: false }),
+      },
+      {
+        method: "GET",
+        path: "/1.5/imports/imp-async",
+        status: 200,
+        body: importPayload({ id: "imp-async", preFinished: true }),
+      },
+      {
+        method: "POST",
+        path: "/1.5/imports/imp-async/update_mappings",
+        status: 204,
+      },
+      {
+        method: "GET",
+        path: "/1.5/imports/imp-async",
+        status: 200,
+        body: importPayload({ id: "imp-async", preFinished: true, procFinished: true }),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/imp-async\/records\?/,
+        status: 200,
+        body: importedAppleRecordsPage(),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/imp-async\/records\?/,
+        status: 200,
+        body: importedAppleRecordsPage(),
+      },
+    ]);
+
+    const out = await importAndQualify.execute(
+      newClient(),
+      {
+        domains: [{ domain: "apple.com" }],
+        wait_for_completion: false,
+      },
+      { bulkTracker: tracker }
+    );
+
+    expect(out).toMatchObject({
+      kind: "result",
+      status: "running",
+      handle_id: expect.any(String),
+      qualify_id: null,
+      imported: [],
+      qualified: [],
+      still_running: [],
+    });
+    expect(getHttpRequests().map((r) => `${r.method} ${r.path}`)).toEqual([
+      "GET /1.5/users/me",
+      expect.stringContaining("POST /1.5/imports?file_name="),
+    ]);
+
+    const record = await waitForImportRecord(tracker, out.handle_id!, "complete");
+    expect(record?.result?.leads).toEqual([
+      { domain: "apple.com", leadId: "lead-apple", name: "Apple Inc." },
+    ]);
   });
 });
 

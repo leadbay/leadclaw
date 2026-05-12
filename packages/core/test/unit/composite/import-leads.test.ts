@@ -34,6 +34,7 @@ import {
   escapeCsvCell,
   synthesizeCsv,
 } from "../../../src/composite/import-leads.js";
+import { InMemoryBulkStore } from "../../../src/jobs/bulk-store.js";
 
 const BASE = "https://api-us.leadbay.app";
 
@@ -290,6 +291,78 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
     // Only 1 importId — not 2 — because the duplicate normalized to the
     // same single chunk.
     expect(out.importIds).toHaveLength(1);
+  });
+
+  it("wait_for_completion=false starts the wizard and returns before polling", async () => {
+    const tracker = new InMemoryBulkStore();
+    mockHttp([
+      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      {
+        method: "POST",
+        path: /\/1\.5\/imports\?file_name=/,
+        status: 200,
+        body: makeImportPayload({ preFinished: false }),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        status: 200,
+        body: makeImportPayload({ preFinished: true }),
+      },
+      {
+        method: "POST",
+        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        status: 204,
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        status: 200,
+        body: makeImportPayload({ preFinished: true, procFinished: true }),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        status: 200,
+        body: importedAppleRecordsPage(),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        status: 200,
+        body: importedAppleRecordsPage(),
+      },
+    ]);
+
+    const started = Date.now();
+    const out = await importLeads.execute(
+      newClient(),
+      {
+        domains: [{ domain: "apple.com" }],
+        wait_for_completion: false,
+      },
+      { bulkTracker: tracker }
+    );
+
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(out).toMatchObject({
+      status: "running",
+      importIds: [expect.any(String)],
+      progress: {
+        phase: "preprocess",
+        records_processed: 0,
+        records_total: 1,
+      },
+    });
+    const requestsAtReturn = getHttpRequests().map((r) => `${r.method} ${r.path}`);
+    expect(requestsAtReturn).toHaveLength(2);
+    expect(requestsAtReturn[0]).toBe("GET /1.5/users/me");
+    expect(requestsAtReturn[1]).toContain("POST /1.5/imports?file_name=");
+
+    const record = await waitForImportRecord(tracker, (out as any).handle_id, "complete");
+    expect(record?.result?.leads).toEqual([
+      { domain: "apple.com", leadId: "lead-apple", name: "Apple Inc." },
+    ]);
   });
 });
 
@@ -1190,4 +1263,35 @@ function makeImportPayload(opts: {
       error: opts.procError ?? null,
     } : null,
   };
+}
+
+function importedAppleRecordsPage() {
+  return {
+    items: [
+      {
+        id: 1,
+        records: [
+          { column_name: "LEAD_WEBSITE", value: "apple.com" },
+          { column_name: "LEAD_NAME", value: "Apple" },
+        ],
+        match_type: "AUTOMATIC_MATCH",
+        status: "IMPORTED",
+        lead: { id: "lead-apple", name: "Apple Inc.", website: "apple.com" },
+      },
+    ],
+    pagination: { page: 0, pages: 1, total: 1 },
+  };
+}
+
+async function waitForImportRecord(
+  tracker: InMemoryBulkStore,
+  handleId: string,
+  status: string
+) {
+  for (let i = 0; i < 400; i++) {
+    const record = await tracker.getImport(handleId);
+    if (record?.status === status) return record;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  return tracker.getImport(handleId);
 }
