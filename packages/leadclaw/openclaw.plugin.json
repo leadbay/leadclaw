@@ -21,6 +21,7 @@
       "leadbay_report_outreach",
       "leadbay_import_leads",
       "leadbay_import_and_qualify",
+      "leadbay_import_status",
       "leadbay_qualify_status",
       "leadbay_list_mappable_fields",
       "leadbay_list_lenses",
