@@ -1,5 +1,9 @@
 # Changelog — @leadbay/mcp
 
+## 0.6.4 — UNRELEASED
+
+**Agentic file import prep**: adds `leadbay_resolve_import_rows`, a read-only resolver that calls the new backend `/leads/resolve` endpoint for messy CSV-shaped rows, returns matched/ambiguous/unresolved candidates, can hydrate ambiguous candidates with active-lens profile facts, and emits `records_for_import` plus safe identity-only `mappings_for_import` for `leadbay_import_leads` / `leadbay_import_and_qualify`. Import mappings now accept `LEADBAY_ID`, `CRM_ID`, and `SIREN` as resolver fields, so rows with resolved Leadbay IDs can import immediately while website-only rows can still rely on normal or late matching. New `leadbay_import_file` prompt teaches agents the full inspect → map → resolve → disambiguate → import/qualify workflow.
+
 ## 0.6.3 — 2026-05-12
 
 **Async import schema fix**: `leadbay_import_leads` now declares both its legacy blocking result shape and its async kickoff shape (`{status: "running", handle_id, importIds, progress}`) in `outputSchema`, so Claude Desktop and other MCP SDK clients accept the fast handle response instead of rejecting `structuredContent`.
