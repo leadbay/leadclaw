@@ -1,5 +1,5 @@
 /**
- * Prompts test — verifies the prompts/* capability + 5 canned slash
+ * Prompts test — verifies the prompts/* capability + canned slash
  * commands.
  */
 
@@ -28,13 +28,14 @@ async function connect() {
 }
 
 describe("prompts/* capability (P2 prompts)", () => {
-  it("prompts/list returns all 5 canned prompts", async () => {
+  it("prompts/list returns all canned prompts", async () => {
     const { mcpClient } = await connect();
     const listed = await mcpClient.listPrompts();
     const names = listed.prompts.map((p) => p.name);
     expect(names).toEqual([
       "leadbay_daily_check_in",
       "leadbay_research_a_domain",
+      "leadbay_import_file",
       "leadbay_refine_audience",
       "leadbay_log_outreach",
       "leadbay_qualify_top_n",
@@ -66,6 +67,25 @@ describe("prompts/* capability (P2 prompts)", () => {
     const text = (result.messages[0].content as any).text;
     expect(text).toContain("acme.com");
     expect(text).toContain("leadbay_import_and_qualify");
+  });
+
+  it("prompts/get(import_file) teaches resolve-disambiguate-import flow", async () => {
+    const { mcpClient } = await connect();
+    const result = await mcpClient.getPrompt({
+      name: "leadbay_import_file",
+      arguments: { file: "leads.csv", instruction: "then qualify them" },
+    });
+    const text = (result.messages[0].content as any).text;
+    expect(text).toContain("leads.csv");
+    expect(text).toContain("leadbay_resolve_import_rows");
+    expect(text).toContain("include_candidate_profiles");
+    expect(text).toContain("leadbay_import_and_qualify");
+    expect(text).toContain("Never choose from score alone");
+    expect(text).toContain("business domain");
+    expect(text).toContain("CONTACT_EMAIL");
+    expect(text).toContain("leadbay_create_custom_field");
+    expect(text).toContain("EXTERNAL_ID");
+    expect(text).toContain("HubSpot");
   });
 
   it("prompts/get with missing required argument errors", async () => {

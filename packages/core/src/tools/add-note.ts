@@ -18,7 +18,8 @@ export const addNote: Tool<AddNoteParams> = {
   },
   description:
     "Add a note to a lead. Notes are visible to the whole organization in Leadbay. " +
-    "When to use: low-level — for free-form notes not tied to outreach actions. " +
+    "When to use: low-level — for free-form notes not tied to outreach actions, including meaningful " +
+    "per-lead notes/context preserved from an imported file after the import returns lead IDs. " +
     "When NOT to use: to log an outreach action — use leadbay_report_outreach, which requires verification " +
     "(gmail/calendar/user_confirmed) to prevent hallucinated outreach poisoning the SDR pipeline.",
   optional: true,

@@ -162,6 +162,27 @@ interface ConformanceCase {
 
 const CASES: ConformanceCase[] = [
   {
+    toolName: "leadbay_resolve_import_rows",
+    arguments: {
+      records: [{ Company: "Apple", Domain: "apple.com" }],
+      identity_mappings: { name: "Company", website: "Domain" },
+    },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "POST",
+          path: "/1.5/leads/resolve",
+          status: 200,
+          body: {
+            type: "matched",
+            lead_id: "lead-apple",
+            matched_on: ["website_exact"],
+          },
+        },
+      ]);
+    },
+  },
+  {
     toolName: "leadbay_account_status",
     arguments: {},
     setupMocks: () => {
@@ -432,6 +453,34 @@ const CASES: ConformanceCase[] = [
     setupMocks: () => {
       mockHttp([
         { method: "GET", path: "/1.5/crm/custom_fields", status: 200, body: [] },
+      ]);
+    },
+  },
+  {
+    toolName: "leadbay_create_custom_field",
+    arguments: {
+      name: "HubSpot Contact",
+      type: "EXTERNAL_ID",
+      config: {
+        url_template: "https://app.hubspot.com/contacts/123/record/0-1/{value}",
+      },
+    },
+    setupMocks: () => {
+      mockHttp([
+        { method: "GET", path: "/1.5/crm/custom_fields", status: 200, body: [] },
+        {
+          method: "POST",
+          path: "/1.5/crm/custom_fields",
+          status: 200,
+          body: {
+            id: "8",
+            name: "HubSpot Contact",
+            type: "EXTERNAL_ID",
+            config: {
+              url_template: "https://app.hubspot.com/contacts/123/record/0-1/{value}",
+            },
+          },
+        },
       ]);
     },
   },
@@ -768,7 +817,7 @@ describe("structuredContent conformance — every outputSchema declarer (iter17)
       });
       expect(
         (result as any).isError,
-        `${c.toolName} returned isError — happy-path mock incomplete`
+        `${c.toolName} returned isError — happy-path mock incomplete: ${JSON.stringify((result as any).content)}`
       ).not.toBe(true);
 
       const structured = (result as any).structuredContent;

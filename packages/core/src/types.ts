@@ -490,6 +490,7 @@ export type CustomCrmFieldKind =
 export interface CustomCrmFieldConfig {
   currency?: string;
   format?: string | null;
+  url_template?: string;
   urlTemplate?: string;
 }
 
@@ -537,6 +538,47 @@ export interface FileImportPayloadV15 {
 export interface ImportLeadsResponse {
   lead_ids: string[];
 }
+
+// ─── Lead resolver payloads (POST /1.5/leads/resolve) ─────────────────────
+
+export interface ResolveSocialsPayload {
+  linkedin?: string | null;
+  facebook?: string | null;
+  instagram?: string | null;
+  twitter?: string | null;
+  tiktok?: string | null;
+}
+
+export interface ResolvePayload {
+  leadbay_id?: string | null;
+  crm_id?: string | null;
+  name?: string | null;
+  website?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  registry_number?: string | null;
+  registry_type?: string | null;
+  address?: string | null;
+  city?: string | null;
+  postcode?: string | null;
+  country?: string | null;
+  socials?: ResolveSocialsPayload | null;
+}
+
+export interface ResolveCandidate {
+  lead_id: string;
+  score: number;
+  matched_on: string[];
+  lead_fields_populated: Array<
+    "registry" | "website" | "phone" | "email" | "address" | "linkedin" | (string & {})
+  >;
+}
+
+export type ResolveResult =
+  | { type: "matched"; lead_id: string; matched_on: string[] }
+  | { type: "ambiguous"; candidates: ResolveCandidate[] }
+  | { type: "none"; would_help: Array<"website" | "registry_number" | (string & {})> }
+  | { type: "unidentifiable"; reason: string };
 
 // One entry in record.records[] — { column_name, value, field? }.
 export interface ImportRecordCell {

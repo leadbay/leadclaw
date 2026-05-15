@@ -7,6 +7,15 @@ P1 / P2 / P3 priorities from the comprehensive eval doc.
 
 ### Spec primitive coverage
 
+- **Agentic file-import resolver.** New `leadbay_resolve_import_rows`
+  wraps backend `POST /leads/resolve` for messy CSV-shaped user data,
+  returns matched / ambiguous / unresolved candidates, optionally
+  hydrates ambiguous candidates with active-lens profile facts, and emits
+  `records_for_import` + safe identity-only `mappings_for_import` for the
+  standard import and import-and-qualify composites. Import mappings now
+  accept `LEADBAY_ID`, `CRM_ID`, and `SIREN` as resolver keys in addition
+  to name / website. A new `leadbay_import_file` prompt teaches the full
+  inspect → map → resolve → disambiguate → import / qualify workflow.
 - **Tool annotations on every tool (spec MCP 2025-11-25 §Tools).** Each
   tool now declares `readOnlyHint`, `destructiveHint`, `idempotentHint`,
   `openWorldHint`, plus a short `title`, so MCP clients (Claude Desktop,

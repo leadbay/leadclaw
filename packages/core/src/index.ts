@@ -57,6 +57,7 @@ import { setEpilogueStatus } from "./tools/set-epilogue-status.js";
 import { removeEpilogue } from "./tools/remove-epilogue.js";
 import { previewBulkEnrichment } from "./tools/preview-bulk-enrichment.js";
 import { launchBulkEnrichment } from "./tools/launch-bulk-enrichment.js";
+import { createCustomField } from "./tools/create-custom-field.js";
 
 // ─── Composite workflow tools — agent-facing surface ─────────────────────
 
@@ -70,6 +71,7 @@ import { researchLead } from "./composite/research-lead.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
+import { resolveImportRows } from "./composite/resolve-import-rows.js";
 import { importLeads } from "./composite/import-leads.js";
 import { importAndQualify } from "./composite/import-and-qualify.js";
 import { importStatus } from "./composite/import-status.js";
@@ -114,11 +116,12 @@ export {
   updateLens, updateLensFilter, createLensDraft, promoteLens, setUserPrompt,
   clearUserPrompt, pickClarification, dismissClarification, setEpilogueStatus,
   removeEpilogue, previewBulkEnrichment, launchBulkEnrichment,
+  createCustomField,
   // existing composite
   researchCompany, prepareOutreach,
   // new composite reads
   pullLeads, researchLead, recallOrderedTitles, accountStatus,
-  bulkEnrichStatus, qualifyStatus, importStatus,
+  bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
   answerClarification, reportOutreach, importLeads, importAndQualify,
@@ -172,6 +175,7 @@ export const granularWriteTools: Tool[] = [
   removeEpilogue,
   previewBulkEnrichment,
   launchBulkEnrichment,
+  createCustomField,
 ];
 
 // Backward-compat alias (existing consumers use granularTools):
@@ -194,6 +198,7 @@ export const compositeReadTools: Tool[] = [
   bulkEnrichStatus,
   qualifyStatus,
   importStatus,
+  resolveImportRows,
   // listMappableFields is granular-shaped but the import composites depend on
   // it for discoverability; expose it always-on so agents can find custom fields
   // without needing LEADBAY_MCP_ADVANCED=1.
@@ -214,6 +219,12 @@ export const compositeWriteTools: Tool[] = [
   reportOutreach,
   importLeads,
   importAndQualify,
+  // createCustomField is granular-shaped but file-import prompts depend on it
+  // to preserve source-system links without requiring advanced-tool exposure.
+  createCustomField,
+  // addNote is granular-shaped but file-import prompts depend on it to preserve
+  // meaningful source-file notes after imports return lead ids.
+  addNote,
 ];
 
 // Backward-compat alias for existing consumers.

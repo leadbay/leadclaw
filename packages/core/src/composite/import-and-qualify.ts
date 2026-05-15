@@ -318,7 +318,13 @@ export const importAndQualify: Tool<
     "  - `domains`: list of `{domain, name?}` (Mode A) — mutually exclusive with `records`.\n" +
     "  - `records`: list of CSV-shaped objects (Mode B), accompanied by `mappings`. Use `mappings.fields` with " +
     "    StandardCrmFieldType names or 'CUSTOM.<id>' wire values; or `mappings.custom_fields` with field id " +
-    "    or name shorthand. Discover the org's mappable surface via leadbay_list_mappable_fields.\n" +
+    "    or name shorthand. At least one mapped field must be LEADBAY_ID, CRM_ID, SIREN, LEAD_NAME, or " +
+    "    LEAD_WEBSITE. For messy files, inspect every column and sample values, build a preservation plan, call leadbay_resolve_import_rows, and pass its " +
+    "    records_for_import / mappings_for_import here. Discover the org's mappable surface via " +
+    "    leadbay_list_mappable_fields. For each meaningful column decide standard field, CONTACT_* field, Leadbay note, custom field, derived helper, or skip with a reason; create/reuse custom fields for meaningful data with no standard field. For contact exports and embedded owner/contact lists, map parent company identity plus CONTACT_* fields; " +
+    "    expand structured owners, decision makers, or contacts into additional rows that repeat the parent lead identity and import one person per row. Repeated company/LEADBAY_ID rows import as multiple contacts. If there is no company website, derive " +
+    "    one from business contact email domains only when they agree with company/deal/brand context; ignore consumer mailbox and conflicting POS/vendor/group domains. Preserve HubSpot/source " +
+    "    links by reusing or creating a custom field with leadbay_create_custom_field; reuse existing HubSpot linked-id fields and preserve raw source identifiers such as hubspot_id and associated_deal when meaningful. Keep meaningful per-lead notes/context aside and write them with leadbay_add_note after the import returns lead IDs; for dry runs, report which notes would be written. For ambiguous rows, work to disambiguate with hydrated candidate profiles, exact phone/domain/registry/CRM id, and street-level location; if several candidates share a website, use location/phone/source URL path to pick the specific branch when exactly one matches.\n" +
     `  - Budgets: \`total_budget_ms\` (default ${DEFAULT_TOTAL_BUDGET_MS / 60_000} min) caps the entire wall-clock; ` +
     `    \`per_lead_budget_ms\` (default ${DEFAULT_PER_LEAD_BUDGET_MS / 1_000}s) caps each lead's individual qualification poll.\n\n` +
     "Outputs include `qualified[]` (per-lead question answers), `still_running[]` (lead ids whose qualification " +
@@ -404,7 +410,11 @@ export const importAndQualify: Tool<
             description:
               "Object whose keys are CSV column names and whose values are either StandardCrmFieldType " +
               "(LEAD_NAME, LEAD_WEBSITE, ..., CONTACT_TITLE) or 'CUSTOM.<id>'. Discover via " +
-              "leadbay_list_mappable_fields. At least one entry must target LEAD_NAME or LEAD_WEBSITE.",
+              "leadbay_list_mappable_fields. At least one entry must target LEADBAY_ID, CRM_ID, SIREN, " +
+              "LEAD_NAME, or LEAD_WEBSITE. Use leadbay_resolve_import_rows to prepare LEADBAY_ID values " +
+              "from messy user files. Contact exports and embedded owner/contact lists should map CONTACT_EMAIL/PHONE/TITLE/name fields " +
+              "while preserving parent lead identity; expand structured people into repeated parent rows. HubSpot/source links should map to CUSTOM.<id> " +
+              "fields created or discovered before import.",
           },
           custom_fields: {
             type: "object",

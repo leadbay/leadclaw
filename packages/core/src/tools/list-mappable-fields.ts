@@ -61,7 +61,7 @@ const STANDARD_FIELDS: ReadonlyArray<{
 }> = [
   { name: "LEAD_NAME", description: "Company name. Required for fuzzy match." },
   { name: "LEAD_WEBSITE", description: "Company domain (preferred matcher; protocol/path auto-stripped)." },
-  { name: "EMAIL", description: "Email — domain part used as a website-fallback matcher." },
+  { name: "EMAIL", description: "Lead/company email — domain part may be used as a website-fallback matcher. For a person's email, use CONTACT_EMAIL and optionally derive a separate business-domain column for LEAD_WEBSITE." },
   { name: "CRM_ID", description: "Your CRM's stable lead identifier (round-trips back as crm_id on the lead)." },
   { name: "LEADBAY_ID", description: "Leadbay UUID, if you already have one (matches by id, no fuzzy needed)." },
   { name: "DEAL_CRM_ID", description: "Your CRM's deal id (one deal per row; combined with LEAD_STATUS forms a sales record)." },
@@ -79,7 +79,7 @@ const STANDARD_FIELDS: ReadonlyArray<{
   { name: "SIREN", description: "French SIREN registry number (9 digits) — auto-matches against the FR registry." },
   { name: "CONTACT_FIRST_NAME", description: "Contact first name (creates an org contact)." },
   { name: "CONTACT_LAST_NAME", description: "Contact last name." },
-  { name: "CONTACT_EMAIL", description: "Contact email." },
+  { name: "CONTACT_EMAIL", description: "Contact email. Does not replace the parent company's LEAD_WEBSITE; derive a company domain from this only when it is a business domain, not a personal mailbox provider." },
   { name: "CONTACT_PHONE_NUMBER", description: "Contact phone (free-form)." },
   { name: "CONTACT_TITLE", description: "Contact job title." },
   { name: "CONTACT_LINKEDIN", description: "Contact LinkedIn URL." },
@@ -113,7 +113,7 @@ function describeCustomField(f: CustomFieldDef): string {
       }.`;
     case "EXTERNAL_ID":
       return `Custom EXTERNAL_ID field — opaque id${
-        f.config?.urlTemplate ? ` (deep-link template configured)` : ""
+        f.config?.url_template || f.config?.urlTemplate ? ` (deep-link template configured)` : ""
       }.`;
     default:
       // Unknown kind — surface plainly without rejecting.
@@ -142,6 +142,13 @@ export const listMappableFields: Tool<
     "LEAD_STATUS, contact + location + sector fields) and `custom_fields` (this org's user-defined fields — id, " +
     "name, type, and the literal `mapping_value` you pass in `mappings.fields`). For custom fields, `mapping_value` " +
     "is the wire-format string `CUSTOM.<id>` — pass it verbatim.\n\n" +
+    "For contact exports, map person data to CONTACT_* fields and still provide parent-company identity via " +
+    "LEADBAY_ID/LEAD_WEBSITE/LEAD_NAME/CRM_ID/SIREN. When contact emails contain business domains, agents may " +
+    "derive a clean company-domain column for LEAD_WEBSITE only when the domain agrees with the row's company/deal/brand context, while preserving the original email as CONTACT_EMAIL. " +
+    "For import files, audit every meaningful source column. If no standard/contact field fits, preserve the data by creating or reusing a custom field unless the column is blank, duplicate plumbing, raw unparsed noise after useful extraction, or harmful to data quality. " +
+    "For HubSpot or other source-system deep links, create or reuse an EXTERNAL_ID/TEXT custom field with " +
+    "leadbay_create_custom_field, then map the source id/link to the returned mapping_value. Backend mapping_hints " +
+    "are advisory only; for contact files, do not accept hints such as first_name -> LEAD_NAME when the column is clearly a person field.\n\n" +
     "Optional `for_records` param: pass a sample of CSV-shaped rows and the tool also runs the wizard's preprocess " +
     "on them, attaching `mapping_hints` (per-column AI-confidence suggestions) and `custom_field_candidates` " +
     "(custom fields that match unmapped columns by exact / case-insensitive / fuzzy name) to the response. " +
@@ -242,7 +249,10 @@ export const listMappableFields: Tool<
     };
 
     if (Array.isArray(params.for_records) && params.for_records.length > 0) {
-      const notes: string[] = [];
+      const notes: string[] = [
+        "mapping_hints are backend suggestions, not final truth. Inspect values semantically before importing; person columns like first_name/last_name should map to CONTACT_* fields, not LEAD_NAME.",
+        "If mapping_hints disagree with the user's file semantics, ignore the hint. Use leadbay_resolve_import_rows with explicit identity_mappings for identity matching, then author final mappings yourself.",
+      ];
       try {
         const sample = params.for_records.slice(0, PREVIEW_SAMPLE_CAP);
         const headerSet = new Set<string>();

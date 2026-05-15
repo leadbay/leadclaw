@@ -107,6 +107,7 @@ function buildSlashCommandsParagraph(has: (name: string) => boolean): string {
   commands.push("`/leadbay daily-check-in` (chains account_status → pull_leads → research_lead on the top hit)");
   if (has("leadbay_import_and_qualify")) {
     commands.push("`/leadbay research-a-domain {domain}` (import_and_qualify → research_lead)");
+    commands.push("`/leadbay import-file {file}` (resolve_import_rows → import_leads/import_and_qualify → status)");
   }
   if (has("leadbay_refine_prompt")) {
     commands.push("`/leadbay refine-audience {instruction}` (refine_prompt with clarification handling)");

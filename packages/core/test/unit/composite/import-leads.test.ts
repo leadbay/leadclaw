@@ -647,6 +647,34 @@ describe("leadbay_import_leads — records mode", () => {
     });
   });
 
+  it("accepts LEADBAY_ID-only mappings as deterministic resolver input", async () => {
+    mockHttp([
+      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      {
+        method: "POST",
+        path: /\/1\.5\/imports\?file_name=/,
+        status: 200,
+        body: makeImportPayload({ preFinished: true }),
+      },
+      {
+        method: "GET",
+        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        status: 200,
+        body: makeImportPayload({ preFinished: true }),
+      },
+    ]);
+
+    const out = await importLeads.execute(newClient(), {
+      records: [{ LEADBAY_ID: "lead-apple" }],
+      mappings: { fields: { LEADBAY_ID: "LEADBAY_ID" } },
+      dry_run: true,
+    });
+
+    expect(out.dry_run).toBe(true);
+    const uploadReq = getHttpRequests().find((r) => /\/imports\?file_name=/.test(r.path));
+    expect(uploadReq?.body).toContain("MCP_ROW_ID,LEADBAY_ID");
+  });
+
   it("dry_run: no update_mappings; not_imported uses rowId; domain only when LEAD_WEBSITE parsed", async () => {
     mockHttp([
       { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
