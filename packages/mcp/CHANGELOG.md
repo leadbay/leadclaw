@@ -1,6 +1,10 @@
 # Changelog — @leadbay/mcp
 
-## 0.7.0 — UNRELEASED
+## 0.7.1 — UNRELEASED
+
+**Hotfix**: `packages/mcp/server.json` (the MCP Registry manifest) was still pinned at `0.6.3` and referenced `@leadbay/mcp@0.6` in three places. The 0.7.0 npm publish succeeded but the MCP Registry publish failed on a version-drift check. This release re-publishes 0.7.0's content with `server.json` bumped to `0.7.1` and the npm specifier updated to `@leadbay/mcp@0.7`. No functional change to the published package over 0.7.0.
+
+## 0.7.0 — 2026-05-15
 
 **Compile pipeline for prompts and tool descriptions**: every MCP prompt body and every Tool description is now authored as a `.md.tmpl` source file in the new `@leadbay/promptforge` workspace package and compiled into `prompts.generated.ts` / `tool-descriptions.generated.ts` at build time. Authors edit prose in one place; the generated TS modules are the bundle's source of inlined strings. No wire-format change: every consumer (Claude Desktop, Cursor, Claude Code, OpenClaw) sees the same MCP protocol shape — `tools/list`, `prompts/list`, `prompts/get` are unchanged. Backwards-compat: every tool name, every `inputSchema`, every annotation set, every `outputSchema` is preserved byte-for-byte. The descriptions themselves are rewritten (see below) — that is the visible change.
 
