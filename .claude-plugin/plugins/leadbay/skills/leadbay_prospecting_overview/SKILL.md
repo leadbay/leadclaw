@@ -42,9 +42,12 @@ Leadbay supports two parallel ways to find leads to act on. Detect which entry t
 ```
 Discovery entry              Follow-up entry
 ─────────────────            ───────────────
-leadbay_pull_leads           (re-engagement on the Monitor view —
-(new from the Discover        currently surfaced via the Leadbay app
- wishlist, lens-driven)       UI; MCP-side composite forthcoming)
+leadbay_pull_leads           leadbay_pull_followups
+(new from the Discover        (re-engagement on the
+ wishlist, lens-driven)        Monitor view of known leads)
+        │                            │
+   wrapped by:                   wrapped by:
+leadbay_daily_check_in      leadbay_followup_check_in
         │                            │
         │  optional:                 │  filters by user phrasing:
         │  research_company /        │  geo, sector, recency,
@@ -69,6 +72,14 @@ leadbay_pull_leads           (re-engagement on the Monitor view —
 **Follow-up signals**: "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", "this week", "this month", "what's overdue", explicit mention of recent or pending actions. Route to `leadbay_pull_followups` — the Monitor view of known leads. Apply `set_filter` for geo / sector / recency / action-type refinement; the filter is server-persisted across sessions.
 
 When in doubt, ask. The two paths return overlapping but differently-ranked data; presenting the wrong one wastes the user's time.
+
+**Routing the user's first message to an entry point (orchestrator prompts):**
+
+- "give me leads", "what's new", "let's prospect", "today's batch", "best NEW leads" → `leadbay_daily_check_in` (Discovery orchestrator — wraps `leadbay_pull_leads`)
+- "follow up", "already known", "leads I should contact", "before my trip", "this week", "what's overdue", "re-engage" → `leadbay_followup_check_in` (Follow-up orchestrator — wraps `leadbay_pull_followups`)
+- Ambiguous ("what should I work on?") → ASK once: "Looking for NEW leads from your wishlist, or follow-ups on leads you've already worked?"
+
+Never call `leadbay_pull_leads` directly for a follow-up query. Never call `leadbay_pull_followups` for a discovery query. The two tools read from different backend tables; iterating pages of one to fake the other is a known failure mode (see the anti-confusion guardrail in `pull_followups`'s description).
 
 ## The outreach loop
 
@@ -124,3 +135,7 @@ After your first `leadbay_pull_leads` call, capture `response.lens.id` (the resp
 ## What to read once you've matched intent
 
 You don't need to memorize every tool here — each tool's own description carries a RENDERING block (how to present the response) and a NEXT STEPS block (observation → suggestion table). Read the relevant tool's description in full when the user picks an entry point. This overview just gets you to the right starting tool.
+
+GATE — DEFER TO TOOL RENDERING. When you call a Leadbay composite that ships its own RENDERING block (every composite in 0.9.0+ does), render the response using that block's recipe verbatim — score bars, glyph palette, column order, hide-list, link priorities, all of it. Do NOT substitute prose, a numbered list, or a different column structure even when an orchestrating prompt's body suggests alternate framing. Prompt-specific commentary (motivational nudges, summaries, next-action recommendations) belongs ABOVE or BELOW the canonical table, never in place of it.
+
+If the prompt's body and the tool's RENDERING appear to conflict, the tool's RENDERING wins for the structural layout; the prompt's voice wins for the commentary that surrounds it.
