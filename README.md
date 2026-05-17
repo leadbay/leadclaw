@@ -26,7 +26,7 @@ Leadbay ships in three shapes depending on which host runs your agent. Pick one 
 ### Via OpenClaw
 
 ```bash
-openclaw plugins install @leadbay/openclaw-leadclaw
+openclaw plugins install @leadbay/leadclaw
 openclaw config set plugins.entries.leadclaw.region "us"   # or "fr"
 ```
 
@@ -104,6 +104,13 @@ leadbay_get_quota → leadbay_get_contacts → leadbay_enrich_contacts → (wait
 ```
 leadbay_discover_leads → leadbay_qualify_lead (for unscored leads) → (wait ~60s) → leadbay_get_lead_profile
 ```
+
+**Check public X/Twitter signals with TweetClaw:**
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Use LeadClaw to pull, qualify, and research companies, then use TweetClaw when the agent needs to scrape tweets, search tweets, search tweet replies, monitor tweets, export followers, look up users, or prepare reviewed post tweets and post tweet replies around a selected lead. Keep the Leadbay token in LeadClaw config and the Xquik API key in TweetClaw config; do not paste either value into prompts, notes, or outreach copy.
 
 ## Configuration
 

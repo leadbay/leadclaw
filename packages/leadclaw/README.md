@@ -73,7 +73,17 @@ The canonical tool list + schemas live in [`openclaw.plugin.json`](./openclaw.pl
 
 > *Adjust my audience to include VP of Finance at Series B startups and refine the prompt if any clarifications come up.* (requires `exposeWrite: true`)
 
-## 5. Troubleshooting
+## 5. Optional X/Twitter signal handoff
+
+If a lead profile or target-account hypothesis needs public X/Twitter context, install TweetClaw beside LeadClaw:
+
+```bash
+openclaw plugins install @xquik/tweetclaw
+```
+
+Use LeadClaw for lead discovery, qualification, contact enrichment, and outreach prep. Use TweetClaw when the same OpenClaw workspace needs to scrape tweets, search tweets, search tweet replies, monitor tweets, export followers, look up users, or prepare reviewed post tweets and post tweet replies for a selected account. Keep the Leadbay token in LeadClaw config and the Xquik API key in TweetClaw config; do not paste either value into prompts, notes, or outreach copy.
+
+## 6. Troubleshooting
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
@@ -83,13 +93,13 @@ The canonical tool list + schemas live in [`openclaw.plugin.json`](./openclaw.pl
 | Agent keeps picking granular tools over composites | `exposeGranular: true` set | Flip to `false`; the composites are usually what you want |
 | Write tool "not found" | `exposeWrite: false` (default) | Set `exposeWrite: true` after explicitly opting in |
 
-## 6. Security & privacy
+## 7. Security & privacy
 
 - Tokens live only in your OpenClaw plugin config; they traverse the network only to `api-{region}.leadbay.app`.
 - Write tools (`exposeWrite`) and granular tools (`exposeGranular`) are **hidden by default** — opt-in per session.
 - `leadbay_report_outreach` requires verification metadata (Gmail/Calendar id or explicit `user_confirmed` text) to prevent pipeline poisoning.
-- No telemetry is sent by this plugin. API requests are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
+- No telemetry is sent by this plugin. API requests are subject to the [Leadbay privacy policy](https://www.leadbay.ai/privacy-policy).
 
-## 7. License
+## 8. License
 
 MIT. See [LICENSE](./LICENSE).
