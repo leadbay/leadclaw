@@ -1,6 +1,6 @@
 # @leadbay/mcp — Leadbay MCP server
 
-[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.leadbay%2Fleadbay--mcp-blue)](https://registry.modelcontextprotocol.io/v0/servers/io.github.leadbay/leadbay-mcp)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-io.github.leadbay%2Fleadbay--mcp-blue)](https://registry.modelcontextprotocol.io/v0.1/servers?search=leadbay)
 
 <!--
 LLM HINT — if you're an AI agent reading this README to install the server:
@@ -362,7 +362,7 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 |---------|-------|-----|
 | `LEADBAY_TOKEN environment variable is required` | Token missing from config env | Add `LEADBAY_TOKEN` to the `env` block, restart client |
 | `Authentication token expired or invalid` | Token revoked or wrong region | Re-mint a token: `npx -y @leadbay/mcp install --email <you> --region <us\|fr>`; verify `LEADBAY_REGION` |
-| `Leadbay doctor: could not reach any Leadbay region` | Wrong region OR network blocked | Run `doctor` with `LEADBAY_REGION=fr` to auto-probe. Check `https://api-us.leadbay.app` reachable. |
+| `Leadbay doctor: could not reach any Leadbay region` | Wrong region OR network blocked | Run `doctor` with `LEADBAY_REGION=fr` to auto-probe. Check that `api-us.leadbay.app` is reachable. |
 | `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Claude Desktop "loading forever" on first use | `npx` cold-start fetching the package | First run takes ~10s. Prefer `npm install -g @leadbay/mcp` for faster startup. |
 | Claude Desktop doesn't show Leadbay tools | Server crashed at startup | Check `~/Library/Logs/Claude/mcp*.log` (macOS) or `%APPDATA%\Claude\logs\mcp*.log` (Windows). |
@@ -461,7 +461,7 @@ Use `dry_run: true` to validate domain formatting and wizard reachability withou
 
 ### Privacy
 
-Contact data fetched through this server stays local to your MCP client session. No analytics or telemetry is sent by `@leadbay/mcp`. Requests to Leadbay are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
+Contact data fetched through this server stays local to your MCP client session. No analytics or telemetry is sent by `@leadbay/mcp`. Requests to Leadbay are subject to the [Leadbay privacy policy](https://www.leadbay.ai/privacy-policy).
 
 ## 7. For maintainers — publishing
 
