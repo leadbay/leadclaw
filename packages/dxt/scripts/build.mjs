@@ -76,6 +76,30 @@ async function main() {
     copyFileSync(join(MCP_DIR, "README.md"), join(STAGE_DIR, "README.md"));
   }
 
+  // 3b. Sanity check the staged server/index.js. esbuild escapes non-ASCII to
+  // \uXXXX, so we look for both the literal and escaped forms. A previous
+  // 0.9.1 bundle shipped without these strings because @leadbay/core was
+  // compiled against a stale tool-descriptions.generated.ts — fail fast here
+  // rather than ship a partial build.
+  const indexJs = readFileSync(join(STAGE_DIR, "server", "index.js"), "utf8");
+  const checks = [
+    { label: "pull_leads RENDERING block", needles: ["RENDERING \\u2014 markdown table", "RENDERING — markdown table"] },
+    { label: "NEXT STEPS block",           needles: ["NEXT STEPS \\u2014 after rendering", "NEXT STEPS — after rendering"] },
+    { label: "AI booster-cap glyph (❖)",   needles: ["\\u2756", "❖"] },
+    { label: "IRON LAW outcome-after-outreach", needles: ["IRON LAW \\u2014 OUTCOME AFTER OUTREACH", "IRON LAW — OUTCOME AFTER OUTREACH"] },
+  ];
+  const missing = checks.filter(({ needles }) => !needles.some((n) => indexJs.includes(n)));
+  if (missing.length > 0) {
+    console.error("\n✗ Bundle is missing required tool-description content:");
+    for (const { label, needles } of missing) {
+      console.error(`  - ${label}  (looked for: ${needles.map((n) => JSON.stringify(n)).join(" | ")})`);
+    }
+    console.error("\nLikely cause: @leadbay/core was compiled before @leadbay/promptforge re-rendered tool-descriptions.generated.ts.");
+    console.error("Fix: pnpm --filter @leadbay/promptforge build && pnpm --filter @leadbay/core build, then rebuild.\n");
+    process.exit(1);
+  }
+  console.log("✓ Bundle sanity check passed (RENDERING + NEXT STEPS + ❖ + IRON LAW present)");
+
   // 4. Zip.
   // iter-27: Anthropic renamed DXT → MCPB (Model Context Protocol Bundle)
   // for Claude Desktop. The bundle content is identical (same manifest + same
