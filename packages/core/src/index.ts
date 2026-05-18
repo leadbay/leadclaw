@@ -236,6 +236,10 @@ export const compositeWriteTools: Tool[] = [
   // addNote is granular-shaped but file-import prompts depend on it to preserve
   // meaningful source-file notes after imports return lead ids.
   addNote,
+  // likeLead/dislikeLead are granular-shaped but should always be available
+  // to the agent without requiring LEADBAY_MCP_ADVANCED=1.
+  likeLead,
+  dislikeLead,
 ];
 
 // Backward-compat alias for existing consumers.

@@ -4,7 +4,6 @@ import { leadbay_like_lead as LIKE_LEAD_DESCRIPTION } from "../tool-descriptions
 
 interface LikeLeadParams {
   lead_id: string;
-  lens_id?: number;
 }
 
 export const likeLead: Tool<LikeLeadParams> = {
@@ -17,6 +16,7 @@ export const likeLead: Tool<LikeLeadParams> = {
     openWorldHint: true,
   },
   description: LIKE_LEAD_DESCRIPTION,
+  optional: true,
   write: true,
   inputSchema: {
     type: "object",
@@ -25,19 +25,12 @@ export const likeLead: Tool<LikeLeadParams> = {
         type: "string",
         description: "UUID of the lead to like.",
       },
-      lens_id: {
-        type: "number",
-        description: "Lens context. Defaults to the last-active lens if omitted.",
-      },
     },
     required: ["lead_id"],
     additionalProperties: false,
   },
   execute: async (client: LeadbayClient, params: LikeLeadParams) => {
-    const lensId = params.lens_id ?? (await client.resolveDefaultLens());
-    await client.request<void>("POST", "/interactions", [
-      { type: "LEAD_LIKED", leadId: params.lead_id, lensId: String(lensId) },
-    ]);
+    await client.requestVoid("POST", `/leads/${params.lead_id}/like`);
     return { applied: true, lead_id: params.lead_id, action: "liked" };
   },
 };
