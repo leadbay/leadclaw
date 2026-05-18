@@ -182,6 +182,19 @@ WHEN NOT TO USE: as the agent's default lead-discovery entry point — use leadb
 `;
 // endregion: leadbay_discover_leads
 
+// region: leadbay_dislike_lead
+export const leadbay_dislike_lead: string = `Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
+
+Pass the lead's UUID as \`lead_id\`. The \`lens_id\` is optional and defaults to the user's last-active lens.
+
+WHEN TO USE: the user explicitly rejects a lead ("not relevant", "wrong industry", "too small", "thumbs down", "skip this", "not a fit"). Use proactively after \`leadbay_research_lead\` reveals disqualifying signals.
+
+WHEN NOT TO USE: the user simply wants to defer a lead — use \`leadbay_set_pushback\` to snooze instead. Dislike is a permanent negative signal; pushback is a temporary deferral.
+
+This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
+`;
+// endregion: leadbay_dislike_lead
+
 // region: leadbay_dismiss_clarification
 export const leadbay_dismiss_clarification: string = `Dismiss the pending clarification without answering. Leadbay proceeds with its best guess. Admin-only.
 
@@ -499,6 +512,19 @@ WHEN NOT TO USE: from agent flow — leadbay_enrich_titles handles selection lif
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;
 // endregion: leadbay_launch_bulk_enrichment
+
+// region: leadbay_like_lead
+export const leadbay_like_lead: string = `Mark a lead as liked. This is the same action as clicking the thumbs-up on the Leadbay website. The signal is fed back into the scoring engine: liked leads improve the quality of future batches by teaching Leadbay what the user finds relevant.
+
+Pass the lead's UUID as \`lead_id\`. The \`lens_id\` is optional and defaults to the user's last-active lens.
+
+WHEN TO USE: the user explicitly approves of a lead ("this one looks good", "I like this", "thumbs up", "save this one", "this is a good fit"). Also use after \`leadbay_research_lead\` reveals strong signals.
+
+WHEN NOT TO USE: the user is just reading or researching a lead without expressing approval. Use \`leadbay_dislike_lead\` for negative signals.
+
+This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
+`;
+// endregion: leadbay_like_lead
 
 // region: leadbay_list_lenses
 export const leadbay_list_lenses: string = `List all available Leadbay lenses (saved lead-search configurations). Each lens defines a different target market or buyer segment. The lens with \`is_last_active=true\` is used by default for lead discovery.
@@ -1310,6 +1336,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_create_lens_draft,
   leadbay_deselect_leads,
   leadbay_discover_leads,
+  leadbay_dislike_lead,
   leadbay_dismiss_clarification,
   leadbay_enrich_contacts,
   leadbay_enrich_titles,
@@ -1332,6 +1359,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_import_leads,
   leadbay_import_status,
   leadbay_launch_bulk_enrichment,
+  leadbay_like_lead,
   leadbay_list_lenses,
   leadbay_list_mappable_fields,
   leadbay_list_sectors,
