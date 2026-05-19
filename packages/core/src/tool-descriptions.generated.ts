@@ -185,7 +185,7 @@ WHEN NOT TO USE: as the agent's default lead-discovery entry point — use leadb
 // region: leadbay_dislike_lead
 export const leadbay_dislike_lead: string = `Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
 
-Pass the lead's UUID as \`lead_id\`. The \`lens_id\` is optional and defaults to the user's last-active lens.
+Pass the lead's UUID as \`lead_id\`.
 
 WHEN TO USE: the user explicitly rejects a lead ("not relevant", "wrong industry", "too small", "thumbs down", "skip this", "not a fit"). Use proactively after \`leadbay_research_lead\` reveals disqualifying signals.
 
@@ -516,7 +516,7 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // region: leadbay_like_lead
 export const leadbay_like_lead: string = `Mark a lead as liked. This is the same action as clicking the thumbs-up on the Leadbay website. The signal is fed back into the scoring engine: liked leads improve the quality of future batches by teaching Leadbay what the user finds relevant.
 
-Pass the lead's UUID as \`lead_id\`. The \`lens_id\` is optional and defaults to the user's last-active lens.
+Pass the lead's UUID as \`lead_id\`.
 
 WHEN TO USE: the user explicitly approves of a lead ("this one looks good", "I like this", "thumbs up", "save this one", "this is a good fit"). Also use after \`leadbay_research_lead\` reveals strong signals.
 
@@ -994,7 +994,7 @@ export const leadbay_pull_liked_leads: string = `Fetch all leads the user has li
 
 Pass \`personal: true\` to restrict to leads liked by the current user only (default false = org-wide).
 
-Paginated: default 20 per page, max 50. Use \`page\` (0-indexed) and \`has_more\` / \`next_page\` to iterate.
+Paginated: default 20 per page, max 200. Use \`page\` (0-indexed) and \`has_more\` / \`next_page\` to iterate.
 
 Note on disliked leads: the Leadbay backend does not expose a cross-lens disliked filter. To see disliked state on a specific lead, use \`leadbay_research_lead\` or check the \`disliked\` field on individual leads from \`leadbay_pull_leads\`.
 

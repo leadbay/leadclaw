@@ -12,7 +12,7 @@ annotations:
 ---
 Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
 
-Pass the lead's UUID as `lead_id`. The `lens_id` is optional and defaults to the user's last-active lens.
+Pass the lead's UUID as `lead_id`.
 
 {{include:headers/tool-when-to-use}} the user explicitly rejects a lead ("not relevant", "wrong industry", "too small", "thumbs down", "skip this", "not a fit"). Use proactively after `leadbay_research_lead` reveals disqualifying signals.
 

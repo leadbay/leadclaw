@@ -1,12 +1,12 @@
 import type { LeadbayClient } from "../client.js";
 import type { Tool } from "../types.js";
+import { leadbay_pull_liked_leads as PULL_LIKED_LEADS_DESCRIPTION } from "../tool-descriptions.generated.js";
 
 interface MonitorResponse {
   items?: unknown[];
   leads?: unknown[];
   pagination?: { page: number; pages: number; total: number };
 }
-import { leadbay_pull_liked_leads as PULL_LIKED_LEADS_DESCRIPTION } from "../tool-descriptions.generated.js";
 
 function normalizeLinkedinPage(v: unknown): string | null {
   if (v == null) return null;
@@ -19,6 +19,16 @@ function normalizeLinkedinPage(v: unknown): string | null {
 function augmentContact(c: any) {
   return c ? { ...c, linkedin_page: normalizeLinkedinPage(c.linkedin_page ?? null) } : null;
 }
+
+const isActivePushback = (lead: any): boolean => {
+  const status = lead?.pushback_status;
+  if (!status) return false;
+  const until = lead?.pushback_until ?? lead?.pushback_status_set_at;
+  if (!until) return true;
+  const ts = Date.parse(until);
+  if (Number.isNaN(ts)) return true;
+  return ts > Date.now();
+};
 
 interface PullLikedLeadsParams {
   count?: number;
@@ -39,7 +49,7 @@ export const pullLikedLeads: Tool<PullLikedLeadsParams> = {
   inputSchema: {
     type: "object",
     properties: {
-      count: { type: "number", description: "Leads per page, max 50 (default 20)" },
+      count: { type: "number", description: "Leads per page, max 200 (default 20)" },
       page: { type: "number", description: "Page number, 0-indexed (default 0)" },
       personal: {
         type: "boolean",
@@ -52,15 +62,22 @@ export const pullLikedLeads: Tool<PullLikedLeadsParams> = {
     type: "object",
     properties: {
       leads: { type: "array", description: "Liked leads across all lenses.", items: { type: "object" } },
-      pagination: { type: "object", description: "page, pages, total." },
+      pagination: {
+        type: ["object", "null"],
+        description: "page / pages / total — the backend's pagination envelope when present, null if absent.",
+      },
       has_more: { type: "boolean" },
       next_page: { type: ["number", "null"] },
+      total_excluded_by_pushback: {
+        type: "number",
+        description: "Count of leads excluded because their pushback_status is active.",
+      },
       _meta: { type: "object" },
     },
-    required: ["leads", "pagination"],
+    required: ["leads"],
   },
   execute: async (client: LeadbayClient, params: PullLikedLeadsParams) => {
-    const count = Math.min(params.count ?? 20, 50);
+    const count = Math.min(params.count ?? 20, 200);
     const page = params.page ?? 0;
     const personal = params.personal ?? false;
 
@@ -82,13 +99,19 @@ export const pullLikedLeads: Tool<PullLikedLeadsParams> = {
           ? (monitor as unknown as any[])
           : [];
 
-    const leads = rawLeads.map((lead) => ({
-      ...lead,
-      recommended_contact: augmentContact(lead.recommended_contact),
-      org_contacts: Array.isArray(lead.org_contacts)
-        ? lead.org_contacts.map(augmentContact)
-        : lead.org_contacts ?? null,
-    }));
+    let excluded = 0;
+    const leads = rawLeads
+      .filter((lead) => {
+        if (isActivePushback(lead)) { excluded += 1; return false; }
+        return true;
+      })
+      .map((lead) => ({
+        ...lead,
+        recommended_contact: augmentContact(lead.recommended_contact),
+        org_contacts: Array.isArray(lead.org_contacts)
+          ? lead.org_contacts.map(augmentContact)
+          : lead.org_contacts ?? null,
+      }));
 
     const pagination = (monitor as any).pagination ?? null;
     const totalPages = pagination?.pages ?? 0;
@@ -99,6 +122,7 @@ export const pullLikedLeads: Tool<PullLikedLeadsParams> = {
       pagination,
       has_more: hasMore,
       next_page: hasMore ? page + 1 : null,
+      total_excluded_by_pushback: excluded,
       _meta: {
         region: client.region,
         latency_ms: client.lastMeta?.latency_ms ?? null,

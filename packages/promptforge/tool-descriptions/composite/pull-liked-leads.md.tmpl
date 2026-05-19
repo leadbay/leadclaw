@@ -15,7 +15,7 @@ Fetch all leads the user has liked, across every lens. Unlike `leadbay_pull_lead
 
 Pass `personal: true` to restrict to leads liked by the current user only (default false = org-wide).
 
-Paginated: default 20 per page, max 50. Use `page` (0-indexed) and `has_more` / `next_page` to iterate.
+Paginated: default 20 per page, max 200. Use `page` (0-indexed) and `has_more` / `next_page` to iterate.
 
 Note on disliked leads: the Leadbay backend does not expose a cross-lens disliked filter. To see disliked state on a specific lead, use `leadbay_research_lead` or check the `disliked` field on individual leads from `leadbay_pull_leads`.
 
