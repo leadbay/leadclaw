@@ -1,0 +1,21 @@
+---
+name: leadbay_dislike_lead
+kind: tool-description
+short_description: |
+  Mark a lead as disliked — signals negative interest to the Leadbay
+  scoring engine, improving future batch quality by filtering similar leads.
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+---
+Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
+
+Pass the lead's UUID as `lead_id`. The `lens_id` is optional and defaults to the user's last-active lens.
+
+{{include:headers/tool-when-to-use}} the user explicitly rejects a lead ("not relevant", "wrong industry", "too small", "thumbs down", "skip this", "not a fit"). Use proactively after `leadbay_research_lead` reveals disqualifying signals.
+
+{{include:headers/tool-when-not-to-use}} the user simply wants to defer a lead — use `leadbay_set_pushback` to snooze instead. Dislike is a permanent negative signal; pushback is a temporary deferral.
+
+{{include:headers/verification-required-if-write}}

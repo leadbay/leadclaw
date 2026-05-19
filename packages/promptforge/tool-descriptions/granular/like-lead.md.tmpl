@@ -1,0 +1,21 @@
+---
+name: leadbay_like_lead
+kind: tool-description
+short_description: |
+  Mark a lead as liked — signals positive interest to the Leadbay
+  scoring engine, influencing future batch composition.
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+---
+Mark a lead as liked. This is the same action as clicking the thumbs-up on the Leadbay website. The signal is fed back into the scoring engine: liked leads improve the quality of future batches by teaching Leadbay what the user finds relevant.
+
+Pass the lead's UUID as `lead_id`. The `lens_id` is optional and defaults to the user's last-active lens.
+
+{{include:headers/tool-when-to-use}} the user explicitly approves of a lead ("this one looks good", "I like this", "thumbs up", "save this one", "this is a good fit"). Also use after `leadbay_research_lead` reveals strong signals.
+
+{{include:headers/tool-when-not-to-use}} the user is just reading or researching a lead without expressing approval. Use `leadbay_dislike_lead` for negative signals.
+
+{{include:headers/verification-required-if-write}}
