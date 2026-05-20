@@ -11,6 +11,7 @@ import {
   type ToolLogger,
 } from "@leadbay/core";
 import { buildServer } from "./server.js";
+import { initTelemetry } from "./telemetry.js";
 
 // __LEADBAY_MCP_VERSION__ is replaced at build time by tsup with the string
 // literal from packages/mcp/package.json#version. Single source of truth —
@@ -53,6 +54,13 @@ ENV VARS
                          journaled in-process and return {mocked: true, would_call: {...}}.
   LEADBAY_MOCK_DIR       (optional) Fixture directory. Default: ./.context/leadbay-live-shapes/
   LEADBAY_LOG_LEVEL      (optional) "debug" | "info" | "error" (default "error"). Logs to stderr.
+  LEADBAY_TELEMETRY_ENABLED  (optional) Default "true". Sends product usage events
+                         (tool name, duration, ok flag, error code) to PostHog and
+                         unexpected errors to Sentry, helping Leadbay improve the MCP.
+                         Events are tied to your Leadbay account email (so MCP usage
+                         consolidates with web-app usage in our analytics). Tool
+                         arguments, response bodies, and lead PII are NEVER captured.
+                         Set to "false" to opt out. See README "Privacy & telemetry".
 
 EXAMPLE Claude Desktop config (~/Library/Application Support/Claude/claude_desktop_config.json)
   {
@@ -62,7 +70,8 @@ EXAMPLE Claude Desktop config (~/Library/Application Support/Claude/claude_deskt
         "args": ["-y", "@leadbay/mcp@0.3"],
         "env": {
           "LEADBAY_TOKEN": "lb_...",
-          "LEADBAY_REGION": "us"
+          "LEADBAY_REGION": "us",
+          "LEADBAY_TELEMETRY_ENABLED": "true"
         }
       }
     }
@@ -794,7 +803,8 @@ async function readChoice(prompt: string, def = true): Promise<boolean> {
 export function buildClaudeCodeAddArgs(
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): string[] {
   const args = [
     "mcp",
@@ -806,6 +816,11 @@ export function buildClaudeCodeAddArgs(
     `LEADBAY_TOKEN=${token}`,
     "--env",
     `LEADBAY_REGION=${region}`,
+    // Always written explicitly (not just when opting out) so MCP-client
+    // config UIs can render it as a toggle the user can flip without
+    // editing the file by hand.
+    "--env",
+    `LEADBAY_TELEMETRY_ENABLED=${telemetryEnabled ? "true" : "false"}`,
   ];
   if (!includeWrite) args.push("--env", `LEADBAY_MCP_WRITE=0`);
   args.push("--", "npx", "-y", "@leadbay/mcp@0.3");
@@ -815,10 +830,11 @@ export function buildClaudeCodeAddArgs(
 async function installInClaudeCode(
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): Promise<{ ok: boolean; message: string }> {
   const cp = await import("node:child_process");
-  const args = buildClaudeCodeAddArgs(token, region, includeWrite);
+  const args = buildClaudeCodeAddArgs(token, region, includeWrite, telemetryEnabled);
   return await new Promise((resolve) => {
     const child = cp.spawn("claude", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
@@ -848,7 +864,8 @@ async function installInJsonConfig(
   configPath: string,
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): Promise<{ ok: boolean; message: string }> {
   try {
     const { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } = await import("node:fs");
@@ -872,6 +889,8 @@ async function installInJsonConfig(
     const env: Record<string, string> = {
       LEADBAY_TOKEN: token,
       LEADBAY_REGION: region,
+      // Always written so MCP-client config UIs can render it as a toggle.
+      LEADBAY_TELEMETRY_ENABLED: telemetryEnabled ? "true" : "false",
     };
     // Default in 0.3.0 is writes-on; only set the env when explicitly disabled.
     if (!includeWrite) env.LEADBAY_MCP_WRITE = "0";
@@ -907,7 +926,7 @@ async function runInstall(args: string[]): Promise<number> {
   if (!email) {
     process.stderr.write(
       "Usage: leadbay-mcp install --email you@example.com [--region us|fr]\n" +
-        "                          [--allow-region-fallback] [--no-write]\n" +
+        "                          [--allow-region-fallback] [--no-write] [--no-telemetry]\n" +
         "                          [--target claude-code,claude-desktop,cursor]\n" +
         "                          [--yes] [--force-legacy]\n" +
         "  Mints a token AND registers the MCP server with your installed clients (at user scope).\n" +
@@ -915,6 +934,10 @@ async function runInstall(args: string[]): Promise<number> {
         "  --no-write          Disable composite write tools (refine_prompt, report_outreach,\n" +
         "                      adjust_audience, etc.). They are ON by default since 0.3.0;\n" +
         "                      pass --no-write for read-only agents.\n" +
+        "  --no-telemetry      Opt out of product usage events (PostHog + Sentry).\n" +
+        "                      Defaults to ON: helps Leadbay improve the MCP. Events are\n" +
+        "                      tied to your Leadbay email; tool args, response bodies,\n" +
+        "                      and lead PII are NEVER captured.\n" +
         "  --include-write     (deprecated since 0.3.0; now a no-op — writes are on by default).\n" +
         "  --yes               Don't ask before installing into each detected client.\n" +
         "  --force-legacy      Write to claude_desktop_config.json even when Claude Desktop 2026\n" +
@@ -1048,6 +1071,24 @@ async function runInstall(args: string[]): Promise<number> {
     );
   }
 
+  // Telemetry is ON by default; --no-telemetry opts out. Always written
+  // explicitly to the env block so MCP-client UIs render it as a toggle.
+  const telemetryEnabled = !hasFlag(args, "no-telemetry");
+  if (telemetryEnabled) {
+    process.stderr.write(
+      "Product usage events ENABLED — helps Leadbay improve the MCP. We capture\n" +
+        "  per-tool-call metrics (name, duration, ok/error code) and unexpected exceptions.\n" +
+        "  Events are tied to your Leadbay email (so MCP usage consolidates with web-app\n" +
+        "  usage in our analytics) — they are NOT anonymous. Tool arguments, response\n" +
+        "  bodies, and lead PII are NEVER sent. Flip the toggle\n" +
+        "  LEADBAY_TELEMETRY_ENABLED=false in your client's env block to opt out anytime.\n\n"
+    );
+  } else {
+    process.stderr.write(
+      "Product usage events DISABLED. Re-run without --no-telemetry to enable.\n\n"
+    );
+  }
+
   const skipPrompts = hasFlag(args, "yes");
 
   const results: Array<{ id: string; label: string; ok: boolean; message: string }> = [];
@@ -1071,11 +1112,11 @@ async function runInstall(args: string[]): Promise<number> {
     }
     let res: { ok: boolean; message: string };
     if (c.id === "claude-code") {
-      res = await installInClaudeCode(token, region, includeWrite);
+      res = await installInClaudeCode(token, region, includeWrite, telemetryEnabled);
     } else {
       // claude-desktop and cursor both use the same JSON shape.
       const path = c.detail.split(" ")[0];
-      res = await installInJsonConfig(path, token, region, includeWrite);
+      res = await installInJsonConfig(path, token, region, includeWrite, telemetryEnabled);
     }
     results.push({ id: c.id, label: c.label, ...res });
   }
@@ -1182,7 +1223,14 @@ async function main(): Promise<void> {
 
   // Stdio MCP mode (default).
   const logger = makeStderrLogger(parseLogLevel(process.env.LEADBAY_LOG_LEVEL));
+  // Telemetry (PostHog + Sentry). ON by default; opt-out via
+  // LEADBAY_TELEMETRY_DISABLED=1. See packages/mcp/src/telemetry.ts.
+  const telemetry = initTelemetry({ version: VERSION, logger });
   const client = await resolveClientFromEnv(logger);
+  // Non-blocking identify — kicks off /users/me (cached if region
+  // auto-probe already paid for it). Events captured before identity
+  // resolves are buffered and flushed once me.email lands.
+  telemetry.identify(client);
   const includeAdvanced = process.env.LEADBAY_MCP_ADVANCED === "1";
   const includeWrite = parseWriteEnv();
 
@@ -1196,12 +1244,27 @@ async function main(): Promise<void> {
     logger,
     bulkTracker,
     version: VERSION,
+    telemetry,
   });
   const transport = new StdioServerTransport();
   logger.info?.(
     `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability})`
   );
   await server.connect(transport);
+
+  // Shutdown hooks: flush PostHog + Sentry bounded at 2s each so a network
+  // hang can't block process exit. stdio-end fires when the MCP client
+  // (Claude Desktop, Cursor) disconnects — same effect as SIGTERM.
+  const shutdown = async (code: number) => {
+    try {
+      await telemetry.shutdown();
+    } finally {
+      process.exit(code);
+    }
+  };
+  process.once("SIGINT", () => void shutdown(130));
+  process.once("SIGTERM", () => void shutdown(143));
+  process.stdin.once("end", () => void shutdown(0));
 }
 
 // Run main() only when invoked as a CLI. realpath on both sides handles
@@ -1218,8 +1281,18 @@ const isEntrypoint = (() => {
 })();
 
 if (isEntrypoint) {
-  main().catch((err) => {
+  main().catch(async (err) => {
     process.stderr.write(`leadbay-mcp: ${err?.message ?? err}\n`);
+    // Best-effort Sentry capture for bootstrap failures (token missing,
+    // region probe fully failed, etc.). Standalone init so the catch site
+    // doesn't depend on main() having reached the telemetry handle.
+    try {
+      const bootTelemetry = initTelemetry({ version: VERSION });
+      bootTelemetry.captureException(err, { tool: "__bootstrap__" });
+      await bootTelemetry.shutdown();
+    } catch {
+      // Swallow — telemetry must never block the failure exit.
+    }
     process.exit(1);
   });
 }

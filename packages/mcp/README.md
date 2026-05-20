@@ -459,9 +459,49 @@ Use `dry_run: true` to validate domain formatting and wizard reachability withou
 - The `leadbay_login` tool from the OpenClaw adapter is **not** registered on MCP: exposing a credential-taking tool to an LLM is a prompt-injection risk. Use the token path above.
 - The `leadbay_add_note` and `leadbay_enrich_contacts` tools are write actions flagged `optional: true`. If your client supports per-tool opt-in, leave them disabled until you need them.
 
-### Privacy
+### Privacy & telemetry
 
-Contact data fetched through this server stays local to your MCP client session. No analytics or telemetry is sent by `@leadbay/mcp`. Requests to Leadbay are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
+`@leadbay/mcp` sends product usage events to PostHog and reports unexpected errors to Sentry — same posture as the Leadbay web app. PostHog measures product usage (which tools fire, durations, error rates); Sentry catches crashes we'd otherwise never see.
+
+**These events are NOT anonymous.** Each event is tied to your Leadbay account email (`distinctId = me.email`) so your MCP activity consolidates with your web-app activity under the same identity in our analytics — that's the same identity model the web app already uses. If you'd rather not have your MCP usage attributed to you, opt out (see below).
+
+**What we send to PostHog** (per tool call):
+
+| Event | When | Properties |
+|---|---|---|
+| `mcp tool called` | Every tool invocation | `tool`, `ok`, `duration_ms`, `format`, `bytes`, `error_code` (if failed) |
+| `mcp quota hit` | When the API returns `QUOTA_EXCEEDED` (HTTP 429/402) | `tool`, `retry_after_s`, `endpoint` |
+| `mcp topup link created` | When `leadbay_create_topup_link` returns a checkout URL | `tool` (the URL itself is **never** captured) |
+
+After your first authenticated call, your PostHog `distinctId` is set to your Leadbay account email so MCP events consolidate with web-app events for the same person. Events also carry `$groups.organization` so org-level rollups work.
+
+**What we never send**: tool argument bodies, response bodies, lead emails / phones, Stripe URLs, lens descriptions, qualification answers.
+
+**Errors to Sentry**: only unexpected throws (TypeError, network failures, parse bugs). Expected business outcomes — quota walls, missing resources, auth expiry, billing suspension — stay in PostHog only.
+
+**Opt out** — `leadbay-mcp install` writes `LEADBAY_TELEMETRY_ENABLED=true` into your MCP client's env block by default. Most clients (Claude Desktop, Cursor) render env-var booleans as a toggle in their settings UI, so you can flip it without editing the file. To opt out at install time, pass `--no-telemetry`; to opt out manually, flip the env value to `"false"`:
+
+```jsonc
+{
+  "mcpServers": {
+    "leadbay": {
+      "command": "npx",
+      "args": ["-y", "@leadbay/mcp@0.10"],
+      "env": {
+        "LEADBAY_TOKEN": "u.…",
+        "LEADBAY_REGION": "us",
+        "LEADBAY_TELEMETRY_ENABLED": "false"
+      }
+    }
+  }
+}
+```
+
+Accepted values: `"true"|"1"|"yes"|"on"` enable; `"false"|"0"|"no"|"off"` disable (case-insensitive). Unset / unrecognized values default to enabled.
+
+**Override the destinations** with `LEADBAY_POSTHOG_KEY=<your-project-key>` and/or `LEADBAY_SENTRY_DSN=<your-dsn>` if you'd rather pipe to your own projects. Telemetry is also disabled automatically when `NODE_ENV=test`.
+
+Contact data fetched through this server stays local to your MCP client session — telemetry never carries it. Requests to Leadbay are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
 
 ## 7. For maintainers — publishing
 

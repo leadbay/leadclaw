@@ -32,6 +32,7 @@ import {
   type ToolContext,
   type ToolLogger,
 } from "@leadbay/core";
+import { NOOP_TELEMETRY, type TelemetryHandle } from "./telemetry.js";
 
 // SERVER_INSTRUCTIONS is now BUILT from the actual exposed tool set (see
 // buildServerInstructions below). 0.2.x shipped a single static string that
@@ -270,6 +271,10 @@ interface BuildServerOptions {
   // wiring without depending on long-running real composites.
   // Production code does not pass this.
   extraTools?: Tool[];
+  // Telemetry handle (PostHog + Sentry). Defaults to NOOP_TELEMETRY when
+  // omitted (tests + offline embeds). The CLI builds the real handle via
+  // initTelemetry() in bin.ts and passes it here.
+  telemetry?: TelemetryHandle;
 }
 
 function formatErrorForLLM(err: any): string {
@@ -457,8 +462,27 @@ export function buildServer(
   const DEBUG_RAW = process.env.LEADBAY_DEBUG ?? "";
   const DEBUG_ON = DEBUG_RAW === "1" || DEBUG_RAW.toLowerCase() === "true";
 
+  // Telemetry handle is always non-null (defaults to NOOP_TELEMETRY) so
+  // capture sites don't branch. The real handle is wired in bin.ts via
+  // initTelemetry() and emits to PostHog + Sentry.
+  const telemetry: TelemetryHandle = opts.telemetry ?? NOOP_TELEMETRY;
+
+  // A LeadbayError surfaced either via throw OR via the `{ error: true,
+  // code, ... }` envelope shape (see formatErrorForLLM). Either way it
+  // represents a business outcome (QUOTA_EXCEEDED, NOT_FOUND, AUTH_EXPIRED,
+  // FORBIDDEN, BILLING_SUSPENDED, API_ERROR) — captured as PostHog
+  // tool-call event with `error_code`, NOT as a Sentry exception. Plain
+  // throws (TypeError, network errors, parse bugs) DO go to Sentry.
+  const isLeadbayBusinessError = (err: any): err is { error: true; code: string; _meta?: any } =>
+    err != null &&
+    typeof err === "object" &&
+    err.error === true &&
+    typeof err.code === "string";
+
   server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
-    const debugStart = DEBUG_ON ? Date.now() : 0;
+    // Duration timer is always on now (telemetry needs it). The DEBUG
+    // gating moves to the stderr-write step.
+    const callStart = Date.now();
     const name = req.params.name;
     const tool = toolByName.get(name);
     if (!tool) {
@@ -543,9 +567,32 @@ export function buildServer(
         typeof result === "object" &&
         (result as any).error === true
       ) {
+        const envText = formatErrorForLLM(result);
+        const envDur = Date.now() - callStart;
+        const envCode = (result as any).code ?? "Error";
+        if (envCode === "QUOTA_EXCEEDED") {
+          telemetry.captureQuotaHit({
+            tool: name,
+            retry_after_s: (result as any)._meta?.retry_after,
+            endpoint: (result as any)._meta?.endpoint,
+          });
+        }
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: envDur,
+          format: "error-envelope",
+          bytes: envText.length,
+          error_code: envCode,
+        });
+        if (DEBUG_ON) {
+          process.stderr.write(
+            `[leadbay-mcp debug] tool=${name} dur=${envDur}ms ok=false code=${envCode}\n`
+          );
+        }
         return {
           content: [
-            { type: "text", text: formatErrorForLLM(result) },
+            { type: "text", text: envText },
           ],
           isError: true,
         };
@@ -576,11 +623,24 @@ export function buildServer(
         ) {
           out.structuredContent = env.structured;
         }
+        const mdDur = Date.now() - callStart;
+        const mdBytes = env.markdown.length;
+        telemetry.captureToolCall({
+          tool: name,
+          ok: true,
+          duration_ms: mdDur,
+          format: "markdown",
+          bytes: mdBytes,
+        });
+        if (
+          name === "leadbay_create_topup_link" &&
+          typeof (env.structured as any)?.url === "string"
+        ) {
+          telemetry.captureTopupLink({ tool: name });
+        }
         if (DEBUG_ON) {
-          const dur = Date.now() - debugStart;
-          const bytes = env.markdown.length;
           process.stderr.write(
-            `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes} format=markdown\n`
+            `[leadbay-mcp debug] tool=${name} dur=${mdDur}ms ok=true bytes=${mdBytes} format=markdown\n`
           );
         }
         return out;
@@ -604,26 +664,69 @@ export function buildServer(
       ) {
         response.structuredContent = result;
       }
+      const okText = (response.content as any)[0]?.text ?? "";
+      const okBytes = typeof okText === "string" ? okText.length : 0;
+      const okDur = Date.now() - callStart;
+      telemetry.captureToolCall({
+        tool: name,
+        ok: true,
+        duration_ms: okDur,
+        format: "json",
+        bytes: okBytes,
+      });
+      if (
+        name === "leadbay_create_topup_link" &&
+        typeof (result as any)?.url === "string"
+      ) {
+        telemetry.captureTopupLink({ tool: name });
+      }
       if (DEBUG_ON) {
-        const dur = Date.now() - debugStart;
-        const text = (response.content as any)[0]?.text ?? "";
-        const bytes = typeof text === "string" ? text.length : 0;
         process.stderr.write(
-          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes}\n`
+          `[leadbay-mcp debug] tool=${name} dur=${okDur}ms ok=true bytes=${okBytes}\n`
         );
       }
       return response;
     } catch (err: any) {
+      const errDur = Date.now() - callStart;
+      const errText = formatErrorForLLM(err);
+      const code = err?.code ?? err?.name ?? "Error";
+      if (isLeadbayBusinessError(err)) {
+        if (err.code === "QUOTA_EXCEEDED") {
+          telemetry.captureQuotaHit({
+            tool: name,
+            retry_after_s: err._meta?.retry_after,
+            endpoint: err._meta?.endpoint,
+          });
+        }
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: errDur,
+          format: "error-envelope",
+          bytes: errText.length,
+          error_code: code,
+        });
+      } else {
+        // Unexpected throw — capture to Sentry AND record the tool-call
+        // event so the failure shows up in product analytics too.
+        telemetry.captureException(err, { tool: name });
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: errDur,
+          format: "error-envelope",
+          bytes: errText.length,
+          error_code: code,
+        });
+      }
       if (DEBUG_ON) {
-        const dur = Date.now() - debugStart;
-        const code = err?.code ?? err?.name ?? "Error";
         process.stderr.write(
-          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=false code=${code}\n`
+          `[leadbay-mcp debug] tool=${name} dur=${errDur}ms ok=false code=${code}\n`
         );
       }
       return {
         content: [
-          { type: "text", text: formatErrorForLLM(err) },
+          { type: "text", text: errText },
         ],
         isError: true,
       };
