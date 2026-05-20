@@ -22,10 +22,12 @@ import {
   leadbay_daily_check_in,
   leadbay_import_file,
   leadbay_log_outreach,
+  leadbay_plan_tour_in_city,
   leadbay_prospecting_overview,
   leadbay_qualify_top_n,
   leadbay_refine_audience,
   leadbay_research_a_domain,
+  leadbay_setup_team_prospecting,
   PROMPT_META,
 } from "./prompts.generated.js";
 
@@ -162,6 +164,61 @@ const CATALOG: CatalogEntry[] = [
         substitutePlaceholders(leadbay_log_outreach, {
           lead_id: args.lead_id ?? "<missing>",
           summary: args.summary ?? "<missing>",
+        }),
+      ),
+    ],
+  },
+  {
+    name: "leadbay_plan_tour_in_city",
+    description: PROMPT_META.leadbay_plan_tour_in_city.short_description,
+    arguments: [
+      {
+        name: "city",
+        description:
+          "City or region the user is visiting (e.g. 'Limoges', 'Bay Area'). Used as the geo filter for both Monitor and Discover lookups.",
+        required: true,
+      },
+      {
+        name: "date",
+        description:
+          "When the visit is (e.g. 'May 24', 'next Thursday'). Surfaced in the outreach drafts as 'I'll be in <city> on <date>'.",
+        required: false,
+      },
+    ],
+    render: (args) => [
+      userMessage(
+        substitutePlaceholders(leadbay_plan_tour_in_city, {
+          city: args.city ?? "<missing>",
+          date_paren: args.date ? ` on ${args.date}` : "",
+          date_dash: args.date ? ` – ${args.date}` : "",
+        }),
+      ),
+    ],
+  },
+  {
+    name: "leadbay_setup_team_prospecting",
+    description: PROMPT_META.leadbay_setup_team_prospecting.short_description,
+    arguments: [
+      {
+        name: "audience",
+        description:
+          "Natural-language audience description (e.g. 'plumbing companies with 10-50 employees in Seine-Maritime').",
+        required: true,
+      },
+      {
+        name: "rep_split",
+        description:
+          "Optional: how to split validated leads into per-rep campaigns. Free text (e.g. 'split by city', 'one campaign per rep').",
+        required: false,
+      },
+    ],
+    render: (args) => [
+      userMessage(
+        substitutePlaceholders(leadbay_setup_team_prospecting, {
+          audience: args.audience ?? "<missing>",
+          rep_split_block: args.rep_split
+            ? `Rep split preference: **${args.rep_split}**\n`
+            : "",
         }),
       ),
     ],

@@ -39,6 +39,8 @@ describe("prompts/* capability (P2 prompts)", () => {
       "leadbay_import_file",
       "leadbay_refine_audience",
       "leadbay_log_outreach",
+      "leadbay_plan_tour_in_city",
+      "leadbay_setup_team_prospecting",
       "leadbay_qualify_top_n",
     ]);
     // Each prompt has a description.
