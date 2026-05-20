@@ -1,5 +1,7 @@
 ## NEXT STEPS — after the research card
 
+{{include:next-steps/ask-user-input-routing}}
+
 Offer 2–3 follow-ups that match the detected mode. Always offer a cross-mode pivot at the end so the user can redirect if you guessed wrong.
 
 ### MODE A (Discovery)

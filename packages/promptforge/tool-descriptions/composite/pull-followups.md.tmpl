@@ -2,16 +2,52 @@
 name: leadbay_pull_followups
 kind: tool-description
 short_description: |
-  Pull KNOWN leads to follow up on — the Monitor view (re-engagement
-  workflow). Server-persisted filter by city / sector / recency / action.
-  Distinct from leadbay_pull_leads (discovery / fresh leads).
+  Pull KNOWN leads to follow up — Monitor view (re-engagement). Filter
+  by city/sector/recency/action. 4-col status-badge table (NO score
+  bar). Distinct from leadbay_pull_leads (discovery / fresh leads).
+routing:
+  triggers:
+    - "what should I follow up on"
+    - "leads I've already worked"
+    - "leads I haven't contacted"
+    - "what's overdue"
+    - "stale leads"
+    - "before my trip"
+    - "this month"
+    - "what's going on with my pipeline"
+    - "leads in <city / state / country>"
+  anti_triggers:
+    - phrase: "show me leads / new leads / today's prospects"
+      route_to: leadbay_pull_leads
+    - phrase: "I'm going to <city> / in person / trip"
+      route_to: leadbay_followups_map
+    - phrase: "Texas / California / France etc. — place names go in `city`, NOT `keywords`"
+      route_to: leadbay_pull_followups
+  prefer_when: "user names a city / sector / recency window → pass `city` (or `set_filter`) so the result is narrowed AND persists for the next session"
+  examples:
+    positive:
+      - "What should I follow up on this week?"
+      - "Which leads have I not contacted in 30 days?"
+      - "What's overdue in my pipeline?"
+    negative:
+      - "Show me today's new leads."
+      - "I'm flying to Berlin Thursday — who can I meet?"
+      - "Draft an email to Sarah at Acme."
+rendering_hint: |
+  4-col markdown table sorted by `last_monitor_action_at` desc, NO
+  score bar (status badges instead). Col 1 = status (🎯⚡🟢💤✨🔥❄) +
+  company link + location/size. Col 2 = AI take (3 lines from
+  `split_ai_summary`). Col 3 = history + notes. Col 4 = contacts
+  (★ recommended, ☎ 📧 pills). Active-filters chip line ABOVE the
+  table. Detail + status priority below.
+next_steps: pull-followups
 annotations:
   readOnlyHint: true
   destructiveHint: false
   idempotentHint: true
   openWorldHint: true
 ---
-Pull KNOWN leads from the user's Monitor view — the re-engagement entry point of the two-entry-point workflow. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", "this month", "what's overdue", or any phrasing that implies pre-existing pipeline context. For NEW leads from the Discover wishlist, use `leadbay_pull_leads` instead.
+Pull KNOWN leads from the user's Monitor view — the re-engagement entry point. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", or any phrasing implying pre-existing pipeline context. For NEW leads from Discover, use `leadbay_pull_leads`.
 
 Backend: wraps `GET /1.5/monitor?personal=&liked=&filtered=&count=&page=` plus, when `set_filter` is supplied, a preceding `POST /1.5/monitor/filter` to persist the filter server-side. The Monitor filter is a single `FilterItem` per user — refreshing the page restores it.
 
@@ -28,7 +64,9 @@ Practical mapping from user phrasing to criterion:
 | "leads 50–200 employees"             | `{type: "size", sizes: [{min: 50, max: 200}]}`                       |
 | "Y Combinator companies"             | `{type: "yc"}`                                                       |
 
-Geo filtering requires `admin_area_id` resolution (the backend doesn't accept free-text city names in `location_ids`). The MCP doesn't expose an admin-area lookup yet — for now, ask the user to pick the geo from the Leadbay app's filter UI, or skip the geo filter and rely on agent post-filtering of the response.
+Geo filtering needs `admin_area_id` resolution — backend rejects free-text in `location_ids`. Pass `city: "<free-text>"` and the composite calls `/geo/search` internally, picks the best match, merges its id into `set_filter`. Ambiguous matches return `status: "ambiguous_locations"` + `location_ambiguities[]` — pick an id and re-call with `city_id`. For multi-city cases, call `leadbay_list_locations` then pass `set_filter.criteria` with `{type: "location_ids", is_excluded: false, locations: [...]}`.
+
+**Place names go through `city`, NEVER `keywords`.** This includes any geographic token the user names — cities (`"Berlin"`, `"NYC"`), states / provinces / regions (`"Texas"`, `"California"`, `"Bavaria"`), countries (`"France"`, `"United States"`), neighborhoods (`"Brooklyn"`, `"SoHo"`). The `/geo/search` resolver handles all admin levels — level 4 (state) and level 2 (country) resolve just as well as level 5 (city). If you put `"Texas"` in `keywords` you get a TEXT-MATCH against company descriptions (≈0 hits) instead of a real state filter. If a place name resolves ambiguously, surface the choices to the user — do NOT silently fall back to keyword search or to the unfiltered Monitor view. If `keywords: ["Texas"]` returned empty, the next call is `city: "Texas"`, not `keywords: []`.
 
 **Pushback exclusion.** Leads with active pushback (`pushback_status` set and `pushback_until > today`) are excluded from the response. The composite enforces this client-side; `total_excluded_by_pushback` in the output reports how many rows were dropped.
 
@@ -36,7 +74,7 @@ Geo filtering requires `admin_area_id` resolution (the backend doesn't accept fr
 
 {{include:headers/tool-when-not-to-use}} for NEW leads — that's `leadbay_pull_leads` (Discover).
 
-**Anti-confusion guardrail.** If you're iterating `pull_leads` pages looking for rows with `prospecting_actions_count > 0` or `notes_count > 0`, STOP — wrong entry point. The two read different backend tables; a lead with follow-up history may not appear in `pull_leads` (already aged out of the new-leads queue). Call `pull_followups` instead.
+**Anti-confusion guardrail.** Iterating `pull_leads` pages looking for `prospecting_actions_count > 0` or `notes_count > 0` rows is the wrong entry point — the two read different tables. Leads with follow-up history live in `pull_followups`.
 
 ---
 

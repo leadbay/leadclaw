@@ -1,5 +1,7 @@
 ## NEXT STEPS — after the outreach brief
 
+{{include:next-steps/ask-user-input-routing}}
+
 Offer 2–3 follow-ups. Choose based on enrichment state + available channels + history. Always offer the "log outreach" option once the user has clearly contacted someone.
 
 | Observation                                     | Suggest                                                       | Calls                                                  |

@@ -5,11 +5,44 @@
 // Tool descriptions, alphabetized by frontmatter.name.
 
 // region: leadbay_account_status
-export const leadbay_account_status: string = `Show the user's account state — admin rights, language, last-active lens, current quota usage across daily/weekly/monthly windows for llm_completion / ai_rescore / web_fetch resources, and whether the org's intelligence is mid-regeneration. Quota windows also hint at the user's consumption pace: heavy recent activity (ai_rescore / web_fetch near their window limits) is a signal that Leadbay will deliver a larger fresh batch next time the user logs back in, since batch size is paced by real consumption.
+export const leadbay_account_status: string = `## WHEN TO USE
 
-WHEN TO USE: at the start of a session to know what the agent can/can't do, or after a 429 to explain to the user which resource window was exhausted and when it resets.
+Trigger phrases: "what's my account status", "how much quota do I have", "what lens am I on", "am I an admin", "is intelligence still regenerating", "I topped up / I bought credits / I added credits".
 
-WHEN NOT TO USE: as a pre-flight gate before bulk ops — operations themselves return 429; this tool is for context, not gating.
+Do NOT use for: "show me leads / today's prospects" → \`leadbay_pull_leads\`.
+
+Prefer when: user opens with a meta question about themselves / their workspace — typically as a daily check-in opener
+
+Examples that SHOULD invoke this tool:
+- "What's my account status?"
+- "How much quota do I have left this week?"
+- "Is my intelligence still regenerating?"
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Show me today's leads."
+- "What should I follow up on?"
+- "Run the daily check-in."
+
+## RENDER (quick)
+
+Compact markdown: org name + admin badge on line 1; active lens on
+line 2; per-window quota usage as \`(used / cap)\` chips for
+llm_completion · ai_rescore · web_fetch. Surface regeneration flag
+prominently if mid-regen.
+
+---
+
+Show the user's account state — admin rights, language, last-active lens, current quota usage across daily/weekly/monthly windows for llm_completion / ai_rescore / web_fetch resources, and whether the org's intelligence is mid-regeneration. Quota windows also hint at the user's consumption pace: heavy recent activity (ai_rescore / web_fetch near their window limits) is a signal that Leadbay will deliver a larger fresh batch next time the user logs back in, since batch size is paced by real consumption.
+
+**Top-ups always beat waiting.** When a quota window is hit, the user has two options: wait for the window reset (\`resets_at\` in each quota entry) OR top up AI credits. Top-ups clear the throttle IMMEDIATELY; they are not subject to the same window. When you tell the user about a 429 / quota exhaustion, ALWAYS surface both options — "wait until <reset>" or "top up now (I can generate the link)" — and let them pick. Never default-recommend "wait until tomorrow" when a 30-second top-up unblocks the same operation.
+
+**Offer the top-up link via \`leadbay_create_topup_link\`.** When the user accepts the top-up offer, call \`leadbay_create_topup_link\` and surface the returned Stripe checkout URL as a clickable link. The user completes payment in their browser; nothing is charged just by generating the URL. For ongoing subscription changes (plan upgrade / payment method), use \`leadbay_open_billing_portal\` instead.
+
+**After a user tops up, do NOT keep refusing — RETRY.** If the user signals they topped up / bought credits / added credits, the previous QUOTA_EXCEEDED is invalidated the moment the Stripe webhook lands. RE-CALL \`leadbay_account_status\` to pick up the new state AND retry the originally failed call. The retry itself does not require a successful account_status check first — a topped-up user has cleared the throttle whether or not your cached snapshot reflects it yet. If the retry hits the wall again, only then re-offer top-up / wait. **A stale quota snapshot is never a reason to gate-keep a topped-up user.**
+
+WHEN TO USE: at the start of a session to know what the agent can/can't do, after a 429 to explain to the user which resource window was exhausted and when it resets (and to offer the top-up alternative), and after the user signals a top-up so the agent can resume the interrupted workflow.
+
+WHEN NOT TO USE: as a pre-flight gate before bulk ops — operations themselves return 429; this tool is for context, not gating. And: a recent quota snapshot showing "exhausted" is NOT a reason to refuse a write call when the user has just topped up — re-call this tool first, then proceed.
 `;
 // endregion: leadbay_account_status
 
@@ -98,6 +131,32 @@ Do not enumerate the affected leads — that's the job of \`leadbay_pull_leads\`
 
 ## NEXT STEPS — after kicking off bulk qualification
 
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
 Exactly two offers — keep it terse, this is a status tool:
 
 | Observation                          | Suggest                                       | Calls                          |
@@ -162,6 +221,26 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_create_lens_draft
 
+// region: leadbay_create_topup_link
+export const leadbay_create_topup_link: string = `Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps \`POST /1.5/stripe/topup_checkout\` → \`{url}\`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
+
+**When a quota window is hit, offer top-up as the FIRST option.** A top-up clears the throttle immediately (no need to wait for the daily/weekly/monthly window reset). The flow:
+
+1. Operation returns QUOTA_EXCEEDED / 429.
+2. Tell the user which window was hit (from \`leadbay_account_status\` / \`leadbay_get_quota\`) and offer BOTH options: "wait until \`<resets_at>\`" OR "top up at app.leadbay.ai (I can generate the link)".
+3. If the user accepts top-up, call \`leadbay_create_topup_link\` and surface the returned \`url\` as a clickable link.
+4. Tell the user to complete checkout in their browser. After they return saying "I topped up" / "bought credits" / "added credits", call \`leadbay_account_status\` to confirm the refreshed state, then RETRY the originally failed call.
+
+Do NOT call this tool defensively before any quota error — only after a real 429 or in response to the user's explicit "I want to top up" / "I'll buy credits". The URL is single-use and rotating it without the user asking just clutters the conversation.
+
+\`leadbay_open_billing_portal\` is the companion tool for ongoing subscription management (upgrade / downgrade / payment methods) via the Stripe customer portal.
+
+WHEN TO USE: when a quota error has blocked the user's intent and they want to keep working today rather than wait for the window reset; OR when the user explicitly asks for a top-up link.
+
+WHEN NOT TO USE: pre-flight (the agent is not paying — the user is); for subscription / plan changes use \`leadbay_open_billing_portal\` instead; for read-only quota diagnostics use \`leadbay_account_status\` / \`leadbay_get_quota\`.
+`;
+// endregion: leadbay_create_topup_link
+
 // region: leadbay_deselect_leads
 export const leadbay_deselect_leads: string = `Remove leads from the user's transient selection.
 
@@ -183,9 +262,37 @@ WHEN NOT TO USE: as the agent's default lead-discovery entry point — use leadb
 // endregion: leadbay_discover_leads
 
 // region: leadbay_dislike_lead
-export const leadbay_dislike_lead: string = `Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
+export const leadbay_dislike_lead: string = `## WHEN TO USE
+
+Trigger phrases: "I don't like this lead", "thumbs down", "not relevant", "wrong industry", "too small", "skip this one permanently", "not a fit", "no to this one".
+
+Do NOT use for: "remind me about this lead later / snooze it / not now" → \`leadbay_set_pushback\`; "thumbs up / save this one / this is a good fit" → \`leadbay_like_lead\`.
+
+Prefer when: user expresses durable rejection of a specific lead; pass the lead's UUID as \`lead_id\`. If the user just wants to defer for now, route to \`leadbay_set_pushback\` instead.
+
+Examples that SHOULD invoke this tool:
+- "Thumbs down — wrong industry."
+- "Dislike this one, never show me leads like this again."
+- "Not a fit at all, remove it."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Skip this for now, ask me again next month."
+- "I'll look at this one later."
+- "I like this lead — save it."
+
+## RENDER (quick)
+
+One short confirmation line after the call returns ("👎 Disliked **{company_name}** —
+negative signal sent."), then continue the current flow (don't dump the full
+lead card again).
+
+---
+
+Mark a lead as disliked. This is the same action as clicking the thumbs-down on the Leadbay website. The signal is fed back into the scoring engine: disliked leads teach Leadbay what to filter out, improving the relevance of future batches.
 
 Pass the lead's UUID as \`lead_id\`.
+
+Dislike is a **permanent** negative signal — it influences scoring durably. If the user only wants to defer a lead ("not now", "remind me next month", "I'll look at this one later"), call \`leadbay_set_pushback\` instead; that's reversible and time-bounded.
 
 WHEN TO USE: the user explicitly rejects a lead ("not relevant", "wrong industry", "too small", "thumbs down", "skip this", "not a fit"). Use proactively after \`leadbay_research_lead\` reveals disqualifying signals.
 
@@ -227,6 +334,175 @@ WHEN NOT TO USE: to enrich a single contact — that's leadbay_enrich_contacts (
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;
 // endregion: leadbay_enrich_titles
+
+// region: leadbay_followups_map
+export const leadbay_followups_map: string = `## WHEN TO USE
+
+Trigger phrases: "I'm going to <city>", "this week's trip", "leads I should visit in person", "visit in person", "show me followups in <city / state / country>", "leads in Texas / California / France / Bavaria etc.", "leads near <city>", "map of leads", "show me on a map", "itinerary", "plan my itinerary", "trip itinerary", "where are my leads".
+
+Do NOT use for: "default follow-up table / status view" → \`leadbay_pull_followups\`; "new leads / today's prospects" → \`leadbay_pull_leads\`.
+
+Prefer when: user signals geographic / map-style intent — even a passive 'before my trip' mention counts
+
+Examples that SHOULD invoke this tool:
+- "I'm flying to New York Thursday — who should I meet in person?"
+- "Show my leads on a map for the SF trip."
+- "Who can I visit while I'm in Chicago next week?"
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "What should I follow up on this week?"
+- "Show me today's new prospects."
+- "Tell me about Acme Corp."
+
+## RENDER (quick)
+
+Two render surfaces — host picks. Primary: route to Claude's
+\`places_map_display_v0\` widget with \`{name, address (lead.location.full),
+latitude+longitude (lead.location.pos[0/1]), notes (short prose with
+bare phone+email)}\` per lead. Fallback: per-lead markdown blocks
+\`### **Company** · City, ST\` + one-sentence note + bare phone/email
+— chat hosts auto-detect into place-card carousel. Detail below.
+
+---
+
+Plot the user's follow-up leads on an interactive map — the canonical surface for travel / in-person / "I'm going to <city>" intent. Wraps \`leadbay_pull_followups\` (same params, response, store-then-apply geo filter); named separately so the agent has an explicit entry-point for travel intent and can route to \`places_map_display_v0\` (when the host exposes it) or emit place-card prose blocks (which most chat hosts auto-detect into Google Place cards).
+
+**Common city aliases resolve automatically** — \`NYC\` / \`New York\` → City of New York, \`SF\` / \`S.F.\` → San Francisco, \`LA\` / \`L.A.\` → Los Angeles, \`DC\` / \`Washington D.C.\` → Washington, \`Philly\` → Philadelphia, \`Vegas\` → Las Vegas, \`NOLA\` → New Orleans. Pass either an abbreviation, a city name, or a pre-resolved \`city_id\`. Ambiguous matches surface as \`status: "ambiguous_locations"\` + \`location_ambiguities[]\` — pick an id and re-call with \`city_id\`.
+
+**\`city\` is the universal geo arg — it resolves any admin level.** Despite the name, pass any place name there: states (\`"Texas"\`, \`"California"\`, \`"Bavaria"\`), countries (\`"France"\`, \`"United States"\`), regions (\`"New England"\`, \`"Bay Area"\`), neighborhoods (\`"Brooklyn"\`, \`"SoHo"\`), or cities. The \`/geo/search\` resolver indexes all levels — level 4 (state), level 2 (country), level 5 (city) — and the composite picks the best match. **Never** put a place name into \`keywords\` instead — that's a text-match against company descriptions, not a real geo filter (e.g. \`keywords: ["Texas"]\` returns ≈0 hits even when the user has dozens of Texas leads). If \`keywords: ["<PlaceName>"]\` returned empty, the correct next call is \`city: "<PlaceName>"\`, NOT the unfiltered Monitor view.
+
+---
+
+## RENDER — host-native map widget (REQUIRED, preferred)
+
+When the host exposes Claude's \`places_map_display_v0\`, route the leads there. It owns the visual surface (markers, place-card carousel, "Notes from Claude") and beats inline prose by miles.
+
+**Call shape — pass the most precise data you have. The richer the address + coordinates, the more likely Google resolves a real business listing and shows structured property pills (phone, website, Directions button, rating) on each card. Cheap city-level data => basic pin + your notes string only.**
+
+\`\`\`
+places_map_display_v0({
+  locations: leads.map(l => ({
+    name: l.company_name ?? l.name,
+    // ★ REQUIRED — pos is [lat, lng] in our payload. Pass them split.
+    latitude:  l.location.pos[0],
+    longitude: l.location.pos[1],
+    // ★ Pass the FULL detailed address from l.location.full
+    //   ("1140, 6th Avenue, 10036, City of New York, New York, United States"),
+    //   NOT a city-level fallback. Google's place lookup needs the street
+    //   + ZIP to resolve a business listing → that's what unlocks the
+    //   structured phone/website/rating pills on the card.
+    address: l.location.full ?? [l.location.city, l.location.state, l.location.country].filter(Boolean).join(", "),
+    notes: <one-sentence pitch — see notes recipe below>,
+    // place_id omitted — Leadbay's backend doesn't store Google Place
+    // IDs. Google resolves implicitly from name + lat/lng + address.
+    // If it doesn't find a listing (small B2B, no Google business page),
+    // the card falls back to your notes string only — that's why the
+    // notes string MUST be self-sufficient (phone + email inline).
+  })),
+  // travel_mode: "driving" if the user mentioned driving / trip, etc.
+})
+\`\`\`
+
+Skip any lead whose \`location.pos\` is null — without lat/lng the widget can't pin it. (Surface them as a "+ N leads without coordinates" footer below the widget instead.)
+
+**Notes recipe for each lead** — "Notes from Claude" on the place card.
+
+CRITICAL REALITY OF THE CAROUSEL: it renders the notes string as **a single wrapped paragraph of plain text**. The carousel renderer:
+- STRIPS markdown — \`[Name](url)\` shows as literal "Name (url)" with the URL visible mid-text;
+- COLLAPSES newlines — vertical stacking does NOT work;
+- TRUNCATES long URLs mid-string visibly;
+- DOES auto-linkify bare phone numbers (\`+1 212-555-0100\` → tappable \`tel:\`) and bare email addresses (\`name@company.com\` → tappable \`mailto:\`) — those become the only "properties" the user can act on inside the card.
+
+So the notes string MUST be short prose with bare-text channels only. Use exactly this shape (one sentence, ≤ ~30 words):
+
+\`\`\`
+★ <One-sentence sector/fit + why-now>. Reach <Contact First Last>, <role>: <bare phone>, <bare email>.
+\`\`\`
+
+Examples:
+- \`★ Strongest fit — active thread, 'trying to reach' from last Friday. Reach Troy Schirk, Principal & CIO: +1 312-550-2382, tschirk@atlasholdingsllc.com.\`
+- \`★ Mid-size HR/staffing match, multi-branch pattern. Reach Irving Enciso, Regional Ops Manager: 952-835-1288, info@employersolutionsgroup.com.\`
+
+Rules:
+- ONE sentence. No newlines. No emoji prefixes (\`👤📞✉️🌐\` add clutter but do NOT create sections — the carousel ignores layout).
+- NO markdown links anywhere in \`notes\`. Especially no LinkedIn URLs — they're long, they mid-truncate visibly, and the carousel renders them as raw text. Save LinkedIn for the chat prose below the widget.
+- Phone + email inline as bare text. They auto-linkify; that's the user's tap target inside the card.
+- Score callout (\`★ Strongest fit\`, \`Score 83\`, etc.) uses \`ai_agent_lead_score\` when present, else \`score\`.
+- Omit channels that aren't enriched yet — don't write "<no phone>".
+
+## Chat prose AFTER the widget (where markdown DOES render)
+
+The carousel is the spatial visual. The user still wants the rich contact detail somewhere — but the right surface for that is the **chat message after invoking the widget**, not the notes inside it. Chat renders markdown links, lists, emoji properly.
+
+Below the widget invocation, emit a short structured summary like:
+
+\`\`\`
+**Atlas Holdings — Far Rockaway.** ★ Strongest fit. Active thread, "trying to reach" status from last Friday; AI angle is fresh (recent strategic investment signal).
+Contact: **[Troy Schirk](<linkedin_page or constructed search URL>)**, Principal & CIO · ☎ +1 312-550-2382 · ✉ tschirk@atlasholdingsllc.com
+
+**Employer Solutions Services — Midtown.** ★ Mid-size HR/staffing match. Same address as the staffing-group sibling — single visit covers both.
+Contact: **[Irving Enciso](<linkedin URL>)**, Regional Operations Manager · ☎ 952-835-1288 · ✉ info@employersolutionsgroup.com
+\`\`\`
+
+Keep it short — 1 lead per ~3 lines, top 3–5 most relevant. The LinkedIn-linked contact name lives here (chat markdown works), the channels are listed as \` · \`-separated pills. **Do NOT enumerate the same leads as a markdown table** — this list-form summary is the chat-side detail surface.
+
+**LinkedIn URL priority** (used in the chat prose, not in carousel notes):
+1. \`recommended_contact.linkedin_page\` when set, not the literal \`"null"\`, starts with \`https://\`;
+2. Constructed search: \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\` with the company name stripped of \`Inc / LLC / Corp / GmbH / Ltd / Co / S.A. / S.L. / PLC / AG / SAS / SARL\` suffixes, URL-encoded. Append a trailing \` °\` to the contact name to mark the fallback path.
+
+Open with **one short intro sentence** in chat ("Five lead visits across NYC for your trip next week — three in Midtown, plus Long Island and one in NJ.") and then invoke the widget, then the chat-side list above. **No markdown table.**
+
+**After the widget renders, end the turn with the NEXT STEPS surface** — not with a prose question. See "GATE — PREFER BUILT-IN HOST WIDGETS" below: surface 2–4 mutually-exclusive moves via \`ask_user_input_v0\` if the host exposes it, else as a short bulleted list. "Want me to plot these on a map or jump to outreach for Atlas?" is exactly the prose pattern to AVOID — it's a \`single_select\` with two options.
+
+## RENDER — fallback for hosts without \`places_map_display_v0\`
+
+If the host doesn't expose the native map, emit per-lead markdown blocks in this **exact** format — modern chat hosts (Claude.ai web, cowork) auto-detect addresses + company names and render them as a Google-Place-card carousel anyway:
+
+\`\`\`
+### **<Company Name>** · <City>, <State or Country>
+
+★ <Score callout>. <One-sentence sector fit + why-now>.
+
+👤 [<Contact First Last>](<LinkedIn URL>) — <role>
+📞 <bare phone>
+✉️ <bare email>
+🌐 <company website>
+\`\`\`
+
+Same one-channel-per-line discipline — newlines between channels so the carousel renders them as scannable properties (vs a wall of prose). Same auto-linkify rules: bare phone, bare email, markdown-wrapped contact name.
+
+The response payload carries everything you need: \`lead.company_name\` (or \`name\`), \`lead.location.city / country / full / pos\`, \`lead.score\`, \`lead.ai_agent_lead_score\`, \`lead.recommended_contact.{first_name, last_name, job_title, linkedin_page, email, phone_number}\`, \`lead.phone_numbers[]\`, \`lead.website\`, \`lead.short_description\`, \`lead.last_monitor_action\` + \`last_monitor_action_at\`. Score callout uses \`ai_agent_lead_score\` when present, else \`score\`.
+
+## GATE — PREFER BUILT-IN HOST WIDGETS
+
+Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can route into. These ALWAYS produce a better UX than markdown tables / inline prose for the data shapes they support — they're tappable on mobile, persistent across turns, and integrate with the host's quick-actions.
+
+**The Big Three** — when a tool result fits, route there:
+
+| Host widget | Use when | Field map (from Leadbay payload) |
+|---|---|---|
+| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
+| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+
+ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
+
+**Rules:**
+- The widget IS the visual. Do NOT emit a markdown table or prose list of the same data alongside — that produces two competing UIs.
+- Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
+- When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
+- One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+
+
+---
+
+WHEN TO USE: the user mentions travel, in-person follow-up, "this week's trip", "visiting", "I'm going to", or any phrasing that benefits from a geographic view of pipeline. Also when the user explicitly asks for a map.
+
+WHEN NOT TO USE: for the default follow-up table (status badges, AI take, history) — that's \`leadbay_pull_followups\`. For NEW leads from the Discover wishlist — that's \`leadbay_pull_leads\`.
+
+The response shape is identical to \`leadbay_pull_followups\`: \`{leads, active_filters, pagination, total_excluded_by_pushback, _meta}\` on success; \`{status: "ambiguous_locations", location_ambiguities}\` when a passed \`city\` was ambiguous.
+`;
+// endregion: leadbay_followups_map
 
 // region: leadbay_get_clarification
 export const leadbay_get_clarification: string = `Check whether Leadbay has a pending clarification question — a question raised when refining the intelligence prompt produced contradictory or ambiguous criteria. Returns \`{pending: false, clarification: null}\` when nothing is pending (the backend returns 204).
@@ -400,6 +676,32 @@ Defer the full list of imported leads to \`leadbay_pull_leads\` or \`leadbay_res
 
 ## NEXT STEPS — after an import
 
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
 | Observation                                    | Suggest                                                       | Calls                                                  |
 |------------------------------------------------|---------------------------------------------------------------|--------------------------------------------------------|
 | Status: running                                | "Check progress"                                              | leadbay_import_status(handle_id)                       |
@@ -449,6 +751,32 @@ Defer the full list of imported leads to \`leadbay_pull_leads\` or \`leadbay_res
 ---
 
 ## NEXT STEPS — after an import
+
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
 
 | Observation                                    | Suggest                                                       | Calls                                                  |
 |------------------------------------------------|---------------------------------------------------------------|--------------------------------------------------------|
@@ -514,13 +842,39 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_launch_bulk_enrichment
 
 // region: leadbay_like_lead
-export const leadbay_like_lead: string = `Mark a lead as liked. This is the same action as clicking the thumbs-up on the Leadbay website. The signal is fed back into the scoring engine: liked leads improve the quality of future batches by teaching Leadbay what the user finds relevant.
+export const leadbay_like_lead: string = `## WHEN TO USE
+
+Trigger phrases: "I like this lead", "thumbs up", "this one looks good", "save this one", "this is a good fit", "more like this", "yes to this one".
+
+Do NOT use for: "remind me about this lead later / snooze it" → \`leadbay_set_pushback\`; "not relevant / wrong fit / thumbs down" → \`leadbay_dislike_lead\`.
+
+Prefer when: user expresses durable positive interest in a specific lead; pass the lead's UUID as \`lead_id\`
+
+Examples that SHOULD invoke this tool:
+- "I like this lead — show me more like it."
+- "Thumbs up on Acme Corp, save it."
+- "This one's a perfect fit, keep them in the rotation."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Skip this for now, I'll look at it next week."
+- "Not relevant — wrong industry."
+- "Just show me the top leads today."
+
+## RENDER (quick)
+
+One short confirmation line after the call returns ("👍 Liked **{company_name}** —
+positive signal sent."), then continue the current flow (don't dump the full
+lead card again).
+
+---
+
+Mark a lead as liked. This is the same action as clicking the thumbs-up on the Leadbay website. The signal is fed back into the scoring engine: liked leads improve the quality of future batches by teaching Leadbay what the user finds relevant.
 
 Pass the lead's UUID as \`lead_id\`.
 
 WHEN TO USE: the user explicitly approves of a lead ("this one looks good", "I like this", "thumbs up", "save this one", "this is a good fit"). Also use after \`leadbay_research_lead\` reveals strong signals.
 
-WHEN NOT TO USE: the user is just reading or researching a lead without expressing approval. Use \`leadbay_dislike_lead\` for negative signals.
+WHEN NOT TO USE: the user is just reading or researching a lead without expressing approval. Use \`leadbay_dislike_lead\` for negative signals; use \`leadbay_set_pushback\` for "remind me later" / temporary snooze (like is durable; pushback is reversible).
 
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;
@@ -534,6 +888,17 @@ WHEN TO USE: when the user wants to switch lens or asks "what lenses do I have".
 WHEN NOT TO USE: in normal flow — composites auto-resolve the active lens via \`/me.last_requested_lens\`.
 `;
 // endregion: leadbay_list_lenses
+
+// region: leadbay_list_locations
+export const leadbay_list_locations: string = `Search the geo / admin-area taxonomy by free-text name and return the matching admin_area ids. This is the primary way to turn a user's "leads in Berlin" / "filter to Lyon" intent into the \`{type: "location_ids", locations: [<id>]}\` shape that the backend filter expects.
+
+The response has two arrays: \`results\` (top-10 prefix matches ranked by relevance) and \`parents\` (the admin-area chain referenced by \`results[].parent_ids\`, useful for disambiguation breadcrumbs). Each entry: \`{id, country, level, name, parent_ids}\`. The \`level\` is the admin depth — **5** = region, **6** = county, **7** = township-area, **8** = city/town.
+
+WHEN TO USE: to resolve a free-text city/region name before passing it to a \`location_ids\` filter (e.g. on \`leadbay_pull_followups({set_filter})\` or \`leadbay_adjust_audience\`). The composite \`leadbay_pull_followups\` accepts \`city: <free-text>\` directly and runs this resolver internally — prefer that path; reach for this granular tool only when you need to surface candidates to the user before committing.
+
+WHEN NOT TO USE: when you already have an admin_area id — pass it as \`city_id\` (composite path) or directly inside the FilterCriterion.
+`;
+// endregion: leadbay_list_locations
 
 // region: leadbay_list_mappable_fields
 export const leadbay_list_mappable_fields: string = `List every CRM field the agent can target when calling leadbay_import_leads or leadbay_import_and_qualify. Returns two arrays: \`standard_fields\` (Leadbay's built-in StandardCrmFieldType enum — LEAD_NAME, LEAD_WEBSITE, LEAD_STATUS, contact + location + sector fields) and \`custom_fields\` (this org's user-defined fields — id, name, type, and the literal \`mapping_value\` you pass in \`mappings.fields\`). For custom fields, \`mapping_value\` is the wire-format string \`CUSTOM.<id>\` — pass it verbatim.
@@ -596,6 +961,20 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_login
 
+// region: leadbay_open_billing_portal
+export const leadbay_open_billing_portal: string = `Generate a one-shot Stripe customer-portal URL. Wraps \`GET /1.5/stripe/portal\` → \`{url}\`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
+
+Sibling of \`leadbay_create_topup_link\`. Use cases differ:
+
+- **Top-up** (\`leadbay_create_topup_link\`) = one-shot purchase of AI credits to clear an immediate quota throttle. Doesn't change the plan.
+- **Billing portal** (this tool) = ongoing subscription management. Plan upgrades persist; they raise the recurring window caps (daily/weekly/monthly) rather than buying a one-time bucket.
+
+WHEN TO USE: when the user asks to upgrade / downgrade / change plan; manage payment methods; view invoices; or "open my billing".
+
+WHEN NOT TO USE: for one-off credit top-ups (use \`leadbay_create_topup_link\`); for read-only quota state (use \`leadbay_account_status\` / \`leadbay_get_quota\`).
+`;
+// endregion: leadbay_open_billing_portal
+
 // region: leadbay_pick_clarification
 export const leadbay_pick_clarification: string = `Answer the pending clarification question — either by picking one of the offered options (\`option_id\`) or by typing a free-text answer. The answer is stored as the new user_prompt and triggers regeneration. Admin-only.
 
@@ -608,7 +987,36 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_pick_clarification
 
 // region: leadbay_prepare_outreach
-export const leadbay_prepare_outreach: string = `Prepare a single-lead outreach brief: the full \`lead\` block (score, \`split_ai_summary\`, \`location\`, \`size\`, \`phone_numbers\`, \`website\`, \`description\`, \`social_urls\`, \`social_presence\`), the \`recommended_contact\` (always in the post-enrichment shape — \`contact_id\`, \`first_name\`, \`last_name\`, \`job_title\`, \`email\`, \`phone_number\`, \`linkedin_page\`, \`is_org_contact\` — with nulls where data isn't yet enriched), \`additional_contacts_count\` (other contacts at this company), and an \`enrichment\` block describing async state.
+export const leadbay_prepare_outreach: string = `## WHEN TO USE
+
+Trigger phrases: "draft outreach for <Contact>", "write an email to <Contact>", "prep me to call <Contact>", "outreach package for <Company>", "I'm about to reach out to <X>".
+
+Do NOT use for: "research a lead I haven't picked yet" → \`leadbay_research_lead\`; "log outreach I already sent" → \`leadbay_report_outreach\`; "enrich a batch of contacts" → \`leadbay_enrich_titles\`.
+
+Prefer when: user is about to act — has picked the lead AND the contact. Single-lead, action-imminent context
+
+Examples that SHOULD invoke this tool:
+- "Draft an email to Sarah at Acme."
+- "Help me write outreach for John Smith."
+- "I'm about to call Acme's CTO — prep me."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "I just sent that email — log it."
+- "Enrich the contacts on these 20 leads."
+- "Research the Acme lead before I commit."
+
+## RENDER (quick)
+
+Route the draft through \`message_compose_v1\` (Claude's email composer)
+with 2–3 strategic variants — labels describe STRATEGY, not tone
+("Push for alignment", "Reference M&A signal", "Soft intro — peer
+reference"). Above the composer, emit ONE short markdown paragraph
+with score callout + sector fit + linked contact name + bare phone /
+email. Do NOT paste the email body into chat prose alongside.
+
+---
+
+Prepare a single-lead outreach brief: the full \`lead\` block (score, \`split_ai_summary\`, \`location\`, \`size\`, \`phone_numbers\`, \`website\`, \`description\`, \`social_urls\`, \`social_presence\`), the \`recommended_contact\` (always in the post-enrichment shape — \`contact_id\`, \`first_name\`, \`last_name\`, \`job_title\`, \`email\`, \`phone_number\`, \`linkedin_page\`, \`is_org_contact\` — with nulls where data isn't yet enriched), \`additional_contacts_count\` (other contacts at this company), and an \`enrichment\` block describing async state.
 
 Optionally trigger contact enrichment in-flight with \`enrich:true\`. Enrichment is async (~60s). **Self-polling pattern (no separate tool needed):** re-call \`leadbay_prepare_outreach(leadId)\` without \`enrich\`; check \`enrichment.complete\`. When \`complete: true\`, the recommended contact now carries \`email\` and/or \`phone_number\`.
 
@@ -620,6 +1028,72 @@ IRON LAW — OUTCOME AFTER OUTREACH. The moment the user reports outreach happen
 WHEN TO USE: when the agent is about to draft outreach for ONE specific lead and needs everything to compose — channels + angles + history context.
 
 WHEN NOT TO USE: across many leads — use leadbay_enrich_titles for bulk; for general lead detail use leadbay_research_lead (richer signals); to actually log the outreach action use leadbay_report_outreach (requires verification).
+
+---
+
+## RENDER — host-native message composer is the PRIMARY surface
+
+\`message_compose_v1\` is the canonical surface for outreach drafts on this tool. The composer gives the user inline edit + send affordances and beats any prose code-fenced draft. **If the host exposes \`message_compose_v1\`, route every draft through it.** Don't paste email body or call-opener body into chat prose alongside — the composer IS the visual.
+
+Above the composer, emit ONE short markdown context paragraph: the lead's score callout + sector fit + recommended-contact name (LinkedIn-markdown-linked) + bare phone/email pills. That gives the user the "why this lead" context. The composer below carries the actionable draft.
+
+**Single draft:**
+
+\`\`\`
+message_compose_v1({
+  kind: "email",
+  summary_title: "Outreach to <Contact Name> at <Company>",
+  variants: [{
+    label: "Lead with the M&A signal",
+    subject: "<one-line subject — references the angle>",
+    body: "<5-8 sentence email; salesperson voice; references signal + a clear next step>"
+  }]
+})
+\`\`\`
+
+**Strategic options (preferred when split_ai_summary surfaces multiple angles):**
+
+\`\`\`
+message_compose_v1({
+  kind: "email",
+  summary_title: "Three angles for <Company> outreach",
+  variants: [
+    { label: "Push for alignment",  subject: "...", body: "..." },
+    { label: "Reference the M&A signal", subject: "...", body: "..." },
+    { label: "Soft intro — peer reference", subject: "...", body: "..." }
+  ]
+})
+\`\`\`
+
+Constraints:
+- **Labels describe STRATEGY, not tone.** "Push for alignment", "Reference M&A signal", "Lead with peer reference" — not "Friendly" / "Formal" / "Aggressive".
+- **2–3 variants when strategic options are clearly distinct.** One variant when you have a single best-angle draft.
+- Subject required for \`kind: "email"\`. Phone/call openers use \`kind: "other"\` with the opener in \`body\`.
+
+The composer becomes the single visual. **Don't also paste the email body into chat prose** — that's just noise next to the composer.
+
+For phone-only contacts (no email enriched), use \`kind: "other"\` with a 60-second call opener.
+
+## GATE — PREFER BUILT-IN HOST WIDGETS
+
+Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can route into. These ALWAYS produce a better UX than markdown tables / inline prose for the data shapes they support — they're tappable on mobile, persistent across turns, and integrate with the host's quick-actions.
+
+**The Big Three** — when a tool result fits, route there:
+
+| Host widget | Use when | Field map (from Leadbay payload) |
+|---|---|---|
+| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
+| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+
+ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
+
+**Rules:**
+- The widget IS the visual. Do NOT emit a markdown table or prose list of the same data alongside — that produces two competing UIs.
+- Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
+- When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
+- One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+
 
 ---
 
@@ -696,6 +1170,32 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the outreach brief
 
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
 Offer 2–3 follow-ups. Choose based on enrichment state + available channels + history. Always offer the "log outreach" option once the user has clearly contacted someone.
 
 | Observation                                     | Suggest                                                       | Calls                                                  |
@@ -736,7 +1236,36 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_promote_lens
 
 // region: leadbay_pull_followups
-export const leadbay_pull_followups: string = `Pull KNOWN leads from the user's Monitor view — the re-engagement entry point of the two-entry-point workflow. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", "this month", "what's overdue", or any phrasing that implies pre-existing pipeline context. For NEW leads from the Discover wishlist, use \`leadbay_pull_leads\` instead.
+export const leadbay_pull_followups: string = `## WHEN TO USE
+
+Trigger phrases: "what should I follow up on", "leads I've already worked", "leads I haven't contacted", "what's overdue", "stale leads", "before my trip", "this month", "what's going on with my pipeline", "leads in <city / state / country>".
+
+Do NOT use for: "show me leads / new leads / today's prospects" → \`leadbay_pull_leads\`; "I'm going to <city> / in person / trip" → \`leadbay_followups_map\`; "Texas / California / France etc. — place names go in \`city\`, NOT \`keywords\`" → \`leadbay_pull_followups\`.
+
+Prefer when: user names a city / sector / recency window → pass \`city\` (or \`set_filter\`) so the result is narrowed AND persists for the next session
+
+Examples that SHOULD invoke this tool:
+- "What should I follow up on this week?"
+- "Which leads have I not contacted in 30 days?"
+- "What's overdue in my pipeline?"
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Show me today's new leads."
+- "I'm flying to Berlin Thursday — who can I meet?"
+- "Draft an email to Sarah at Acme."
+
+## RENDER (quick)
+
+4-col markdown table sorted by \`last_monitor_action_at\` desc, NO
+score bar (status badges instead). Col 1 = status (🎯⚡🟢💤✨🔥❄) +
+company link + location/size. Col 2 = AI take (3 lines from
+\`split_ai_summary\`). Col 3 = history + notes. Col 4 = contacts
+(★ recommended, ☎ 📧 pills). Active-filters chip line ABOVE the
+table. Detail + status priority below.
+
+---
+
+Pull KNOWN leads from the user's Monitor view — the re-engagement entry point. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", or any phrasing implying pre-existing pipeline context. For NEW leads from Discover, use \`leadbay_pull_leads\`.
 
 Backend: wraps \`GET /1.5/monitor?personal=&liked=&filtered=&count=&page=\` plus, when \`set_filter\` is supplied, a preceding \`POST /1.5/monitor/filter\` to persist the filter server-side. The Monitor filter is a single \`FilterItem\` per user — refreshing the page restores it.
 
@@ -753,7 +1282,9 @@ Practical mapping from user phrasing to criterion:
 | "leads 50–200 employees"             | \`{type: "size", sizes: [{min: 50, max: 200}]}\`                       |
 | "Y Combinator companies"             | \`{type: "yc"}\`                                                       |
 
-Geo filtering requires \`admin_area_id\` resolution (the backend doesn't accept free-text city names in \`location_ids\`). The MCP doesn't expose an admin-area lookup yet — for now, ask the user to pick the geo from the Leadbay app's filter UI, or skip the geo filter and rely on agent post-filtering of the response.
+Geo filtering needs \`admin_area_id\` resolution — backend rejects free-text in \`location_ids\`. Pass \`city: "<free-text>"\` and the composite calls \`/geo/search\` internally, picks the best match, merges its id into \`set_filter\`. Ambiguous matches return \`status: "ambiguous_locations"\` + \`location_ambiguities[]\` — pick an id and re-call with \`city_id\`. For multi-city cases, call \`leadbay_list_locations\` then pass \`set_filter.criteria\` with \`{type: "location_ids", is_excluded: false, locations: [...]}\`.
+
+**Place names go through \`city\`, NEVER \`keywords\`.** This includes any geographic token the user names — cities (\`"Berlin"\`, \`"NYC"\`), states / provinces / regions (\`"Texas"\`, \`"California"\`, \`"Bavaria"\`), countries (\`"France"\`, \`"United States"\`), neighborhoods (\`"Brooklyn"\`, \`"SoHo"\`). The \`/geo/search\` resolver handles all admin levels — level 4 (state) and level 2 (country) resolve just as well as level 5 (city). If you put \`"Texas"\` in \`keywords\` you get a TEXT-MATCH against company descriptions (≈0 hits) instead of a real state filter. If a place name resolves ambiguously, surface the choices to the user — do NOT silently fall back to keyword search or to the unfiltered Monitor view. If \`keywords: ["Texas"]\` returned empty, the next call is \`city: "Texas"\`, not \`keywords: []\`.
 
 **Pushback exclusion.** Leads with active pushback (\`pushback_status\` set and \`pushback_until > today\`) are excluded from the response. The composite enforces this client-side; \`total_excluded_by_pushback\` in the output reports how many rows were dropped.
 
@@ -761,7 +1292,7 @@ WHEN TO USE: re-engaging pipeline ("what should I follow up on", "stale leads"),
 
 WHEN NOT TO USE: for NEW leads — that's \`leadbay_pull_leads\` (Discover).
 
-**Anti-confusion guardrail.** If you're iterating \`pull_leads\` pages looking for rows with \`prospecting_actions_count > 0\` or \`notes_count > 0\`, STOP — wrong entry point. The two read different backend tables; a lead with follow-up history may not appear in \`pull_leads\` (already aged out of the new-leads queue). Call \`pull_followups\` instead.
+**Anti-confusion guardrail.** Iterating \`pull_leads\` pages looking for \`prospecting_actions_count > 0\` or \`notes_count > 0\` rows is the wrong entry point — the two read different tables. Leads with follow-up history live in \`pull_followups\`.
 
 ---
 
@@ -854,6 +1385,32 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the follow-ups table
 
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
 Always include at least one filter-modification offer (users think in filters: by city, by recency, by action type). Filter modification goes through \`set_filter: FilterItem\` which the composite POSTs to \`/monitor/filter\` server-side.
 
 | Observation                                   | Suggest                                                  | Calls                                                                                              |
@@ -863,7 +1420,7 @@ Always include at least one filter-modification offer (users think in filters: b
 | \`pagination.has_more == true\`                 | "Pull the next page"                                     | leadbay_pull_followups(page = current + 1)                                                         |
 | ≥3 rows ✨ (never-touched)                    | "Surface only never-touched leads"                       | set_filter with \`last_action_date.last_days = 0\`                                                   |
 | ≥3 rows ⚡ (Trying to reach)                  | "Focus on overdue commitments"                           | set_filter with \`last_action.types = ["EPILOGUE_COULD_NOT_REACH_STILL_TRYING"]\`                    |
-| User planning a trip / in a city              | "Group by city for trip planning"                        | set_filter with \`location_ids\` (requires admin_area_id)                                            |
+| User planning a trip / in a city              | "Group by city for trip planning"                        | leadbay_pull_followups({city: "<their city>"}) — composite resolves admin_area_id via /geo/search  |
 | All rows last action > 60d                    | "Re-qualify — context may have changed"                  | leadbay_bulk_qualify_leads([leadId, ...])                                                          |
 | One obvious priority row                      | "Take me to that lead's full brief"                      | leadbay_prepare_outreach(leadId) / leadbay_research_lead(leadId)                                   |
 | User wants to defer a lead                    | "Snooze [Company] for 3 / 6 / 12 months"                 | leadbay_set_pushback({ lead_ids:[leadId], status:"3" })                                            |
@@ -875,7 +1432,38 @@ Always offer at least one of: prep outreach, refilter, pushback. Pushback is the
 // endregion: leadbay_pull_followups
 
 // region: leadbay_pull_leads
-export const leadbay_pull_leads: string = `Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool. Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line \`qualification_summary\` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
+export const leadbay_pull_leads: string = `## WHEN TO USE
+
+Trigger phrases: "show me leads", "today's prospects", "what's new today", "let's prospect", "best new leads", "my batch".
+
+Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "leads I've already worked" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`; "in person" → \`leadbay_followups_map\`.
+
+Prefer when: user has named a specific lens — pass \`lensId\` and pin it for the rest of the session
+
+Examples that SHOULD invoke this tool:
+- "Show me today's leads."
+- "What's in my inbox this morning?"
+- "Pull my best new prospects."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Which leads should I follow up with this week?"
+- "Show leads I've already contacted."
+- "I'm flying to Berlin Thursday — who should I meet?"
+
+## RENDER (quick)
+
+3-col markdown table sorted by \`score\` desc — DO NOT print the numeric
+score. Col 1 = inline-code 10-segment bar (\`▰\` firmographic, \`❖\` AI
+booster cap at the right end of the filled run, \`▱\` empty;
+filled=round(score/10), ai=round(avg_boost/3.3)) + \`<br>\` + linked
+company · location · size. Col 2 = why-fits ≤20 words. Col 3 = linked
+contact + title. Full algorithm + linking rules below.
+
+---
+
+Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool.
+
+Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line \`qualification_summary\` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
 
 Roughly the top 10 of the batch come pre-qualified (populated qualification_summary + ai_agent_lead_score); leads below the top ~10 carry only the basic firmographic \`score\` — not worse, just resource-saved by the system. Call leadbay_bulk_qualify_leads to deepen any of them on demand — a healthy daily rhythm is to bulk-qualify the rows without ❖ caps so tomorrow's top-10 list is richer.
 
@@ -970,7 +1558,33 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after rendering the pull_leads table
 
-Pick 2–3 items below based on what was actually observed in the response. Surface them as a short bulleted list — do NOT recite the whole table.
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
+Pick 2–3 items below based on what was actually observed in the response. The table is the source of truth for which moves are valid.
 
 | Observation                                                | Suggest                                                      | Calls                                                  |
 |------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------|
@@ -1067,7 +1681,27 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_report_outreach
 
 // region: leadbay_research_company
-export const leadbay_research_company: string = `Deep-dive research on a specific company by NAME (fuzzy match against the active lens's wishlist). Pass \`companyName\` (matches the top-scoring lead with that name) or \`leadId\` (takes precedence when both supplied).
+export const leadbay_research_company: string = `## WHEN TO USE
+
+Trigger phrases: "research <Company> (by name)", "look up <Company>", "what do we know about <Company>", "find <Company> in my pipeline".
+
+Do NOT use for: "user picked a lead row (has \`leadId\`)" → \`leadbay_research_lead\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`.
+
+Prefer when: user names a company in prose without a Leadbay id — the composite fuzzy-matches against the active lens's wishlist
+
+Examples that SHOULD invoke this tool:
+- "Look up Acme Corp for me."
+- "What do we know about Globex?"
+- "Find Initech in my pipeline."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Tell me about that lead I just picked."
+- "Show me today's prospects."
+- "Draft outreach to Acme's CTO."
+
+---
+
+Deep-dive research on a specific company by NAME (fuzzy match against the active lens's wishlist). Pass \`companyName\` (matches the top-scoring lead with that name) or \`leadId\` (takes precedence when both supplied).
 
 The response carries the rich-lead block (firmographics, \`phone_numbers\`, \`split_ai_summary\`, \`social_urls\`), \`qualification[]\` (Q&A pairs from the AI agent — empty until the lead is qualified), \`contacts[]\` (paid + org, each with a normalized \`linkedin_page\`), \`web_insights\` (keyed by emoji-prefixed section labels — see RENDERING for handling), \`web_insights_fetched_at\` (staleness), and \`recent_activities\` (engagement history).
 
@@ -1156,6 +1790,32 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the research card
 
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
 Offer 2–3 follow-ups that match the detected mode. Always offer a cross-mode pivot at the end so the user can redirect if you guessed wrong.
 
 ### MODE A (Discovery)
@@ -1187,7 +1847,27 @@ End MODE B with the pivot offer: \`"Want the full strategic overview instead?"\`
 // endregion: leadbay_research_company
 
 // region: leadbay_research_lead
-export const leadbay_research_lead: string = `Tell me everything decision-relevant about a single lead. Bundles the lens-scoped lead profile, the AI qualification answers (the agent's knowledge-base food), the structured web-research signals (with hot flags + sources), the enriched contacts, and the recent notes/epilogue/prospecting activity in one call. Order is deliberate: qualification first, then signals, then firmographics, then contacts, then engagement.
+export const leadbay_research_lead: string = `## WHEN TO USE
+
+Trigger phrases: "research <Company>", "tell me about <Company>", "deep dive on <Company>", "everything you know about <Company>", "is <Company> a fit", "should I pursue <Company>".
+
+Do NOT use for: "research a domain / company without a Leadbay lead id" → \`leadbay_research_company\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`.
+
+Prefer when: user already picked one lead from a pull_leads/pull_followups table — feed the lead's UUID via \`leadId\`
+
+Examples that SHOULD invoke this tool:
+- "Tell me everything about that Acme lead."
+- "Deep dive on the lead I just picked."
+- "Is Acme actually a good fit — what does the AI think?"
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Show me today's leads."
+- "Draft an email to John at Acme."
+- "Research Acme Corp — I don't see it in my pipeline yet."
+
+---
+
+Tell me everything decision-relevant about a single lead. Bundles the lens-scoped lead profile, the AI qualification answers (the agent's knowledge-base food), the structured web-research signals (with hot flags + sources), the enriched contacts, and the recent notes/epilogue/prospecting activity in one call. Order is deliberate: qualification first, then signals, then firmographics, then contacts, then engagement.
 
 Scoring has two layers: the basic \`score\` (firmographic, always present, already decent) and the AI qualification layer (\`ai_agent_lead_score\` + per-question answers + web_fetch signals). The AI layer is pre-populated for roughly the top 10 of each daily batch, and on-demand (via leadbay_bulk_qualify_leads) for anything below that. Combine both layers when judging a lead.
 
@@ -1334,12 +2014,14 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_create_custom_field,
   leadbay_create_lens,
   leadbay_create_lens_draft,
+  leadbay_create_topup_link,
   leadbay_deselect_leads,
   leadbay_discover_leads,
   leadbay_dislike_lead,
   leadbay_dismiss_clarification,
   leadbay_enrich_contacts,
   leadbay_enrich_titles,
+  leadbay_followups_map,
   leadbay_get_clarification,
   leadbay_get_contacts,
   leadbay_get_enrichment_job_titles,
@@ -1361,9 +2043,11 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_launch_bulk_enrichment,
   leadbay_like_lead,
   leadbay_list_lenses,
+  leadbay_list_locations,
   leadbay_list_mappable_fields,
   leadbay_list_sectors,
   leadbay_login,
+  leadbay_open_billing_portal,
   leadbay_pick_clarification,
   leadbay_prepare_outreach,
   leadbay_preview_bulk_enrichment,

@@ -29,6 +29,7 @@ import { getLeadActivities } from "./tools/get-lead-activities.js";
 import { getLensFilter } from "./tools/get-lens-filter.js";
 import { getLensScoring } from "./tools/get-lens-scoring.js";
 import { listSectors } from "./tools/list-sectors.js";
+import { listLocations } from "./tools/list-locations.js";
 import { getUserPrompt } from "./tools/get-user-prompt.js";
 import { getClarification } from "./tools/get-clarification.js";
 import { getLeadNotes } from "./tools/get-lead-notes.js";
@@ -38,6 +39,8 @@ import { getWebFetch } from "./tools/get-web-fetch.js";
 import { getSelectionIds } from "./tools/get-selection-ids.js";
 import { getEnrichmentJobTitles } from "./tools/get-enrichment-job-titles.js";
 import { listMappableFields } from "./tools/list-mappable-fields.js";
+import { createTopupLink } from "./tools/create-topup-link.js";
+import { openBillingPortal } from "./tools/open-billing-portal.js";
 
 // New write tools (autoplan §E5) — gated behind LEADBAY_MCP_WRITE=1 in MCP
 import { selectLeads } from "./tools/select-leads.js";
@@ -72,6 +75,7 @@ import { prepareOutreach } from "./composite/prepare-outreach.js";
 // New (autoplan §E4 reads + §E6 writes)
 import { pullLeads } from "./composite/pull-leads.js";
 import { pullFollowups } from "./composite/pull-followups.js";
+import { followupsMap } from "./composite/followups-map.js";
 import { researchLead } from "./composite/research-lead.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
@@ -112,10 +116,11 @@ export {
   login, listLenses, discoverLeads, getLeadProfile, getContacts, getQuota,
   getTasteProfile, qualifyLead, enrichContacts, addNote, getLeadActivities,
   // new granular reads
-  getLensFilter, getLensScoring, listSectors, getUserPrompt, getClarification,
+  getLensFilter, getLensScoring, listSectors, listLocations, getUserPrompt, getClarification,
   getLeadNotes, getEpilogueResponses, getProspectingActions, getWebFetch,
   getSelectionIds, getEnrichmentJobTitles,
   listMappableFields,
+  createTopupLink, openBillingPortal,
   // new granular writes
   selectLeads, deselectLeads, clearSelection, setActiveLens, createLens,
   updateLens, updateLensFilter, createLensDraft, promoteLens, setUserPrompt,
@@ -126,7 +131,7 @@ export {
   // existing composite
   researchCompany, prepareOutreach,
   // new composite reads
-  pullLeads, pullFollowups, researchLead, recallOrderedTitles, accountStatus,
+  pullLeads, pullFollowups, followupsMap, researchLead, recallOrderedTitles, accountStatus,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
@@ -147,6 +152,7 @@ export const granularReadTools: Tool[] = [
   getLensFilter,
   getLensScoring,
   listSectors,
+  listLocations,
   getUserPrompt,
   getClarification,
   getLeadNotes,
@@ -156,6 +162,8 @@ export const granularReadTools: Tool[] = [
   getSelectionIds,
   getEnrichmentJobTitles,
   listMappableFields,
+  createTopupLink,
+  openBillingPortal,
 ];
 
 // Granular writes (advanced + write — gated by both LEADBAY_MCP_ADVANCED=1
@@ -203,6 +211,7 @@ granularTools.forEach((t) => {
 export const compositeReadTools: Tool[] = [
   pullLeads,
   pullFollowups,
+  followupsMap,
   researchLead,
   recallOrderedTitles,
   accountStatus,
@@ -214,6 +223,14 @@ export const compositeReadTools: Tool[] = [
   // it for discoverability; expose it always-on so agents can find custom fields
   // without needing LEADBAY_MCP_ADVANCED=1.
   listMappableFields,
+  // Billing / top-up tools — granular-shaped but ALWAYS exposed because
+  // they're the canonical recovery path from a QUOTA_EXCEEDED wall. If
+  // they were gated behind LEADBAY_MCP_ADVANCED=1 the agent would
+  // know about the wall but not the door out. Read-only from the
+  // agent's POV (creating a Stripe session URL doesn't charge anyone;
+  // the user pays in their browser).
+  createTopupLink,
+  openBillingPortal,
   // Keep the existing composites available too.
   researchCompany,
   prepareOutreach,

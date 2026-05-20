@@ -716,6 +716,27 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
+    toolName: "leadbay_list_locations",
+    arguments: { q: "Paris" },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: /\/1\.5\/geo\/search/,
+          status: 200,
+          body: {
+            results: [
+              { id: "416102", country: "US", level: 8, name: "Paris", parent_ids: ["416102", "416103"] },
+            ],
+            parents: [
+              { id: "416103", country: "US", level: 6, name: "Edgar County", parent_ids: [] },
+            ],
+          },
+        },
+      ]);
+    },
+  },
+  {
     toolName: "leadbay_get_quota",
     arguments: {},
     setupMocks: () => {
@@ -905,6 +926,12 @@ describe("structuredContent conformance — every outputSchema declarer (iter17)
 // (with reason) — a new declarer can't sneak in without explicit choice.
 // -----------------------------------------------------------------------
 const OPT_OUT: Record<string, string> = {
+  // followups_map is a thin wrapper around pull_followups (same execute,
+  // same input/output schema; the only delta is the ui.resourceUri
+  // binding). pull_followups already has a conformance case; adding a
+  // duplicate would just double-cover the same code path.
+  leadbay_followups_map:
+    "Delegates execute + input/output schemas to leadbay_pull_followups verbatim — only the ui.resourceUri differs (binding test covers it).",
   // Bulk-status pollers require a populated BulkTracker context to reach
   // the success path; the existing per-tool tests in core/test/unit
   // exercise the success shape. The schema is still asserted by tools/list
@@ -942,6 +969,10 @@ const OPT_OUT: Record<string, string> = {
     "Requires resolveTasteProfile path with multi-call coordination; covered in composite paths.",
   leadbay_create_lens:
     "Returns full LensPayload — backend-shape mock larger than the conformance-signal warrants.",
+  leadbay_create_topup_link:
+    "Single-field {url} response from POST /stripe/topup_checkout; the conformance signal is trivially the URL string. Live-probed shape lives in the tool source comment.",
+  leadbay_open_billing_portal:
+    "Single-field {url} response from GET /stripe/portal; sibling of create_topup_link with identical conformance signal.",
 };
 
 // -----------------------------------------------------------------------

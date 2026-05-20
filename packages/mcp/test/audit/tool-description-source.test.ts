@@ -28,15 +28,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SERVER_PATH = resolve(__dirname, "..", "..", "src", "server.ts");
 
-// Budget raised in the 0.9 RENDERING+NEXT STEPS redesign. Tool descriptions
-// are now the only channel that carries per-tool rendering rules + the
-// observation→suggestion table that agents read verbatim, so the per-tool
-// budget grew from ~3500 to 12000 to accommodate the rich blocks
-// (research_company ~10.5k, prepare_outreach ~10.1k, research_lead similar).
-// Future tightening goal: factor shared rendering fragments further into
-// snippets and trim back, but only after we have evidence the agent
-// behavior is locked in.
-const MIGRATED_TOOL_DESCRIPTION_MAX_CHARS = 12000;
+// Budget raised again in the 0.10 host-widget-routing redesign. Each
+// composite that surfaces a renderable result now carries directives
+// for three parallel rendering surfaces (Claude's built-in widgets, our
+// MCP Apps widgets, plain prose/table) plus the canonical RENDERING
+// block. The cost is real but bounded; the upside is the agent doesn't
+// guess at routing across hosts. Future tightening: when widget
+// routing matures, factor more into shared snippets.
+const MIGRATED_TOOL_DESCRIPTION_MAX_CHARS = 17000;
 
 describe("audit: tool description source-of-truth", () => {
   it("server.ts does not register any inline description literals (must come from tool defs)", () => {

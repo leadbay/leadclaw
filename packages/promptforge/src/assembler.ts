@@ -1,7 +1,70 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { parseTemplate, type Frontmatter, type ParsedTemplate, FrontmatterError } from "./frontmatter.js";
+import { parseTemplate, type Frontmatter, type ParsedTemplate, type Routing, FrontmatterError } from "./frontmatter.js";
 import { resolveSnippets } from "./snippets.js";
+
+/**
+ * Generate the `## WHEN TO USE` block from a tool's routing
+ * frontmatter. Emitted at the head of the description so the agent
+ * sees routing BEFORE the body and well within the first ~600 chars
+ * (the chunk every host reads even on truncation). See /CLAUDE.md.
+ */
+function emitRoutingBlock(routing: Routing | undefined): string {
+  if (!routing) return "";
+  const lines: string[] = ["## WHEN TO USE"];
+  if (routing.triggers && routing.triggers.length > 0) {
+    const phrases = routing.triggers.map((t) => `"${t}"`).join(", ");
+    lines.push(`Trigger phrases: ${phrases}.`);
+  }
+  if (routing.anti_triggers && routing.anti_triggers.length > 0) {
+    const formatted = routing.anti_triggers
+      .map((a) => `"${a.phrase}" → \`${a.route_to}\``)
+      .join("; ");
+    lines.push(`Do NOT use for: ${formatted}.`);
+  }
+  if (routing.prefer_when) {
+    lines.push(`Prefer when: ${routing.prefer_when.trim()}`);
+  }
+  if (routing.examples) {
+    const positives = routing.examples.positive ?? [];
+    const negatives = routing.examples.negative ?? [];
+    if (positives.length > 0) {
+      const items = positives.map((s) => `- "${s.trim()}"`).join("\n");
+      lines.push(`Examples that SHOULD invoke this tool:\n${items}`);
+    }
+    if (negatives.length > 0) {
+      const items = negatives.map((s) => `- "${s.trim()}"`).join("\n");
+      lines.push(`Examples that should NOT invoke this tool (sound similar, route elsewhere):\n${items}`);
+    }
+  }
+  return lines.join("\n\n");
+}
+
+/**
+ * Generate the `## RENDER (quick)` block from `rendering_hint`. A
+ * compact preview of the canonical rendering — full algorithm lives
+ * in the detailed RENDERING include below. Stays terse so the
+ * combined routing + render hint fits in the first ~600 chars.
+ */
+function emitRenderHintBlock(hint: string | undefined): string {
+  if (!hint) return "";
+  return ["## RENDER (quick)", hint.trim()].join("\n\n");
+}
+
+/**
+ * Prepend the auto-generated header (routing + render hint) to the
+ * body. If neither is set, returns the body unchanged so existing
+ * templates that don't use the new frontmatter fields are unaffected.
+ */
+export function applyDescriptionHeader(fm: Frontmatter, body: string): string {
+  const blocks: string[] = [];
+  const routing = emitRoutingBlock(fm.routing);
+  if (routing) blocks.push(routing);
+  const renderHint = emitRenderHintBlock(fm.rendering_hint);
+  if (renderHint) blocks.push(renderHint);
+  if (blocks.length === 0) return body;
+  return blocks.join("\n\n") + "\n\n---\n\n" + body.replace(/^\s+/, "");
+}
 
 export interface AssembledArtifact {
   frontmatter: Frontmatter;
@@ -166,9 +229,20 @@ export function assemble(opts: AssembleOptions): AssembleResult {
     validateExpectedCalls(parsed, registeredToolNames);
     validateMutatingPromptFailureModes(parsed, mutatingToolNames);
 
+    // For tool-descriptions, prepend the auto-generated WHEN TO USE
+    // (from `routing`) + RENDER (quick) (from `rendering_hint`)
+    // blocks. They live at the very head of the emitted description
+    // so the routing/rendering directives land in the first ~600
+    // chars even when a host truncates. Prompts (slash-commands) keep
+    // their body verbatim — no auto-emitted blocks.
+    const finalBody =
+      expectedKind === "tool-description"
+        ? applyDescriptionHeader(parsed.frontmatter, resolved)
+        : resolved;
+
     const artifact: AssembledArtifact = {
       frontmatter: parsed.frontmatter,
-      body: resolved.trimEnd() + "\n",
+      body: finalBody.trimEnd() + "\n",
       sourcePath: path,
     };
 

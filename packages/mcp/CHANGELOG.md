@@ -1,6 +1,6 @@
 # Changelog — @leadbay/mcp
 
-## 0.9.2 — 2026-05-18
+## 0.10.0-dev.17 — 2026-05-19
 
 **New `leadbay_like_lead` and `leadbay_dislike_lead` write tools**: exposes the thumbs-up / thumbs-down actions already available on the Leadbay website as MCP tools. Agents can now send positive and negative lead signals back to the Leadbay scoring engine to improve future batch quality.
 
@@ -8,6 +8,8 @@
 - `leadbay_dislike_lead` — POSTs to `/leads/{id}/dislike`. Use when the user rejects a lead ("not relevant", "wrong industry", "thumbs down"). Distinct from `leadbay_set_pushback` which is a temporary deferral, not a permanent negative signal.
 
 Both tools are exposed in the default write surface (no `LEADBAY_MCP_ADVANCED=1` required). Gated by `LEADBAY_MCP_WRITE=1` (default ON since 0.3.0).
+
+Templates upgraded to the 0.10.0-dev.16 routing convention introduced in #42 — both descriptions now carry structured `routing` frontmatter (triggers, anti-triggers, `prefer_when`, ≥3 positive + ≥3 negative example messages) and `rendering_hint`, so promptforge auto-emits a `## WHEN TO USE` + `## RENDER (quick)` header within the first ~600 chars of the generated description.
 
 ## 0.9.1 — 2026-05-16
 

@@ -1,6 +1,8 @@
 ## NEXT STEPS — after rendering the pull_leads table
 
-Pick 2–3 items below based on what was actually observed in the response. Surface them as a short bulleted list — do NOT recite the whole table.
+{{include:next-steps/ask-user-input-routing}}
+
+Pick 2–3 items below based on what was actually observed in the response. The table is the source of truth for which moves are valid.
 
 | Observation                                                | Suggest                                                      | Calls                                                  |
 |------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------|

@@ -41,7 +41,28 @@ Same resume-check semantics as `leadbay_daily_check_in` Phase 0 — if you see p
 
 Call `leadbay_pull_followups` (NOT `leadbay_pull_leads` — those are different entry points; see §1.6 of the prospecting overview). If the user mentioned a city, sector, recency window, or other filter, build a `FilterItem` and pass it as `set_filter` so the result is narrowed (and the filter persists for the user's next session). If the user said something generic ("anyone I should follow up on?"), call with no `set_filter` to get the default Monitor view.
 
-For geo filters specifically: resolve the user's city name to an `admin_area_id`. The MCP doesn't yet expose an admin-area lookup, so in the interim ask the user to pick the geo from the Leadbay app's filter UI if the city isn't in the popular-cities lookup — do NOT guess an id.
+For geo filters specifically: prefer the `city` shortcut on `leadbay_pull_followups({city: "Berlin"})` — the composite resolves the free-text city via `/geo/search`, returns ambiguities to disambiguate when needed (status: "ambiguous_locations" → pick an id → re-call with `city_id`), then merges the resolved admin_area into the Monitor filter as `location_ids`. If the user has already given you a numeric id, pass it as `city_id`. Don't guess admin_area ids — let the resolver do it.
+
+**TRAVEL / IN-PERSON ROUTING** — when the user's intent is geographic and visual ("I'm going to NYC next week", "leads I should visit in person", "this week's trip", "show me followups in <city>", "plan my itinerary", "trip itinerary", "show on a map", "leads in Texas / California / France", or any phrasing that asks for a map / geographic / trip-planning view — INCLUDING state-, country-, and region-level place names):
+
+1. Call **`leadbay_followups_map`** (same params as `pull_followups`: `city` / `city_id` / `set_filter`). Same response shape — just the explicit entry-point so the agent and the host know to route geographically.
+2. Output a **per-lead place-card block** for each top follow-up, in this exact format — modern chat hosts (Claude / cowork) detect addresses + company names and surface them as a beautiful Google-Place-card carousel with our notes as the "Notes from Claude" section. Lean INTO that surface; don't fight it.
+
+   ```
+   ### <Company Name> · <City>, <State or Country>
+
+   ★ <one-sentence summary: score + sector fit + why-now>. <Contact ask:> reach **[<First Last>](<linkedin_page or constructed people-search URL>)**, <role>. ☎ <phone>.
+   ```
+
+   - Bold + heading-formatted company name so the host's place-card detector lifts the right token.
+   - City on the SAME line as the company (semantic glue for place lookup).
+   - Notes paragraph: short, salesperson voice — score callout, sector/fit, contact ask, channel hint.
+   - Contact name MUST be a markdown link. Use the contact's `linkedin_page` when present; otherwise build `https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company-stripped-of-suffixes>` (URL-encode). Strip `Inc / LLC / Corp / GmbH / Ltd / Co` from the company name before searching. Same rules as the canonical `pull_leads` table renderer.
+   - Phone (when present) as bare `+1 212-555-0100` or `(212) 555-0100` — every modern chat renderer auto-linkifies to `tel:`. Don't wrap in markdown.
+
+3. **Don't repeat the canonical follow-ups table in this mode** — the carousel IS the visual. One short intro sentence ("Five lead visits across NYC for your trip next week — three in Midtown, plus Long Island and one in NJ.") + the per-lead blocks is the full output.
+
+4. Pushback / next-step / outcome language about each lead goes in the prose. The carousel's "Notes from Claude" surfaces what you write here, so make the one sentence count.
 
 # PHASE 2 — RENDER THE CANONICAL TABLE
 

@@ -1,14 +1,14 @@
 /**
  * Geo follow-up — user says "I'm going to Lyon next week — leads to
- * follow up with there". Expected: the agent calls leadbay_pull_followups
- * with a set_filter targeting Lyon's admin_area_id. Since the MCP
- * doesn't yet expose admin-area lookup (the surfaced gap), the agent
- * should NOT guess an id — it should ask the user to set the geo in
- * the Leadbay app UI, or call pull_followups without the geo filter
- * and rely on agent-side post-filtering.
+ * follow up with there". Expected: the agent passes `city: "Lyon"` (or a
+ * resolved `city_id`) to `leadbay_pull_followups`. The composite calls
+ * `/1.5/geo/search?q=Lyon` internally; if the match is ambiguous it
+ * returns `status: "ambiguous_locations"` and the agent picks a
+ * candidate before re-calling.
  *
- * Either path is acceptable; what's NOT acceptable is fabricating an
- * admin_area_id.
+ * What's NOT acceptable: fabricating an admin_area_id, asking the user
+ * to set the filter in the app UI (that workaround is dead now that the
+ * resolver ships), or calling pull_leads.
  */
 import type { ScenarioFixture } from "../daily-check-in/clean-batch.scenario.js";
 
@@ -79,13 +79,12 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
     prompt_name: "leadbay_followup_check_in",
     scenario_name: "geo-followup",
     user_intent:
-      "Surface follow-up leads in Lyon for next week's trip. Either ask the user to set the geo filter in the Leadbay app UI (since the MCP doesn't expose admin-area lookup yet) or call pull_followups without the geo filter and post-filter the results — never fabricate an admin_area_id.",
+      "Surface follow-up leads in Lyon for next week's trip. The agent should use the city shortcut on leadbay_pull_followups — either `city: \"Lyon\"` (composite resolves via /geo/search) or a pre-resolved `city_id`. Never fabricate an admin_area_id, and don't punt to 'set the filter in the app UI' (that workaround is obsolete).",
     success_criteria: [
       "called leadbay_pull_followups at least once",
       "did NOT call leadbay_pull_leads",
-      "did NOT fabricate an admin_area_id for Lyon — either asked the user to set the geo in the Leadbay app filter UI, OR called pull_followups without set_filter and post-filtered the response prose to the Lyon rows",
+      "passed a `city` (free-text) or `city_id` (resolved numeric id) param to leadbay_pull_followups, OR built a set_filter.criteria with `location_ids` populated from a prior leadbay_list_locations call — never fabricated an admin_area_id",
       "rendered the result using the canonical pull_followups table layout (status emoji + AI take + history + contacts)",
-      "explicitly surfaced the limitation (admin-area lookup not yet shipped) in the agent prose if it chose the no-filter path",
     ],
     required_calls: ["leadbay_pull_followups"],
     required_byproducts: [],
