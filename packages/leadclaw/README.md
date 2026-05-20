@@ -57,7 +57,7 @@ Example OpenClaw config fragment:
 
 The plugin ships **50 tools**. Exposure is gated by the two flags above:
 
-- **Default (composite workflow tools)** — the agent-facing surface. Read-only end-to-end: `leadbay_pull_leads`, `leadbay_research_lead`, `leadbay_research_company`, `leadbay_prepare_outreach`, `leadbay_account_status`, `leadbay_recall_ordered_titles`, `leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, plus the login tool.
+- **Default (composite workflow tools)** — the agent-facing surface. Read-only end-to-end: `leadbay_pull_leads`, `leadbay_research_lead_by_id`, `leadbay_research_lead_by_name_fuzzy`, `leadbay_prepare_outreach`, `leadbay_account_status`, `leadbay_recall_ordered_titles`, `leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, plus the login tool.
 - **`exposeGranular: true`** — adds the granular API tools: lens read/filter/scoring, sector taxonomy, selection ids, enrichment job titles, contacts, quota, taste profile, user_prompt, clarifications, epilogue responses, prospecting actions, lead notes, web_fetch, etc. (23 tools.)
 - **`exposeWrite: true`** — adds the write tools: `leadbay_create_lens`, `leadbay_update_lens`, `leadbay_set_active_lens`, `leadbay_set_user_prompt`, `leadbay_qualify_lead`, `leadbay_enrich_contacts`, `leadbay_add_note`, `leadbay_select_leads` / `leadbay_deselect_leads` / `leadbay_clear_selection`, `leadbay_refine_prompt`, `leadbay_report_outreach`, `leadbay_adjust_audience`, `leadbay_launch_bulk_enrichment`, etc. (17 tools.)
 

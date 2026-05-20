@@ -30,8 +30,8 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_pull_leads",
   "leadbay_pull_followups",
   "leadbay_followups_map",
-  "leadbay_research_lead",
-  "leadbay_research_company",
+  "leadbay_research_lead_by_id",
+  "leadbay_research_lead_by_name_fuzzy",
   "leadbay_prepare_outreach",
   "leadbay_account_status",
 ]);

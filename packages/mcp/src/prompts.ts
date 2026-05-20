@@ -147,7 +147,7 @@ const CATALOG: CatalogEntry[] = [
     arguments: [
       {
         name: "lead_id",
-        description: "The lead UUID. Get it from leadbay_pull_leads or leadbay_research_lead.",
+        description: "The lead UUID. Get it from leadbay_pull_leads or leadbay_research_lead_by_id.",
         required: true,
       },
       {

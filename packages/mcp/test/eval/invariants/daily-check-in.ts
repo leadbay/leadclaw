@@ -104,13 +104,13 @@ export function dailyCheckInInvariants(evidence: MCPEvidence): InvariantResult[]
     // and typically multiple. We assert ≥1 (covers the small-batch case where
     // only 1 lead is worth deep-diving) but flag if exactly 1 happens on a
     // batch with many leads via the judge rubric, not here.
-    calledAtLeastOnce(evidence, "leadbay_research_lead"),
+    calledAtLeastOnce(evidence, "leadbay_research_lead_by_id"),
     neverCalled(evidence, "leadbay_report_outreach"),
     neverCalledBeforeUserConfirmation(evidence, "leadbay_enrich_contacts"),
     calledInOrder(evidence, [
       "leadbay_account_status",
       "leadbay_pull_leads",
-      "leadbay_research_lead",
+      "leadbay_research_lead_by_id",
     ]),
     containsByproduct(evidence, "STOP — awaiting user decision"),
   ];

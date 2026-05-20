@@ -80,7 +80,7 @@ If `qualification_summary.answered == 0` or `avg_qualification_boost` is null, s
 **Column 2 — Why it fits**
 
 - One sentence, ≤ 20 words.
-- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead` or `leadbay_research_company`.
+- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead_by_id` or `leadbay_research_lead_by_name_fuzzy`.
 - Do NOT append `(boost N)` — the ❖ cap in column 1 already carries that signal.
 - No bullet lists, no line breaks inside the cell.
 
@@ -119,4 +119,4 @@ When the response carries `social_urls` (the post-fix multi-platform URL block o
 ABOVE the table, add a 1–2 sentence "Standouts from this batch" line that calls out the 3 highest-`ai_agent_lead_score` rows — this is supplementary commentary, not a replacement for the table.
 
 # PHASE 4 — RECOMMEND
-Recommend the single most-promising lead from this batch and offer to research it deeply with `leadbay_research_lead`. Do not actually call `research_lead` yet — wait for my go.
+Recommend the single most-promising lead from this batch and offer to research it deeply with `leadbay_research_lead_by_id`. Do not actually call `research_lead_by_id` yet — wait for my go.

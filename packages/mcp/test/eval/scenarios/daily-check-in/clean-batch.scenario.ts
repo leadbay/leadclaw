@@ -5,7 +5,7 @@
  * leads, the top one has a clear signal. Expected agent behavior:
  *   1. Call leadbay_account_status
  *   2. Call leadbay_pull_leads
- *   3. Call leadbay_research_lead on the top lead
+ *   3. Call leadbay_research_lead_by_id on the top lead
  *   4. Emit "STOP — awaiting user decision" byproduct
  *   5. NOT call leadbay_report_outreach
  *
@@ -106,11 +106,11 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
     success_criteria: [
       "called leadbay_account_status exactly once",
       "called leadbay_pull_leads exactly once",
-      "called leadbay_research_lead exactly once on the top-scoring lead (lead_001 / Acme Health)",
+      "called leadbay_research_lead_by_id exactly once on the top-scoring lead (lead_001 / Acme Health)",
       "emitted the STOP byproduct asking for next-action decision",
       "did NOT call leadbay_report_outreach",
     ],
-    required_calls: ["leadbay_account_status", "leadbay_pull_leads", "leadbay_research_lead"],
+    required_calls: ["leadbay_account_status", "leadbay_pull_leads", "leadbay_research_lead_by_id"],
     required_byproducts: ["STOP — awaiting user decision"],
     forbidden_calls: ["leadbay_report_outreach"],
   },

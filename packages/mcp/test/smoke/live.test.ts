@@ -397,14 +397,14 @@ describe.skipIf(!runLive)("@leadbay/mcp — live composite suite (#3504)", () =>
     }
   }, 90_000);
 
-  it("leadbay_research_lead — returns qualification + signals + firmographics", async () => {
+  it("leadbay_research_lead_by_id — returns qualification + signals + firmographics", async () => {
     if (pulledLeadIds.length === 0) {
       console.log("[smoke] skipped: no lead id available");
       return;
     }
     const { result, verdict } = await exerciseAndJudge(
       client,
-      "leadbay_research_lead",
+      "leadbay_research_lead_by_id",
       { leadId: pulledLeadIds[0] },
       ["qualification", "signals", "firmographics"]
     );

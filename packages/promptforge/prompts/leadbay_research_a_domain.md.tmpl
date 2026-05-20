@@ -11,12 +11,12 @@ arguments:
     required: true
 expected_calls:
   - leadbay_import_and_qualify
-  - leadbay_research_lead
+  - leadbay_research_lead_by_id
 failure_modes:
   - Fabricates qualification answers not present in any tool response
   - Reports certainty about fit when qualification didn't actually run (e.g. quota_blocked)
   - Skips the research step after import completes
-  - Renders the research_lead result as a freeform narrative instead of the canonical research-company-card layout (the card with header score bar, pill row, signal sections, contacts table is the structural contract; commentary belongs ABOVE or BELOW it)
+  - Renders the research_lead_by_id result as a freeform narrative instead of the canonical research-company-card layout (the card with header score bar, pill row, signal sections, contacts table is the structural contract; commentary belongs ABOVE or BELOW it)
   - Enumerates every imported lead in prose instead of the terse single-record summary from the import-result rendering snippet
 ---
 
@@ -32,7 +32,7 @@ Call `leadbay_import_and_qualify` with `domains=[{domain:'{{arg:domain}}'}]`. Th
 {{include:rendering/import-result}}
 
 # PHASE 2 — DEEP DIVE
-When the import resolves, call `leadbay_research_lead` on the new leadId. Render the result using the canonical single-record card layout — detect MODE A (Discovery) since the user asked to "research" a domain rather than to prepare outreach:
+When the import resolves, call `leadbay_research_lead_by_id` on the new leadId. Render the result using the canonical single-record card layout — detect MODE A (Discovery) since the user asked to "research" a domain rather than to prepare outreach:
 
 {{include:rendering/research-company-card}}
 

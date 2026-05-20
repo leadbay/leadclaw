@@ -67,14 +67,14 @@ import { createCustomField } from "./tools/create-custom-field.js";
 // ─── Composite workflow tools — agent-facing surface ─────────────────────
 
 // Existing
-import { researchCompany } from "./composite/research-company.js";
 import { prepareOutreach } from "./composite/prepare-outreach.js";
 
 // New (autoplan §E4 reads + §E6 writes)
 import { pullLeads } from "./composite/pull-leads.js";
 import { pullFollowups } from "./composite/pull-followups.js";
 import { followupsMap } from "./composite/followups-map.js";
-import { researchLead } from "./composite/research-lead.js";
+import { researchLeadById } from "./composite/research-lead-by-id.js";
+import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
@@ -127,9 +127,10 @@ export {
   launchBulkEnrichment,
   createCustomField,
   // existing composite
-  researchCompany, prepareOutreach,
+  prepareOutreach,
   // new composite reads
-  pullLeads, pullFollowups, followupsMap, researchLead, recallOrderedTitles, accountStatus,
+  pullLeads, pullFollowups, followupsMap, researchLeadById, researchLeadByNameFuzzy,
+  recallOrderedTitles, accountStatus,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
@@ -208,7 +209,8 @@ export const compositeReadTools: Tool[] = [
   pullLeads,
   pullFollowups,
   followupsMap,
-  researchLead,
+  researchLeadById,
+  researchLeadByNameFuzzy,
   recallOrderedTitles,
   accountStatus,
   bulkEnrichStatus,
@@ -227,8 +229,6 @@ export const compositeReadTools: Tool[] = [
   // the user pays in their browser).
   createTopupLink,
   openBillingPortal,
-  // Keep the existing composites available too.
-  researchCompany,
   prepareOutreach,
 ];
 

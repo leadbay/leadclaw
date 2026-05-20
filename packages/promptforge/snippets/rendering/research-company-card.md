@@ -2,7 +2,7 @@
 
 Present as a single-record card, not a table. This tool gets invoked in two distinct user contexts — detect which and adapt the body density accordingly.
 
-**MODE A — Discovery.** The user is evaluating whether to pursue this company as a target. Signals: "tell me about", "what do they do", "is this a fit", "research [company]", arrival via a click-through from `leadbay_pull_leads`, no prior outreach context in the conversation. Next step is usually qualify, deep-dive via `leadbay_research_lead`, or decide whether to start outreach.
+**MODE A — Discovery.** The user is evaluating whether to pursue this company as a target. Signals: "tell me about", "what do they do", "is this a fit", "research [company]", arrival via a click-through from `leadbay_pull_leads`, no prior outreach context in the conversation. Next step is usually qualify, deep-dive via `leadbay_research_lead_by_id`, or decide whether to start outreach.
 
 **MODE B — Contact preparation.** The user is about to call or email someone at this company and needs the talking points. Signals: "I'm calling them", "draft an email", "before my call", "outreach prep", "what should I say", or the conversation has already touched on a specific contact. Next step is usually `leadbay_prepare_outreach`.
 

@@ -15,7 +15,7 @@ Resolve messy CSV-shaped lead rows against Leadbay before file import. The tool 
 
 {{include:headers/tool-when-to-use}} before importing user-supplied files when domains, names, CRM IDs, registry numbers, or Leadbay IDs may be inconsistently formatted; when the agent needs to pre-resolve messy rows, inspect ambiguous candidates, or prepare LEADBAY_ID values for the import composites. For contact-only files, first derive company website/domain from business contact emails where possible, while ignoring consumer mailbox domains. Deterministic matches get a LEADBAY_ID column inserted so the standard import commits immediately. Ambiguous rows are deliberately left without LEADBAY_ID; inspect candidates and choose one only when the evidence is good. Rows with websites but no match can still be imported; Leadbay may crawl and match them later, and leadbay_import_status can surface late matches.
 
-{{include:headers/tool-when-not-to-use}} for prospect discovery from scratch (use leadbay_pull_leads); for one known company profile (use leadbay_research_company / leadbay_research_lead); or when the file already has clean, final LEADBAY_ID/CRM_ID/SIREN mappings and no row-level identity disambiguation is needed.
+{{include:headers/tool-when-not-to-use}} for prospect discovery from scratch (use leadbay_pull_leads); for one known company profile (use leadbay_research_lead_by_name_fuzzy / leadbay_research_lead_by_id); or when the file already has clean, final LEADBAY_ID/CRM_ID/SIREN mappings and no row-level identity disambiguation is needed.
 
 ---
 

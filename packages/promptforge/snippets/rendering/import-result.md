@@ -12,4 +12,4 @@ The response carries either a completed result or an async handle. Render a brie
 
 **When the user's request implied a downstream use** ("import then prep outreach for them"), emit `Imported leadIds: <up to 5 ids, then '+N more'>` — just the ids. Let the next composite render the leads.
 
-Defer the full list of imported leads to `leadbay_pull_leads` or `leadbay_research_lead` in NEXT STEPS.
+Defer the full list of imported leads to `leadbay_pull_leads` or `leadbay_research_lead_by_id` in NEXT STEPS.

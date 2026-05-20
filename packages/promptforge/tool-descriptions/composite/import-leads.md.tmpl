@@ -11,7 +11,7 @@ annotations:
   idempotentHint: true
   openWorldHint: true
 ---
-Import leads into Leadbay's CRM via the file-import wizard. Returns stable Leadbay leadIds for downstream chaining into leadbay_bulk_qualify_leads / leadbay_research_lead. For MCP clients with short transport timeouts, pass `wait_for_completion:false` to return quickly with `{status:'running', handle_id}`; poll leadbay_import_status with that handle. For end-to-end import+qualify in one call, prefer leadbay_import_and_qualify. For messy files, prefer the `leadbay_import_file` prompt which walks an agent through scan → resolve → preserve → commit phases.
+Import leads into Leadbay's CRM via the file-import wizard. Returns stable Leadbay leadIds for downstream chaining into leadbay_bulk_qualify_leads / leadbay_research_lead_by_id. For MCP clients with short transport timeouts, pass `wait_for_completion:false` to return quickly with `{status:'running', handle_id}`; poll leadbay_import_status with that handle. For end-to-end import+qualify in one call, prefer leadbay_import_and_qualify. For messy files, prefer the `leadbay_import_file` prompt which walks an agent through scan → resolve → preserve → commit phases.
 
 TWO MODES: (A) Domain-list shortcut — pass `domains: [{domain, name?}]`. The tool builds a 2-column CSV (LEAD_NAME, LEAD_WEBSITE) and imports with the default mapping. (B) Custom records + mapping — pass `records: [{Col1, Col2, ...}]` plus `mappings.fields: {Col1: 'LEAD_NAME', ...}`. `mappings.fields` must include LEADBAY_ID, CRM_ID, SIREN, LEAD_NAME, or LEAD_WEBSITE (resolver needs at least one identity key). Pass exactly one of `domains` / `records`. Reserved column `MCP_ROW_ID` cannot appear in records/mappings — the tool injects it for stable reconciliation.
 
@@ -19,7 +19,7 @@ MUTATES USER STATE: each call creates a row in the user's CRM-imports list (visi
 
 {{include:headers/tool-when-to-use}} you have a list of company domains from another system (CRM, analytics, email correspondents) and need stable Leadbay leadIds; or CRM-shaped rows with custom columns and want to drive the wizard with explicit field mappings.
 
-{{include:headers/tool-when-not-to-use}} for prospect discovery (use leadbay_pull_leads); for one specific company's profile (use leadbay_research_company); when you can't tolerate the side effects above; when you also want qualification in the same call (use leadbay_import_and_qualify).
+{{include:headers/tool-when-not-to-use}} for prospect discovery (use leadbay_pull_leads); for one specific company's profile (use leadbay_research_lead_by_name_fuzzy); when you can't tolerate the side effects above; when you also want qualification in the same call (use leadbay_import_and_qualify).
 
 {{include:headers/verification-required-if-write}}
 

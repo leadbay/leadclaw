@@ -25,7 +25,7 @@ export const getWebFetch: Tool<GetWebFetchParams> = {
   outputSchema: {
     type: "object",
     description:
-      "Raw LeadWebFetchPayload as returned by /leads/{id}/web_fetch. Permissive shape — backend dict structure is documented in detail by leadbay_research_lead which reshapes it.",
+      "Raw LeadWebFetchPayload as returned by /leads/{id}/web_fetch. Permissive shape — backend dict structure is documented in detail by leadbay_research_lead_by_id which reshapes it.",
     properties: {
       content: {
         description: "Backend dict content (object or string), or null when no fetch yet.",

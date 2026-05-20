@@ -8,8 +8,8 @@ Pick 2–3 items below based on what was actually observed in the response. The 
 |------------------------------------------------------------|--------------------------------------------------------------|--------------------------------------------------------|
 | `has_more == true`                                         | "Pull the next page (page N+1 of M)"                         | leadbay_pull_leads(page = current + 1, lensId = pinned)|
 | ≥ 3 rows have `qualification_summary.answered == 0`        | "Deepen AI qualification on the rows without ❖ caps"         | leadbay_bulk_qualify_leads(leadIds=[…])                |
-| User points at a single row                                | "Research [Company] in depth"                                | leadbay_research_lead(leadId)                          |
-| User wants the company-level web view                      | "Pull the company-level research for [Company]"              | leadbay_research_company({leadId} or {companyName})    |
+| User points at a single row                                | "Research [Company] in depth"                                | leadbay_research_lead_by_id(leadId)                    |
+| User only has a name (no leadId in context)                | "Look up [Company] by name"                                  | leadbay_research_lead_by_name_fuzzy(companyName)       |
 | Top row has phone AND email                                | "Prepare an outreach for [Contact] — call + email"           | leadbay_prepare_outreach(leadId)                       |
 | Top row has email but no phone                             | "Draft an outreach email for [Contact]"                      | leadbay_prepare_outreach(leadId)                       |
 | Top row has phone but no email                             | "Show [Contact]'s call details + a 60-second opener"         | leadbay_prepare_outreach(leadId)                       |

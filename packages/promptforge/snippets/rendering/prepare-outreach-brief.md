@@ -22,7 +22,7 @@ Present as the richest single-record card the MCP emits. The user is seconds-to-
 **H5: 🎯 Angles & approach**
 
 - Render `lead.split_ai_summary.approach_angle` as the lead-in.
-- 3–4 bullets distilling `split_ai_summary.next_step` and any signals from a prior `research_company` call into salesperson-voice talking points. Cite `[source](url)` inline when known.
+- 3–4 bullets distilling `split_ai_summary.next_step` and any signals from a prior `research_lead_by_id` call into salesperson-voice talking points. Cite `[source](url)` inline when known.
 - Final line: `Recommended channel: <X> — <rationale>`. Compute the recommendation from what data is available (email present → email; phone present → call; LinkedIn only → DM).
 
 **H5: 📜 History with [Contact name]**
@@ -35,7 +35,7 @@ Same shape as the contact history, but only include items NOT duplicated from th
 
 **H5: 👥 Other contacts** (only if `additional_contacts_count > 0`)
 
-One line: `+N more contacts at this company — [see them all](leadbay_research_company)`.
+One line: `+N more contacts at this company — [see them all](leadbay_research_lead_by_id)`.
 
 **Closing line** (when enrichment is in progress): `*Enrichment running — I'll refresh once email/phone lands.*`
 

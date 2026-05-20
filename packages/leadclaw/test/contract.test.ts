@@ -143,10 +143,10 @@ describe("contract: register() gating", () => {
     // Must include login + composite reads.
     expect(names).toContain("leadbay_login");
     expect(names).toContain("leadbay_pull_leads");
-    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_research_lead_by_id");
     expect(names).toContain("leadbay_account_status");
     expect(names).toContain("leadbay_recall_ordered_titles");
-    expect(names).toContain("leadbay_research_company");
+    expect(names).toContain("leadbay_research_lead_by_name_fuzzy");
     expect(names).toContain("leadbay_prepare_outreach");
     // Must NOT include composite WRITE tools without exposeWrite.
     expect(names).not.toContain("leadbay_bulk_qualify_leads");

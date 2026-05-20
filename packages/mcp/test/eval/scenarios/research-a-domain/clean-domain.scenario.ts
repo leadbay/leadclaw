@@ -48,11 +48,11 @@ export const SCENARIO: ScenarioFixture<{ domain: string }> = {
     user_intent: "Research stripe.com end-to-end: import + qualify + deep dive.",
     success_criteria: [
       "called leadbay_import_and_qualify with domains=[{domain:'stripe.com'}]",
-      "called leadbay_research_lead on the new leadId returned by import_and_qualify",
+      "called leadbay_research_lead_by_id on the new leadId returned by import_and_qualify",
       "summarized: company description, fit (qualification_answers), signals, recommended first-contact",
       "did not fabricate qualification answers not present in the tool response",
     ],
-    required_calls: ["leadbay_import_and_qualify", "leadbay_research_lead"],
+    required_calls: ["leadbay_import_and_qualify", "leadbay_research_lead_by_id"],
     required_byproducts: [],
     forbidden_calls: ["leadbay_report_outreach"],
   },

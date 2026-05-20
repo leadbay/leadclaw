@@ -8,7 +8,7 @@ Run the Leadbay daily check-in for me. Treat this prompt the same way for any eq
 
 # Resilience rules for Leadbay long-running tools
 
-These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
+These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead_by_id`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
 
 ## Rule 1 — Pin the lens
 
@@ -18,9 +18,9 @@ After your first `leadbay_pull_leads` call, capture `response.lens.id` into your
 
 `leadbay_bulk_qualify_leads` and `leadbay_import_and_qualify` accept `wait_for_completion:false`, which returns `{status:'running', qualify_id}` immediately. Then poll `leadbay_qualify_status` (or `leadbay_import_status`) every ~10s until the job completes. **Use the async pattern by default** — the blocking default can exceed the MCP client's per-call timeout on large batches and produce a misleading `"Request timed out"` even though the server is still working.
 
-## Rule 3 — Serialize `leadbay_research_lead` fan-out
+## Rule 3 — Serialize `leadbay_research_lead_by_id` fan-out
 
-`leadbay_research_lead` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
+`leadbay_research_lead_by_id` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
 
 ## Rule 4 — Retry, don't replan
 
@@ -93,7 +93,7 @@ If `qualification_summary.answered == 0` or `avg_qualification_boost` is null, s
 **Column 2 — Why it fits**
 
 - One sentence, ≤ 20 words.
-- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead` or `leadbay_research_company`.
+- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead_by_id` or `leadbay_research_lead_by_name_fuzzy`.
 - Do NOT append `(boost N)` — the ❖ cap in column 1 already carries that signal.
 - No bullet lists, no line breaks inside the cell.
 
@@ -135,7 +135,7 @@ If the batch returns fewer than 10 qualified leads, top it up: call `leadbay_bul
 
 # PHASE 4 — DEEP DIVE (every promising lead)
 
-Call `leadbay_research_lead` on **every** lead from your top 10 that the user might realistically prospect today (filter out clearly weak fits if any). Don't pick just one. **Call it sequentially** — one at a time, or batches of at most 3 in parallel. Do not fire 10 in parallel — it triggers transport backpressure that surfaces as `"Tool permission stream closed"` errors (see Rule 3 above). If a call fails, retry that single lead once; if the retry also fails, note the lead id and continue. Report Phase 4 results even if 1–2 leads were unresearchable.
+Call `leadbay_research_lead_by_id` on **every** lead from your top 10 that the user might realistically prospect today (filter out clearly weak fits if any). Don't pick just one. **Call it sequentially** — one at a time, or batches of at most 3 in parallel. Do not fire 10 in parallel — it triggers transport backpressure that surfaces as `"Tool permission stream closed"` errors (see Rule 3 above). If a call fails, retry that single lead once; if the retry also fails, note the lead id and continue. Report Phase 4 results even if 1–2 leads were unresearchable.
 
 For each researched lead surface:
 - what makes it promising (1–2 sentences citing signals from the research)

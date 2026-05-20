@@ -124,10 +124,10 @@ describe("tools/list annotations (MCP spec ToolAnnotations)", () => {
   it("research_lead is annotated readOnly + idempotent + openWorld (extended in iter 2)", async () => {
     const { mcpClient } = await connect();
     const listed = await mcpClient.listTools();
-    const t = listed.tools.find((tool) => tool.name === "leadbay_research_lead");
+    const t = listed.tools.find((tool) => tool.name === "leadbay_research_lead_by_id");
     expect(t).toBeDefined();
     expect(t!.annotations).toEqual({
-      title: "Research a Leadbay lead in depth",
+      title: "Research a Leadbay lead in depth (by UUID)",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
