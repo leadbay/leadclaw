@@ -28,10 +28,12 @@ import {
 } from "./telemetry-constants.js";
 import {
   EV_QUOTA_HIT,
+  EV_STARTUP,
   EV_TOOL_CALL,
   EV_TOPUP_LINK,
   type ExceptionCtx,
   type QuotaHitProps,
+  type StartupProps,
   type ToolCallProps,
   type TopupLinkProps,
 } from "./telemetry-events.js";
@@ -45,6 +47,7 @@ export interface TelemetryHandle {
   captureToolCall(props: ToolCallProps): void;
   captureQuotaHit(props: QuotaHitProps): void;
   captureTopupLink(props: TopupLinkProps): void;
+  captureStartup(props: StartupProps): void;
   captureException(err: unknown, ctx: ExceptionCtx): void;
   shutdown(): Promise<void>;
 }
@@ -54,6 +57,7 @@ export const NOOP_TELEMETRY: TelemetryHandle = {
   captureToolCall: () => {},
   captureQuotaHit: () => {},
   captureTopupLink: () => {},
+  captureStartup: () => {},
   captureException: () => {},
   shutdown: async () => {},
 };
@@ -131,6 +135,11 @@ export function initTelemetry(opts: InitOpts): TelemetryHandle {
         defaultIntegrations: false,
         integrations: [Sentry.httpIntegration()],
         sendDefaultPii: false,
+        // Tag every captured event with the surface so Sentry views can
+        // split MCP issues from web-app issues without per-call work.
+        initialScope: {
+          tags: { source: "mcp" },
+        },
       });
       sentryReady = true;
     }
@@ -154,6 +163,11 @@ export function initTelemetry(opts: InitOpts): TelemetryHandle {
   let region: string = "unknown";
 
   const baseProps = (): Record<string, unknown> => ({
+    // Always tag MCP-originated events so PostHog dashboards can split
+    // MCP usage from the web app and any future surfaces. The value
+    // ("mcp") is the canonical source identifier — match it in any
+    // PostHog filter or insight that should isolate the MCP surface.
+    source: "mcp",
     mcp_version: version,
     node_version: process.versions.node,
     platform: process.platform,
@@ -266,6 +280,9 @@ export function initTelemetry(opts: InitOpts): TelemetryHandle {
     },
     captureTopupLink(props) {
       emit(EV_TOPUP_LINK, { ...props });
+    },
+    captureStartup(props) {
+      emit(EV_STARTUP, { ...props });
     },
     captureException(err, ctx) {
       if (!sentryReady) return;

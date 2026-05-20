@@ -8,6 +8,7 @@ import {
   LeadbayClient,
   resolveRegion,
   type CreateClientConfig,
+  type LeadbayError,
   type ToolLogger,
 } from "@leadbay/core";
 import { buildServer } from "./server.js";
@@ -126,6 +127,13 @@ export function parseWriteEnv(): boolean {
   return true;
 }
 
+// Token-missing handler for CLI subcommands (doctor, etc.). Interactive
+// commands SHOULD print to stderr and exit non-zero — the user typed the
+// command, they're watching the terminal, and a hard exit is the
+// expected UX. The MCP stdio mode in resolveClientFromEnv takes the
+// opposite tack (broken-client + keep running) because the user there
+// isn't watching a terminal; they're watching a "Server disconnected"
+// banner with no diagnostic.
 function exitWithTokenError(): never {
   process.stderr.write(
     "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
@@ -137,9 +145,82 @@ function exitWithTokenError(): never {
   process.exit(1);
 }
 
-export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayClient> {
+// "Auth state" — describes the outcome of resolveClientFromEnv. The MCP
+// server always boots; auth errors surface as tool-call errors against a
+// broken-client (`expired`/`missing`) so the host shows the server as
+// connected and the agent gets a clear error envelope to render. See
+// makeBrokenClient below.
+export type AuthState = "ok" | "missing" | "expired" | "probe_failed";
+
+export interface ResolvedClient {
+  client: LeadbayClient;
+  authState: AuthState;
+}
+
+// LeadbayClient subclass whose every request method rejects with a
+// pre-baked LeadbayError. The MCP server uses this on startup-auth
+// failures so it can finish the JSON-RPC handshake and surface the
+// failure on first tool call instead of dying mid-`initialize`.
+class BrokenLeadbayClient extends LeadbayClient {
+  private readonly stubError: LeadbayError;
+  constructor(stubError: LeadbayError, baseUrl: string, region: "us" | "fr") {
+    // Placeholder token so the base class's no-token branch (which throws
+    // a different, less-helpful error) is skipped — every request goes
+    // through our overrides below.
+    super(baseUrl, "broken-token-startup-auth-failure", region);
+    this.stubError = stubError;
+  }
+  override async request<T>(): Promise<T> {
+    throw this.stubError;
+  }
+  override async requestVoid(): Promise<void> {
+    throw this.stubError;
+  }
+  override async requestRawBinary<T>(): Promise<T> {
+    throw this.stubError;
+  }
+}
+
+export function makeBrokenClient(
+  stubError: LeadbayError,
+  region: "us" | "fr"
+): LeadbayClient {
+  const baseUrl = region === "fr"
+    ? "https://api-fr.leadbay.app"
+    : "https://api-us.leadbay.app";
+  return new BrokenLeadbayClient(stubError, baseUrl, region);
+}
+
+export async function resolveClientFromEnv(logger: ToolLogger): Promise<ResolvedClient> {
   const token = process.env.LEADBAY_TOKEN;
-  if (!token) exitWithTokenError();
+  if (!token) {
+    // Don't process.exit — Claude Desktop / Cursor would surface this as
+    // "Server disconnected" with no actionable info. Return a broken
+    // client so the server still answers `initialize` + `tools/list`,
+    // and the first tool call returns this AUTH_MISSING envelope which
+    // the agent can render to the user.
+    process.stderr.write(
+      "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
+        "  1. Run: npx -y @leadbay/mcp install --email <you> --region <us|fr>\n" +
+        "  2. Set it in your MCP client config (e.g. claude_desktop_config.json).\n" +
+        "\n" +
+        "Run `leadbay-mcp --help` for the full config template.\n"
+    );
+    const regionEnv = process.env.LEADBAY_REGION;
+    const region: "us" | "fr" = regionEnv === "fr" ? "fr" : "us";
+    return {
+      client: makeBrokenClient(
+        {
+          error: true,
+          code: "AUTH_MISSING",
+          message: "LEADBAY_TOKEN environment variable is not set.",
+          hint: "Run `npx -y @leadbay/mcp install --email <you> --region <us|fr>` to mint a token, then set LEADBAY_TOKEN in your MCP client config.",
+        },
+        region
+      ),
+      authState: "missing",
+    };
+  }
 
   const regionEnv = process.env.LEADBAY_REGION;
   const explicitRegion: "us" | "fr" | undefined =
@@ -151,7 +232,7 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
     const config: CreateClientConfig = { token };
     if (baseUrl) config.baseUrl = baseUrl;
     if (explicitRegion) config.region = explicitRegion;
-    return createClient(config);
+    return { client: createClient(config), authState: "ok" };
   }
 
   // Auto-probe path: token gets sent to BOTH api-us.leadbay.app and
@@ -173,7 +254,8 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
   };
 
   try {
-    return await Promise.any([probe("us"), probe("fr")]);
+    const client = await Promise.any([probe("us"), probe("fr")]);
+    return { client, authState: "ok" };
   } catch (err: any) {
     // Both failed. The AggregateError exposes each leaf error.
     const errors: any[] = err?.errors ?? [];
@@ -181,11 +263,27 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
       (e) => e?.code === "AUTH_EXPIRED" || e?.code === "NOT_AUTHENTICATED"
     );
     if (firstAuth) {
+      // Don't process.exit — same reasoning as the missing-token branch
+      // above. Surface AUTH_EXPIRED as a tool-call error against a
+      // broken-client. Default to `us` for the base URL so the failure
+      // _meta carries a sensible region tag (the token didn't work in
+      // either, so there's no "right" answer here).
       process.stderr.write(
         `leadbay-mcp: ${firstAuth.message}. ${firstAuth.hint}\n` +
           "Tip: verify your LEADBAY_TOKEN is valid and, if you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr.\n"
       );
-      process.exit(1);
+      return {
+        client: makeBrokenClient(
+          {
+            error: true,
+            code: firstAuth.code,
+            message: firstAuth.message,
+            hint: "Verify your LEADBAY_TOKEN is valid. If you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr to skip auto-probing. Mint a fresh token with `leadbay-mcp login --email <you> --region <us|fr>`.",
+          },
+          "us"
+        ),
+        authState: "expired",
+      };
     }
     // Non-auth failures (network, DNS, etc.) — fall back to us so the
     // server can still start and surface the error on first tool call.
@@ -193,7 +291,10 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
     process.stderr.write(
       `leadbay-mcp: region auto-detection failed (${firstMsg}). Defaulting to us; set LEADBAY_REGION to skip probing.\n`
     );
-    return createClient({ token, region: "us" });
+    return {
+      client: createClient({ token, region: "us" }),
+      authState: "probe_failed",
+    };
   }
 }
 
@@ -1200,6 +1301,42 @@ async function runDoctor(): Promise<number> {
   return 1;
 }
 
+// Install last-resort handlers so any uncaught exception or unhandled
+// rejection during startup (or after server.connect) leaves a visible
+// stack trace on stderr + a Sentry event before the process exits.
+// Without these, Node's default kills the process after a deprecation
+// warning that some hosts don't surface — leaving the user staring at
+// "Server disconnected" with no clue why. Called from main(); also
+// exported for tests (via the symbol exists; not currently asserted).
+let startupSafetyNetsInstalled = false;
+function installStartupSafetyNets(logger: ToolLogger): void {
+  if (startupSafetyNetsInstalled) return;
+  startupSafetyNetsInstalled = true;
+
+  const reportAndExit = (label: string, err: unknown): void => {
+    const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+    process.stderr.write(`leadbay-mcp: ${label}: ${msg}\n`);
+    logger.error?.(`${label}: ${msg}`);
+    // Fire-and-forget Sentry capture. Bounded by the same pattern as
+    // the bootstrap catch at the entrypoint — telemetry must never
+    // block the failure exit.
+    try {
+      const bootTelemetry = initTelemetry({ version: VERSION });
+      bootTelemetry.captureException(err, { tool: "__startup__" });
+      // Don't await shutdown — process.exit(1) below flushes stdio;
+      // Sentry's internal flush will best-effort post in the small
+      // window before the process actually dies.
+      void bootTelemetry.shutdown();
+    } catch {
+      // Swallow — never let telemetry mask the underlying failure.
+    }
+    process.exit(1);
+  };
+
+  process.on("uncaughtException", (err) => reportAndExit("uncaughtException", err));
+  process.on("unhandledRejection", (err) => reportAndExit("unhandledRejection", err));
+}
+
 async function main(): Promise<void> {
   const arg = process.argv[2];
 
@@ -1223,14 +1360,32 @@ async function main(): Promise<void> {
 
   // Stdio MCP mode (default).
   const logger = makeStderrLogger(parseLogLevel(process.env.LEADBAY_LOG_LEVEL));
+
+  // Safety nets installed before any startup I/O so a silent crash during
+  // the JSON-RPC `initialize` handshake (which would otherwise show up on
+  // the host as a bare "Server disconnected" with no diagnostic) leaves a
+  // real stack on stderr + Sentry. Stdio writes are flushed synchronously
+  // before exit because we use the sync `process.exit` path; without these
+  // handlers, Node's default for unhandledRejection (since v15) is to log
+  // a deprecation warning then terminate with code 1 and no stack.
+  installStartupSafetyNets(logger);
+
   // Telemetry (PostHog + Sentry). ON by default; opt-out via
   // LEADBAY_TELEMETRY_DISABLED=1. See packages/mcp/src/telemetry.ts.
   const telemetry = initTelemetry({ version: VERSION, logger });
-  const client = await resolveClientFromEnv(logger);
+  const { client, authState } = await resolveClientFromEnv(logger);
   // Non-blocking identify — kicks off /users/me (cached if region
   // auto-probe already paid for it). Events captured before identity
-  // resolves are buffered and flushed once me.email lands.
+  // resolves are buffered and flushed once me.email lands. With a broken
+  // client (authState != "ok"), resolveMe rejects but telemetry.identify
+  // has its own catch and flushes events anonymously.
   telemetry.identify(client);
+  // Bucket disconnects by auth-state in PostHog so a regression in the
+  // startup-auth path is visible without reading the user's logs.
+  telemetry.captureStartup({
+    auth_state: authState,
+    region: client.region,
+  });
   const includeAdvanced = process.env.LEADBAY_MCP_ADVANCED === "1";
   const includeWrite = parseWriteEnv();
 
@@ -1248,7 +1403,7 @@ async function main(): Promise<void> {
   });
   const transport = new StdioServerTransport();
   logger.info?.(
-    `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability})`
+    `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability}, auth_state=${authState})`
   );
   await server.connect(transport);
 

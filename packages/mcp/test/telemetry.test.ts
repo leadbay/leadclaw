@@ -246,8 +246,40 @@ describe("telemetry — tool call events", () => {
     expect(props.bytes).toBeGreaterThan(0);
     expect(props.duration_ms).toBeGreaterThanOrEqual(0);
     expect(props.mcp_version).toBe("0.10.0-dev.18");
+    // Every MCP-originated event carries source="mcp" so PostHog
+    // dashboards can split MCP from web-app usage. See baseProps in
+    // telemetry.ts.
+    expect(props.source).toBe("mcp");
     expect(toolEvents[0][0].groups).toEqual({ organization: "org-42" });
     expect(toolEvents[0][0].distinctId).toBe("alice@leadbay.test");
+  });
+
+  it("every captured event type carries source=mcp", async () => {
+    // Regression test for the cross-surface bucketing requirement:
+    // captureToolCall, captureQuotaHit, captureTopupLink, captureStartup
+    // ALL must emit events tagged with source="mcp" so they can be
+    // filtered apart from the web-app's own PostHog stream.
+    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    const { mcpClient, identityDone, telemetry } = await connect([
+      sumTool,
+      quotaTool,
+    ]);
+    await identityDone;
+    await mcpClient.callTool({ name: "leadbay_test_sum", arguments: { a: 1, b: 2 } });
+    await mcpClient.callTool({ name: "leadbay_test_quota", arguments: {} });
+    telemetry.captureTopupLink({ tool: "leadbay_create_topup_link" });
+    telemetry.captureStartup({ auth_state: "ok", region: "us" });
+    const allEvents = posthogState.capture.mock.calls.map((c: any[]) => c[0]);
+    expect(allEvents.length).toBeGreaterThan(0);
+    for (const ev of allEvents) {
+      expect(ev.properties?.source, `event ${ev.event} missing source=mcp`).toBe("mcp");
+    }
+    // Confirm we exercised the diverse event types.
+    const eventNames = new Set(allEvents.map((e: any) => e.event));
+    expect(eventNames.has("mcp tool called")).toBe(true);
+    expect(eventNames.has("mcp quota hit")).toBe(true);
+    expect(eventNames.has("mcp topup link created")).toBe(true);
+    expect(eventNames.has("mcp startup")).toBe(true);
   });
 
   it("QUOTA_EXCEEDED envelope fires both 'mcp quota hit' and 'mcp tool called' (no Sentry)", async () => {
@@ -424,6 +456,9 @@ describe("NOOP_TELEMETRY", () => {
     })).not.toThrow();
     expect(() => NOOP_TELEMETRY.captureQuotaHit({ tool: "x" })).not.toThrow();
     expect(() => NOOP_TELEMETRY.captureTopupLink({ tool: "x" })).not.toThrow();
+    expect(() =>
+      NOOP_TELEMETRY.captureStartup({ auth_state: "ok", region: "us" })
+    ).not.toThrow();
     expect(() => NOOP_TELEMETRY.captureException(new Error("e"), { tool: "x" })).not.toThrow();
     await expect(NOOP_TELEMETRY.shutdown()).resolves.toBeUndefined();
   });
