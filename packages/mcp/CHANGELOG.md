@@ -1,5 +1,18 @@
 # Changelog — @leadbay/mcp
 
+## 0.10.0-dev.18 — 2026-05-19
+
+**PostHog + Sentry telemetry**: every tool invocation now fires a `mcp tool called` event to PostHog (same project as the frontend, project id 23333), with quota walls surfaced as `mcp quota hit` and successful top-up checkout-link generation as `mcp topup link created`. Unexpected throws (TypeError, network failures, parse bugs) report to a new MCP-specific Sentry DSN; expected `LeadbayError` envelopes (QUOTA_EXCEEDED, NOT_FOUND, AUTH_EXPIRED, FORBIDDEN, BILLING_SUSPENDED, API_ERROR) stay in PostHog only.
+
+- **Identity by email**: PostHog `distinctId = me.email` so MCP events consolidate with web-app events under the same person. Person properties (`leadbay_id`, `leadbay_organization`, `leadbay_organization_id`, etc.) match the frontend's `usePostHog.tsx` shape.
+- **`$groups.organization` attached** so org-level rollups work out of the box (matches the PostHog project's defined group type).
+- **Privacy**: we capture `tool`, `duration_ms`, `ok`, `format`, `bytes`, `error_code` — never tool argument bodies, response bodies, lead emails, or Stripe URLs.
+- **Opt-out as a first-class toggle**: `leadbay-mcp install` always writes `LEADBAY_TELEMETRY_ENABLED=true` into your client's env block (next to `LEADBAY_TOKEN` / `LEADBAY_REGION`), so MCP-client config UIs (Claude Desktop, Cursor) render it as a toggle the user can flip without editing files. Pass `--no-telemetry` to install with telemetry off, or flip the env value to `"false"` anytime. Accepted: `true|1|yes|on` (enable), `false|0|no|off` (disable), case-insensitive. Also disabled when `NODE_ENV=test`.
+- **Override**: `LEADBAY_POSTHOG_KEY` and `LEADBAY_SENTRY_DSN` env vars override the baked-in defaults.
+- **stdio safety**: both SDKs are configured to never write to stdout (the JSON-RPC channel). Sentry runs without its default integrations (no console capture) and shutdown is bounded at 2s to never block process exit.
+
+Closes #3631.
+
 ## 0.10.0-dev.17 — 2026-05-19
 
 **New `leadbay_like_lead` and `leadbay_dislike_lead` write tools**: exposes the thumbs-up / thumbs-down actions already available on the Leadbay website as MCP tools. Agents can now send positive and negative lead signals back to the Leadbay scoring engine to improve future batch quality.
