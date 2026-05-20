@@ -446,9 +446,17 @@ Contact: **[Irving Enciso](<linkedin URL>)**, Regional Operations Manager · ☎
 
 Keep it short — 1 lead per ~3 lines, top 3–5 most relevant. The LinkedIn-linked contact name lives here (chat markdown works), the channels are listed as \` · \`-separated pills. **Do NOT enumerate the same leads as a markdown table** — this list-form summary is the chat-side detail surface.
 
-**LinkedIn URL priority** (used in the chat prose, not in carousel notes):
-1. \`recommended_contact.linkedin_page\` when set, not the literal \`"null"\`, starts with \`https://\`;
-2. Constructed search: \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\` with the company name stripped of \`Inc / LLC / Corp / GmbH / Ltd / Co / S.A. / S.L. / PLC / AG / SAS / SARL\` suffixes, URL-encoded. Append a trailing \` °\` to the contact name to mark the fallback path.
+## Linking a contact's name
+
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
+
+URL priority (first applicable wins):
+
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
+
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
+
 
 Open with **one short intro sentence** in chat ("Five lead visits across NYC for your trip next week — three in Midtown, plus Long Island and one in NJ.") and then invoke the widget, then the chat-side list above. **No markdown table.**
 
@@ -1142,19 +1150,14 @@ One line: \`+N more contacts at this company — [see them all](leadbay_research
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — \`contact.linkedin_page\` is a string that starts with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
 
-\`\`\`
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-\`\`\`
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing \` °\` to the rendered name ONLY when the fallback is in use AND \`social_presence.linkedin == false\` (no company LinkedIn → search may not resolve). Never append \`°\` when a real \`linkedin_page\` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 
@@ -1357,19 +1360,14 @@ Markers: \`★\` recommended, \`💎\` hot in web_insights key_people. Channel p
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — \`contact.linkedin_page\` is a string that starts with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
 
-\`\`\`
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-\`\`\`
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing \` °\` to the rendered name ONLY when the fallback is in use AND \`social_presence.linkedin == false\` (no company LinkedIn → search may not resolve). Never append \`°\` when a real \`linkedin_page\` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 
@@ -1524,25 +1522,20 @@ If \`qualification_summary.answered == 0\` or \`avg_qualification_boost\` is nul
 
 **Column 3 — Contact**
 
-\`[Contact name](LINK) · short job title\`. See linking/contact-linkedin for LINK priority and the °-flag fallback.
+\`[Contact name](LINK) · short job title\`. The \`[Contact name](LINK)\` markdown link wrapping is mandatory — never render the name as plain text. See linking/contact-linkedin for the URL priority (real profile → constructed people-search) and the °-flag fallback.
 
 **Hide from the user (never include in any cell):** \`id\`, \`location.pos\`, \`location.country\` (unless city/state both missing), \`sector_id\`, \`is_hq\`, \`web_fetch_in_progress\`, \`enrichment_in_progress\`, \`highlighted_fields\`, \`custom_fields\`, \`contacts_count\` when 0, \`notes_count\` / \`epilogue_actions_count\` / \`prospecting_actions_count\` when 0, \`stale_at\`, \`deal_insights\`, \`social_presence\` booleans (except as the °-flag signal), \`need_attention\` flags, any field whose value is the string \`"null"\`.
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — \`contact.linkedin_page\` is a string that starts with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
 
-\`\`\`
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-\`\`\`
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing \` °\` to the rendered name ONLY when the fallback is in use AND \`social_presence.linkedin == false\` (no company LinkedIn → search may not resolve). Never append \`°\` when a real \`linkedin_page\` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 
@@ -1793,19 +1786,14 @@ If \`qualification[]\` is non-empty, append one collapsed line: \`"Qualification
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — \`contact.linkedin_page\` is a string that starts with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
 
-\`\`\`
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-\`\`\`
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing \` °\` to the rendered name ONLY when the fallback is in use AND \`social_presence.linkedin == false\` (no company LinkedIn → search may not resolve). Never append \`°\` when a real \`linkedin_page\` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 
@@ -1989,19 +1977,14 @@ If \`qualification[]\` is non-empty, append one collapsed line: \`"Qualification
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — \`contact.linkedin_page\` is a string that starts with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
 
-\`\`\`
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-\`\`\`
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing \` °\` to the rendered name ONLY when the fallback is in use AND \`social_presence.linkedin == false\` (no company LinkedIn → search may not resolve). Never append \`°\` when a real \`linkedin_page\` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 

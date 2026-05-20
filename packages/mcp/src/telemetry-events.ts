@@ -5,6 +5,7 @@
 export const EV_TOOL_CALL = "mcp tool called";
 export const EV_QUOTA_HIT = "mcp quota hit";
 export const EV_TOPUP_LINK = "mcp topup link created";
+export const EV_STARTUP = "mcp startup";
 
 export type ToolCallFormat = "json" | "markdown" | "error-envelope";
 
@@ -29,4 +30,14 @@ export interface TopupLinkProps {
 
 export interface ExceptionCtx {
   tool: string;
+}
+
+// auth_state buckets startups by whether resolveClientFromEnv produced a
+// real client ("ok") or a broken stub. Lets us bucket "Server
+// disconnected" reports without reading individual users' logs.
+export type StartupAuthState = "ok" | "missing" | "expired" | "probe_failed";
+
+export interface StartupProps {
+  auth_state: StartupAuthState;
+  region: string;
 }
