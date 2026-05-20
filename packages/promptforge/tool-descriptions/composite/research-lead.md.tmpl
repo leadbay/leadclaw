@@ -5,6 +5,29 @@ short_description: |
   Tell me everything decision-relevant about a single lead — qualification
   answers, web-research signals, firmographics, enriched contacts, and
   recent engagement in one bundled call.
+routing:
+  triggers:
+    - "research <Company>"
+    - "tell me about <Company>"
+    - "deep dive on <Company>"
+    - "everything you know about <Company>"
+    - "is <Company> a fit"
+    - "should I pursue <Company>"
+  anti_triggers:
+    - phrase: "research a domain / company without a Leadbay lead id"
+      route_to: leadbay_research_company
+    - phrase: "draft outreach for <Contact>"
+      route_to: leadbay_prepare_outreach
+  prefer_when: "user already picked one lead from a pull_leads/pull_followups table — feed the lead's UUID via `leadId`"
+  examples:
+    positive:
+      - "Tell me everything about that Acme lead."
+      - "Deep dive on the lead I just picked."
+      - "Is Acme actually a good fit — what does the AI think?"
+    negative:
+      - "Show me today's leads."
+      - "Draft an email to John at Acme."
+      - "Research Acme Corp — I don't see it in my pipeline yet."
 annotations:
   readOnlyHint: true
   destructiveHint: false

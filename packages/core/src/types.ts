@@ -39,6 +39,12 @@ export interface LocationPayload {
   state?: string | null;
   country?: string | null;
   full?: string | null;
+  // Backend axis order is not pinned in the wiki (backend ask #4 of the
+  // MCP Apps plan tracks confirmation). The map widget detects the order
+  // heuristically — if one component is clearly outside latitude range
+  // (|lat| > 90) it's treated as longitude. Servers MUST emit MapLibre's
+  // native [lng, lat] when possible; otherwise the widget still renders
+  // sanely thanks to the heuristic.
   pos?: [number, number] | null;
 }
 
@@ -298,8 +304,33 @@ export interface PaginatedActivities {
 
 export type FilterCriterion =
   | { type: "sector_ids"; is_excluded: boolean; sectors: string[] }
+  | { type: "location_ids"; is_excluded: boolean; locations: string[] }
   | { type: "size"; is_excluded: boolean; sizes: Array<{ min?: number; max?: number }> }
   | { type: string; is_excluded: boolean; [k: string]: unknown };
+
+// /1.5/geo/search response shape. `level` is the admin hierarchy depth
+// (5=region, 6=county, 7=township-area, 8=city/town). `parent_ids` traces
+// the lead's location up the admin tree.
+export interface GeoMatch {
+  id: string;
+  country: string;
+  level: number;
+  name: string;
+  parent_ids: string[];
+}
+
+export interface GeoSearchResponse {
+  results: GeoMatch[];
+  parents: GeoMatch[];
+}
+
+// Surface shape for city ambiguity — mirrors SectorAmbiguity (see
+// composite/adjust-audience.ts) so the picker widget handles both with
+// the same render path.
+export interface LocationAmbiguity {
+  location_text: string;
+  matches: Array<{ id: string; name: string; country: string; level: number; score: number }>;
+}
 
 export interface LensFilterItem {
   criteria: FilterCriterion[];

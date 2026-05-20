@@ -20,6 +20,7 @@ import {
   listResourceTemplates,
   readResource,
 } from "./resources.js";
+import { BUILTIN_WIDGETS_PARAGRAPH } from "./host-widgets.js";
 import {
   compositeReadTools,
   compositeWriteTools,
@@ -50,6 +51,23 @@ const MENTAL_MODEL_PARAGRAPH =
   "logs back in, a fresh batch of leads is delivered. Batch size is paced by how many leads the user has " +
   "actually acted on recently — some workflows produce a big stream of smaller prospects, others a narrow " +
   "stream of bigger ones. Pulling more won't produce more; the user acting on leads (outreach, skips, saves) does.";
+
+const QUOTA_AND_TOPUP_PARAGRAPH =
+  "Quota & top-ups: when a tool returns QUOTA_EXCEEDED / 429, the user has TWO options — wait for the window " +
+  "reset (daily / weekly / monthly resets shown in leadbay_account_status), OR top up AI credits (top-ups clear " +
+  "the throttle IMMEDIATELY — they are not subject to the same window). Always offer BOTH options; " +
+  "default-recommending 'wait until tomorrow' is wrong when a 30-second top-up unblocks the same call. " +
+  "If the host exposes leadbay_create_topup_link, OFFER it on every quota wall: 'Want me to generate a top-up " +
+  "link?' — when the user says yes, call leadbay_create_topup_link and surface the returned Stripe URL as a " +
+  "clickable link for the user to open in their browser. (Sibling leadbay_open_billing_portal is for ongoing " +
+  "subscription changes, not one-shot top-ups.) " +
+  "AFTER the user has topped up: do NOT keep refusing operations. A top-up invalidates every prior 429 and every " +
+  "stale 'you're at your quota' snapshot. The moment the user signals they topped up / bought credits / added " +
+  "credits — even WITHOUT re-calling account_status — treat the previous quota state as void and RETRY the " +
+  "originally failed call. (Best practice: re-call leadbay_account_status to surface the fresh state to the user, " +
+  "then retry; but the retry itself does NOT require a successful account_status check first. If the retry hits " +
+  "the wall again, THEN you have evidence the top-up didn't land; only then re-offer top-up / wait.) " +
+  "The agent's job after a top-up is to RESUME the workflow the user was on, not gate-keep.";
 
 function buildScoringParagraph(has: (name: string) => boolean): string {
   const base =
@@ -220,6 +238,7 @@ export function buildServerInstructions(exposed: Set<string>): string {
     parts.push(VERIFICATION_MANDATE);
   }
   parts.push(MENTAL_MODEL_PARAGRAPH);
+  parts.push(QUOTA_AND_TOPUP_PARAGRAPH);
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
@@ -227,6 +246,12 @@ export function buildServerInstructions(exposed: Set<string>): string {
   if (promptsCatalog) parts.push(promptsCatalog);
   parts.push(RESOURCES_PARAGRAPH);
   parts.push(buildProtocolPrimitivesParagraph(has));
+  // Host-native widget routing — Claude's places_map_display_v0 /
+  // message_compose_v1 / ask_user_input_v0, ChatGPT's parallels. The
+  // paragraph self-conditions on host capability; agent falls back to
+  // the per-tool markdown RENDERING block when the widget isn't
+  // exposed.
+  parts.push(BUILTIN_WIDGETS_PARAGRAPH);
   return parts.join("\n\n");
 }
 

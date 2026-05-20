@@ -1,5 +1,7 @@
 ## NEXT STEPS — after kicking off bulk qualification
 
+{{include:next-steps/ask-user-input-routing}}
+
 Exactly two offers — keep it terse, this is a status tool:
 
 | Observation                          | Suggest                                       | Calls                          |

@@ -2,6 +2,7 @@ import type { LeadbayClient } from "../client.js";
 import type { Tool, ToolContext, MonitorFilterItem } from "../types.js";
 
 import { leadbay_pull_followups as PULL_FOLLOWUPS_DESCRIPTION } from "../tool-descriptions.generated.js";
+import { resolveLocations } from "./_geo-helpers.js";
 
 // B6/B7: coerce the legacy literal `"null"` LinkedIn string back to JSON null
 // across every contact-shaped object the response emits.
@@ -31,6 +32,43 @@ interface PullFollowupsParams {
   // `/monitor/filter` (server-persisted), then re-pulls `/monitor` with
   // `?filtered=true`. Mirrors the app's store-then-apply mechanism.
   set_filter?: MonitorFilterItem;
+  // Geo shortcut: pass a free-text city / region (e.g. "Berlin") to
+  // resolve into an admin_area id and merge into set_filter as a
+  // `location_ids` FilterCriterion. Ambiguous matches surface as
+  // `status: "ambiguous_locations"`; the agent picks an id and re-calls
+  // via `city_id`.
+  city?: string;
+  // Pre-resolved admin_area id (numeric string). Bypasses the resolver
+  // — useful when the agent has already disambiguated.
+  city_id?: string;
+}
+
+function mergeLocationIds(
+  filter: MonitorFilterItem | undefined,
+  ids: string[]
+): MonitorFilterItem {
+  // MonitorFilterItem.criteria is the wire shape: Array<Record<string, unknown>>
+  // (the backend's anyOf can't be narrowed strictly without a discriminated
+  // union it doesn't ship). We narrow per-criterion locally.
+  const criteria: Array<Record<string, unknown>> = filter?.criteria
+    ? [...filter.criteria]
+    : [];
+  const idx = criteria.findIndex(
+    (c) => c?.type === "location_ids" && c?.is_excluded === false
+  );
+  if (idx >= 0) {
+    const cur = criteria[idx];
+    const existing = Array.isArray(cur.locations) ? (cur.locations as string[]) : [];
+    const merged = Array.from(new Set([...existing, ...ids]));
+    criteria[idx] = { ...cur, locations: merged };
+  } else {
+    criteria.push({
+      type: "location_ids",
+      is_excluded: false,
+      locations: ids,
+    });
+  }
+  return { criteria };
 }
 
 interface MonitorResponse {
@@ -94,6 +132,16 @@ export const pullFollowups: Tool<PullFollowupsParams> = {
           },
         },
       },
+      city: {
+        type: "string",
+        description:
+          "Free-text city / region (e.g. 'Berlin', 'NYC', 'São Paulo'). The composite resolves it to an admin_area id via GET /geo/search and merges it into the active Monitor filter as a `location_ids` FilterCriterion. Ambiguous matches surface as `status: 'ambiguous_locations'` with `location_ambiguities[]` — the agent picks an id and re-calls via `city_id`.",
+      },
+      city_id: {
+        type: "string",
+        description:
+          "Pre-resolved admin_area id (numeric string). Use when the user / agent has already picked one of the ambiguity candidates. Bypasses the resolver.",
+      },
     },
     additionalProperties: false,
   },
@@ -120,6 +168,17 @@ export const pullFollowups: Tool<PullFollowupsParams> = {
         description:
           "Composite-derived count of leads in the page that were excluded because their `pushback_status` is active. The backend may or may not pre-filter; this exposes the count when the composite has to drop them itself.",
       },
+      status: {
+        type: "string",
+        description:
+          "`ambiguous_locations` when a passed `city` matched multiple admin_areas; the agent picks an id from `location_ambiguities` and re-calls with `city_id`. Absent on the happy path.",
+      },
+      location_ambiguities: {
+        type: "array",
+        description:
+          "Per ambiguous city: {location_text, matches:[{id, name, country, level, score}]}. Only present when `status === 'ambiguous_locations'`.",
+        items: { type: "object" },
+      },
       _meta: {
         type: "object",
         description: "Operator context: region + last-call latency.",
@@ -142,11 +201,40 @@ export const pullFollowups: Tool<PullFollowupsParams> = {
     const page = params.page ?? 0;
     const count = Math.min(params.count ?? 20, 200);
 
+    // Geo-shortcut: resolve city / city_id → location_ids, then merge into
+    // the effective set_filter. city_id bypasses the resolver; city goes
+    // through /geo/search with the same ambiguity-surfacing pattern that
+    // adjust_audience uses for sectors.
+    let effectiveSetFilter: MonitorFilterItem | undefined = params.set_filter;
+    const geoTexts: string[] = [];
+    if (params.city) geoTexts.push(params.city);
+    if (params.city_id) geoTexts.push(params.city_id);
+    if (geoTexts.length > 0) {
+      const { resolved, ambiguities } = await resolveLocations(client, geoTexts);
+      if (ambiguities.length > 0) {
+        return {
+          status: "ambiguous_locations" as const,
+          location_ambiguities: ambiguities,
+          leads: [],
+          active_filters: null,
+          pagination: null,
+          total_excluded_by_pushback: 0,
+          _meta: {
+            region: client.region,
+            latency_ms: client.lastMeta?.latency_ms ?? null,
+          },
+        };
+      }
+      if (resolved.length > 0) {
+        effectiveSetFilter = mergeLocationIds(effectiveSetFilter, resolved);
+      }
+    }
+
     // Modify-filter mode: store-then-apply (mirrors the Monitor app behavior).
     // The backend's filter is a single FilterItem per user, server-persisted.
-    if (params.set_filter) {
+    if (effectiveSetFilter) {
       try {
-        await client.requestVoid("POST", "/monitor/filter", params.set_filter);
+        await client.requestVoid("POST", "/monitor/filter", effectiveSetFilter);
       } catch (err: any) {
         ctx?.logger?.warn?.(
           `pull_followups: POST /monitor/filter failed: ${err?.message ?? err?.code ?? err}`

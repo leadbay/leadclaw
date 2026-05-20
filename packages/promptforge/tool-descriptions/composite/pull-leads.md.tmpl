@@ -2,16 +2,54 @@
 name: leadbay_pull_leads
 kind: tool-description
 short_description: |
-  Pull up new leads from the user's last-active lens — the canonical
-  "show me today's prospects" tool. Each lead carries a one-line
-  qualification_summary plus tags / scores / contact hints.
+  Pull new leads — today's prospects, last-active lens. Render as a
+  3-col markdown table sorted by score desc; col 1 is the inline-code
+  10-segment `▰❖▱` bar + linked company + location + size; col 2 is
+  why-fits ≤20 words; col 3 is linked contact + title.
+routing:
+  triggers:
+    - "show me leads"
+    - "today's prospects"
+    - "what's new today"
+    - "let's prospect"
+    - "best new leads"
+    - "my batch"
+  anti_triggers:
+    - phrase: "leads I should follow up with"
+      route_to: leadbay_pull_followups
+    - phrase: "leads I've already worked"
+      route_to: leadbay_pull_followups
+    - phrase: "I'm going to <city>"
+      route_to: leadbay_followups_map
+    - phrase: "in person"
+      route_to: leadbay_followups_map
+  prefer_when: "user has named a specific lens — pass `lensId` and pin it for the rest of the session"
+  examples:
+    positive:
+      - "Show me today's leads."
+      - "What's in my inbox this morning?"
+      - "Pull my best new prospects."
+    negative:
+      - "Which leads should I follow up with this week?"
+      - "Show leads I've already contacted."
+      - "I'm flying to Berlin Thursday — who should I meet?"
+rendering_hint: |
+  3-col markdown table sorted by `score` desc — DO NOT print the numeric
+  score. Col 1 = inline-code 10-segment bar (`▰` firmographic, `❖` AI
+  booster cap at the right end of the filled run, `▱` empty;
+  filled=round(score/10), ai=round(avg_boost/3.3)) + `<br>` + linked
+  company · location · size. Col 2 = why-fits ≤20 words. Col 3 = linked
+  contact + title. Full algorithm + linking rules below.
+next_steps: pull-leads
 annotations:
   readOnlyHint: true
   destructiveHint: false
   idempotentHint: true
   openWorldHint: true
 ---
-Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool. Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line `qualification_summary` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
+Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool.
+
+Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line `qualification_summary` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
 
 Roughly the top 10 of the batch come pre-qualified (populated qualification_summary + ai_agent_lead_score); leads below the top ~10 carry only the basic firmographic `score` — not worse, just resource-saved by the system. Call leadbay_bulk_qualify_leads to deepen any of them on demand — a healthy daily rhythm is to bulk-qualify the rows without ❖ caps so tomorrow's top-10 list is richer.
 

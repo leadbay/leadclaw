@@ -76,7 +76,7 @@ async function main() {
     copyFileSync(join(MCP_DIR, "README.md"), join(STAGE_DIR, "README.md"));
   }
 
-  // 3b. Sanity check the staged server/index.js. esbuild escapes non-ASCII to
+  // 3a. Sanity check the staged server/index.js. esbuild escapes non-ASCII to
   // \uXXXX, so we look for both the literal and escaped forms. A previous
   // 0.9.1 bundle shipped without these strings because @leadbay/core was
   // compiled against a stale tool-descriptions.generated.ts — fail fast here

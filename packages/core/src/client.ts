@@ -621,14 +621,25 @@ export class LeadbayClient {
       parsed?.error === "quota_exceeded" ||
       parsed?.error?.code === "quota_exceeded"
     ) {
+      const hintBase = retryAfter
+        ? `Wait ${retryAfter}s before retrying`
+        : "Wait, then retry";
       return this.makeError(
         "QUOTA_EXCEEDED",
         retryAfter
           ? `Quota exceeded — retry in ${retryAfter}s`
           : "Quota exceeded",
-        retryAfter
-          ? `Wait ${retryAfter}s before retrying. Check leadbay_get_quota to see which resource window was hit.`
-          : "Wait, then retry. Check leadbay_get_quota to see which resource window (daily/weekly/monthly) was hit.",
+        // The Leadbay user can either wait for the window to reset OR top up
+        // AI credits (which clears the throttle immediately). Tell the agent
+        // both options exist so it offers the top-up path to the user instead
+        // of forcing them to wait. Surface leadbay_create_topup_link so the
+        // agent can generate the URL itself instead of asking the user to
+        // navigate to a website. Once the user has topped up, the previous
+        // 429 is stale — retry the failed call.
+        `${hintBase}, OR top up AI credits — top-ups clear the throttle immediately. ` +
+          `Offer the user to generate a Stripe checkout URL via leadbay_create_topup_link, OR direct them to app.leadbay.ai → Billing. ` +
+          `Check leadbay_account_status / leadbay_get_quota to see which resource window (daily/weekly/monthly) was hit. ` +
+          `Once the user has topped up, the previous QUOTA_EXCEEDED is stale — re-call leadbay_account_status to refresh, then RETRY the original operation.`,
         endpoint,
         retryAfter
       );
