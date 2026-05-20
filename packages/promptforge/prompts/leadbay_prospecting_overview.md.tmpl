@@ -13,8 +13,8 @@ expected_calls:
   - leadbay_account_status
   - leadbay_pull_leads
   - leadbay_pull_followups
-  - leadbay_research_company
-  - leadbay_research_lead
+  - leadbay_research_lead_by_id
+  - leadbay_research_lead_by_name_fuzzy
   - leadbay_prepare_outreach
   - leadbay_report_outreach
   - leadbay_set_pushback
@@ -56,8 +56,8 @@ leadbay_pull_leads           leadbay_pull_followups
 leadbay_daily_check_in      leadbay_followup_check_in
         │                            │
         │  optional:                 │  filters by user phrasing:
-        │  research_company /        │  geo, sector, recency,
-        │  research_lead             │  liked / pushback / outcome
+        │  research_lead_by_name_fuzzy /  │  geo, sector, recency,
+        │  research_lead_by_id        │  liked / pushback / outcome
         │  (deepen profile)          │
         └───────────┬────────────────┘
                     ▼

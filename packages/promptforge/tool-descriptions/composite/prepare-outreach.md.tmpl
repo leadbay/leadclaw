@@ -14,7 +14,7 @@ routing:
     - "I'm about to reach out to <X>"
   anti_triggers:
     - phrase: "research a lead I haven't picked yet"
-      route_to: leadbay_research_lead
+      route_to: leadbay_research_lead_by_id
     - phrase: "log outreach I already sent"
       route_to: leadbay_report_outreach
     - phrase: "enrich a batch of contacts"
@@ -53,7 +53,7 @@ The first call to this tool on a lead records a `LEAD_VIEWED`-style prospecting 
 
 {{include:headers/tool-when-to-use}} when the agent is about to draft outreach for ONE specific lead and needs everything to compose — channels + angles + history context.
 
-{{include:headers/tool-when-not-to-use}} across many leads — use leadbay_enrich_titles for bulk; for general lead detail use leadbay_research_lead (richer signals); to actually log the outreach action use leadbay_report_outreach (requires verification).
+{{include:headers/tool-when-not-to-use}} across many leads — use leadbay_enrich_titles for bulk; for general lead detail use leadbay_research_lead_by_id (richer signals); to actually log the outreach action use leadbay_report_outreach (requires verification).
 
 ---
 

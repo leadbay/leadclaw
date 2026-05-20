@@ -16,7 +16,7 @@ Present the response as a markdown table sorted by `score` descending, with exac
 **Column 2 — Why it fits**
 
 - One sentence, ≤ 20 words.
-- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead` or `leadbay_research_company`.
+- Synthesize from (in priority order, whichever is present) the lead's `short_description`, top 2 `tags[].display_name`, and the gist of `qualification_summary.best_response_excerpt`. The trim payload does NOT carry the longer `description` field — for that, agent must call `leadbay_research_lead_by_id` or `leadbay_research_lead_by_name_fuzzy`.
 - Do NOT append `(boost N)` — the ❖ cap in column 1 already carries that signal.
 - No bullet lists, no line breaks inside the cell.
 

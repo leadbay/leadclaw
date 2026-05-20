@@ -13,7 +13,7 @@ arguments: []
 expected_calls:
   - leadbay_account_status
   - leadbay_pull_leads
-  - leadbay_research_lead
+  - leadbay_research_lead_by_id
   - leadbay_bulk_qualify_leads
   - leadbay_enrich_contacts
 failure_modes:
@@ -21,10 +21,10 @@ failure_modes:
   - Surfaces fewer than 10 leads when more are available, or fails to top up via leadbay_qualify_top_n when the batch is short
   - Replaces the canonical pull_leads table layout with prose per row (the per-tool RENDERING block is the structural contract; "Today's nudges" goes above it, not in place of it)
   - Skips the nudge paragraph entirely — the table alone is fine but adding the nudge is the value-add
-  - Skips deep research on promising leads (Phase 4) — the agent must call leadbay_research_lead on each, not just one
+  - Skips deep research on promising leads (Phase 4) — the agent must call leadbay_research_lead_by_id on each, not just one
   - Triggers contact enrichment without asking the user first (it consumes quota)
   - Skips the STOP byproduct and proposes next actions on its own
-  - Fires 10 parallel leadbay_research_lead calls and treats "stream closed" errors as terminal — must serialize and retry singletons
+  - Fires 10 parallel leadbay_research_lead_by_id calls and treats "stream closed" errors as terminal — must serialize and retry singletons
   - Re-pulls leadbay_pull_leads without passing the captured lensId, allowing a backend lens shift to discard the Phase 2 batch
   - Treats a "Request timed out" from leadbay_bulk_qualify_leads as terminal instead of retrying with wait_for_completion:false + qualify_status polling
   - Triggers on a follow-up query (e.g., "leads I should follow up with") that should have routed to `leadbay_followup_check_in` — the two entry points are different data sources (Discover wishlist vs Monitor view) per §1.6
@@ -58,7 +58,7 @@ If the batch returns fewer than 10 qualified leads, top it up: call `leadbay_bul
 
 # PHASE 4 — DEEP DIVE (every promising lead)
 
-Call `leadbay_research_lead` on **every** lead from your top 10 that the user might realistically prospect today (filter out clearly weak fits if any). Don't pick just one. **Call it sequentially** — one at a time, or batches of at most 3 in parallel. Do not fire 10 in parallel — it triggers transport backpressure that surfaces as `"Tool permission stream closed"` errors (see Rule 3 above). If a call fails, retry that single lead once; if the retry also fails, note the lead id and continue. Report Phase 4 results even if 1–2 leads were unresearchable.
+Call `leadbay_research_lead_by_id` on **every** lead from your top 10 that the user might realistically prospect today (filter out clearly weak fits if any). Don't pick just one. **Call it sequentially** — one at a time, or batches of at most 3 in parallel. Do not fire 10 in parallel — it triggers transport backpressure that surfaces as `"Tool permission stream closed"` errors (see Rule 3 above). If a call fails, retry that single lead once; if the retry also fails, note the lead id and continue. Report Phase 4 results even if 1–2 leads were unresearchable.
 
 For each researched lead surface:
 - what makes it promising (1–2 sentences citing signals from the research)

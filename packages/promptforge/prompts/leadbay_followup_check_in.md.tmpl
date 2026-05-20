@@ -12,7 +12,7 @@ short_description: |
 arguments: []
 expected_calls:
   - leadbay_pull_followups
-  - leadbay_research_lead
+  - leadbay_research_lead_by_id
   - leadbay_prepare_outreach
 failure_modes:
   - Calls leadbay_pull_leads (the Discover entry point) instead of leadbay_pull_followups — these are different data sources; the Discover queue does NOT contain Monitor's known-but-cold pipeline
@@ -68,7 +68,7 @@ ABOVE the table, add a 1–3 sentence "Where to start today" paragraph that name
 
 Unlike `leadbay_daily_check_in` which deep-dives on every promising lead in Phase 4, this prompt waits for the user to point at a row. Reason: follow-up batches are typically larger and the user is triaging recall, not researching cold.
 
-When the user picks a row, call `leadbay_research_lead` on that single lead (or `leadbay_research_company` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
+When the user picks a row, call `leadbay_research_lead_by_id` on that single lead (or `leadbay_research_lead_by_name_fuzzy` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
 
 # CROSS-MODE PIVOT
 

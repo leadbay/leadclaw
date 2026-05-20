@@ -21,7 +21,7 @@ export function qualifyTopNInvariants(evidence: MCPEvidence): InvariantResult[] 
       pass: countArg === 10 || countArg === "10",
       reason: `expected count=10, observed ${JSON.stringify(countArg)}`,
     },
-    { name: "never_called.leadbay_research_lead", pass: !calls.includes("leadbay_research_lead") },
+    { name: "never_called.leadbay_research_lead_by_id", pass: !calls.includes("leadbay_research_lead_by_id") },
     {
       name: "still_running_leads_named",
       pass: ["l8", "l9", "l10"].every((id) => proseAll.includes(id)),

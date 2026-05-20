@@ -44,7 +44,7 @@ export function listResourceTemplates(): ResourceTemplate[] {
       uriTemplate: "lead://{uuid}/profile",
       name: "Lead profile",
       description:
-        "Full profile for a single Leadbay lead by UUID. Read-only. Cached client-side; cheaper than calling leadbay_research_lead when you already have the id.",
+        "Full profile for a single Leadbay lead by UUID. Read-only. Cached client-side; cheaper than calling leadbay_research_lead_by_id when you already have the id.",
       mimeType: "application/json",
     },
     {

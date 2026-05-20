@@ -87,7 +87,7 @@ function buildScoringParagraph(has: (name: string) => boolean): string {
 function buildStartHereParagraph(has: (name: string) => boolean): string {
   const base =
     "Start with leadbay_account_status to see the user's state, then leadbay_pull_leads to surface fresh leads. " +
-    "Use leadbay_research_lead to dig into one lead deeply (qualification answers, signals, contacts).";
+    "Use leadbay_research_lead_by_id to dig into one lead deeply (qualification answers, signals, contacts).";
   const compositeNames = ["bulk_qualify_leads", "adjust_audience", "refine_prompt", "enrich_titles"]
     .filter((n) => has(`leadbay_${n}`));
   if (compositeNames.length > 0) {

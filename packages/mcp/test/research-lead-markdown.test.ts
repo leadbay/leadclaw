@@ -103,7 +103,7 @@ describe("research_lead response_format='markdown' (iter25)", () => {
     HAPPY_PATH_MOCKS();
     const { mcpClient } = await connect();
     const result = await mcpClient.callTool({
-      name: "leadbay_research_lead",
+      name: "leadbay_research_lead_by_id",
       arguments: { leadId: "lead-1", lensId: 42 },
     });
     expect((result as any).isError).not.toBe(true);
@@ -120,7 +120,7 @@ describe("research_lead response_format='markdown' (iter25)", () => {
     HAPPY_PATH_MOCKS();
     const { mcpClient } = await connect();
     const result = await mcpClient.callTool({
-      name: "leadbay_research_lead",
+      name: "leadbay_research_lead_by_id",
       arguments: { leadId: "lead-1", lensId: 42, response_format: "markdown" },
     });
     expect((result as any).isError).not.toBe(true);
@@ -139,7 +139,7 @@ describe("research_lead response_format='markdown' (iter25)", () => {
     HAPPY_PATH_MOCKS();
     const { mcpClient } = await connect();
     const result = await mcpClient.callTool({
-      name: "leadbay_research_lead",
+      name: "leadbay_research_lead_by_id",
       arguments: { leadId: "lead-1", lensId: 42, response_format: "markdown" },
     });
     expect((result as any).structuredContent).toBeDefined();
@@ -152,12 +152,12 @@ describe("research_lead response_format='markdown' (iter25)", () => {
     HAPPY_PATH_MOCKS();
     const { mcpClient } = await connect();
     const r1 = await mcpClient.callTool({
-      name: "leadbay_research_lead",
+      name: "leadbay_research_lead_by_id",
       arguments: { leadId: "lead-1", lensId: 42 },
     });
     HAPPY_PATH_MOCKS();
     const r2 = await mcpClient.callTool({
-      name: "leadbay_research_lead",
+      name: "leadbay_research_lead_by_id",
       arguments: { leadId: "lead-1", lensId: 42, response_format: "markdown" },
     });
     const jsonLen = (r1 as any).content[0].text.length;

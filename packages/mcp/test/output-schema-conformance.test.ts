@@ -334,7 +334,7 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
-    toolName: "leadbay_research_lead",
+    toolName: "leadbay_research_lead_by_id",
     arguments: { leadId: "lead-1", lensId: 42 },
     setupMocks: () => {
       mockHttp([
@@ -572,8 +572,8 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
-    toolName: "leadbay_research_company",
-    arguments: { leadId: "lead-1" },
+    toolName: "leadbay_research_lead_by_name_fuzzy",
+    arguments: { companyName: "Acme" },
     setupMocks: () => {
       mockHttp([
         // resolveDefaultLens → /me
@@ -587,6 +587,18 @@ const CASES: ConformanceCase[] = [
             last_requested_lens: 42,
           },
         },
+        // discoverLeads wishlist fan-out for fuzzy resolution
+        {
+          method: "GET",
+          path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+          status: 200,
+          body: {
+            items: [
+              { id: "lead-1", name: "Acme", score: 80 },
+            ],
+            pagination: { page: 0, pages: 1, total: 1 },
+          },
+        },
         // POST /interactions (fire-and-forget)
         {
           method: "POST",
@@ -594,7 +606,7 @@ const CASES: ConformanceCase[] = [
           status: 200,
           body: {},
         },
-        // getLeadProfile main payload via lens-prefixed path
+        // research_lead_by_id main payload via lens-prefixed path
         {
           method: "GET",
           path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,

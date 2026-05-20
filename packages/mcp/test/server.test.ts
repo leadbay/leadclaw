@@ -48,11 +48,11 @@ describe("tools/list — default (composite reads + writes since 0.3.0)", () => 
 
     // 0.3.0: composite reads + writes both exposed by default.
     expect(names).toContain("leadbay_pull_leads");
-    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_research_lead_by_id");
     expect(names).toContain("leadbay_account_status");
     expect(names).toContain("leadbay_recall_ordered_titles");
     // Existing composites (kept for back-compat)
-    expect(names).toContain("leadbay_research_company");
+    expect(names).toContain("leadbay_research_lead_by_name_fuzzy");
     expect(names).toContain("leadbay_prepare_outreach");
     // Composite writes — exposed under the new default.
     expect(names).toContain("leadbay_report_outreach");
@@ -95,7 +95,7 @@ describe("tools/list — read-only mode (LEADBAY_MCP_WRITE=0 / includeWrite=fals
     const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
     // Reads still exposed.
     expect(names).toContain("leadbay_pull_leads");
-    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_research_lead_by_id");
     expect(names).toContain("leadbay_account_status");
     // Writes hidden.
     expect(names).not.toContain("leadbay_report_outreach");
@@ -268,7 +268,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
   const FULL_EXPOSURE = new Set([
     "leadbay_account_status",
     "leadbay_pull_leads",
-    "leadbay_research_lead",
+    "leadbay_research_lead_by_id",
     "leadbay_recall_ordered_titles",
     "leadbay_bulk_qualify_leads",
     "leadbay_enrich_titles",
@@ -281,7 +281,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
   const READ_ONLY = new Set([
     "leadbay_account_status",
     "leadbay_pull_leads",
-    "leadbay_research_lead",
+    "leadbay_research_lead_by_id",
     "leadbay_recall_ordered_titles",
   ]);
 
@@ -298,7 +298,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
     const { buildServerInstructions } = await import("../src/server.js");
     const out = buildServerInstructions(FULL_EXPOSURE);
     expect(out).toMatch(/leadbay_pull_leads/);
-    expect(out).toMatch(/leadbay_research_lead/);
+    expect(out).toMatch(/leadbay_research_lead_by_id/);
     expect(out).toMatch(/leadbay_account_status/);
   });
 
@@ -339,7 +339,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
     expect(out).toMatch(/LEADBAY_MCP_WRITE=0/);
     // Still references the composite read flow.
     expect(out).toMatch(/leadbay_pull_leads/);
-    expect(out).toMatch(/leadbay_research_lead/);
+    expect(out).toMatch(/leadbay_research_lead_by_id/);
   });
 
   it("buildServer attaches dynamic instructions to the Server (read-only mode)", async () => {

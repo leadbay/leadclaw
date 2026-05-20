@@ -8,7 +8,7 @@ Run the Leadbay follow-up check-in for me. Treat this prompt the same way for an
 
 # Resilience rules for Leadbay long-running tools
 
-These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
+These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead_by_id`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
 
 ## Rule 1 — Pin the lens
 
@@ -18,9 +18,9 @@ After your first `leadbay_pull_leads` call, capture `response.lens.id` into your
 
 `leadbay_bulk_qualify_leads` and `leadbay_import_and_qualify` accept `wait_for_completion:false`, which returns `{status:'running', qualify_id}` immediately. Then poll `leadbay_qualify_status` (or `leadbay_import_status`) every ~10s until the job completes. **Use the async pattern by default** — the blocking default can exceed the MCP client's per-call timeout on large batches and produce a misleading `"Request timed out"` even though the server is still working.
 
-## Rule 3 — Serialize `leadbay_research_lead` fan-out
+## Rule 3 — Serialize `leadbay_research_lead_by_id` fan-out
 
-`leadbay_research_lead` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
+`leadbay_research_lead_by_id` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
 
 ## Rule 4 — Retry, don't replan
 
@@ -162,7 +162,7 @@ ABOVE the table, add a 1–3 sentence "Where to start today" paragraph that name
 
 Unlike `leadbay_daily_check_in` which deep-dives on every promising lead in Phase 4, this prompt waits for the user to point at a row. Reason: follow-up batches are typically larger and the user is triaging recall, not researching cold.
 
-When the user picks a row, call `leadbay_research_lead` on that single lead (or `leadbay_research_company` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
+When the user picks a row, call `leadbay_research_lead_by_id` on that single lead (or `leadbay_research_lead_by_name_fuzzy` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
 
 # CROSS-MODE PIVOT
 
