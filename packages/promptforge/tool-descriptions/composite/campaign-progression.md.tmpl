@@ -48,7 +48,7 @@ annotations:
 Per-lead progression view for one campaign. Wraps `GET /campaigns/{id}/leads` (paginated). For every lead in the campaign:
 
 - **lead** — full `LeadPayload` (same shape `pull_leads` / `pull_followups` return), so the agent has score, contacts, ai_summary, location, etc. without an extra round trip.
-- **progress** — `{total_contacts, in_progress, declined, headline}`. `headline` is the most recent `InteractionType` (CONTACTED / MEETING_BOOKED / DECLINED / etc.) and is the load-bearing field for "what stage is this lead at".
+- **progress** — `{total_contacts, in_progress, declined, headline}`. `total_contacts` is reachable contact coverage; do not treat it as prior outreach. `headline` is the most recent `InteractionType` (CONTACTED / MEETING_BOOKED / DECLINED / etc.) and is the load-bearing field for "what stage is this lead at".
 - **affiliation** — `{own_campaigns: CampaignRefPayload[], other_users_campaign_count}`. `own_campaigns` lists OTHER campaigns of yours this lead is in (overlap detection — avoids the rep doubling outreach across two of their own campaigns). `other_users_campaign_count` is how many teammates also have this lead in one of THEIR campaigns. This is the only cross-user signal the campaign API exposes.
 
 The composite also adds a `summary` block computed across the current page (`{page_size, contacted, in_progress, declined}`) so a quick "how is this campaign doing" prompt doesn't need to roll up the items array itself.

@@ -28,6 +28,7 @@ import {
   leadbay_refine_audience,
   leadbay_research_a_domain,
   leadbay_setup_team_prospecting,
+  leadbay_work_campaign,
   PROMPT_META,
 } from "./prompts.generated.js";
 
@@ -219,6 +220,32 @@ const CATALOG: CatalogEntry[] = [
           rep_split_block: args.rep_split
             ? `Rep split preference: **${args.rep_split}**\n`
             : "",
+        }),
+      ),
+    ],
+  },
+  {
+    name: "leadbay_work_campaign",
+    description: PROMPT_META.leadbay_work_campaign.short_description,
+    arguments: [
+      {
+        name: "campaign",
+        description:
+          "Campaign name (fuzzy match) or campaign UUID. Omit to list and pick interactively.",
+        required: false,
+      },
+      {
+        name: "mode",
+        description:
+          "Optional: skip readiness proposal and jump to 'call_sheet', 'email_sheet', 'map', or 'enrich_first'. Omit to let the prompt propose based on campaign data.",
+        required: false,
+      },
+    ],
+    render: (args) => [
+      userMessage(
+        substitutePlaceholders(leadbay_work_campaign, {
+          campaign_or_default: args.campaign ?? "<pick from the list>",
+          mode_paren: args.mode ? ` (mode: ${args.mode})` : "",
         }),
       ),
     ],

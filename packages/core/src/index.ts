@@ -80,6 +80,7 @@ import { createCampaign } from "./composite/create-campaign.js";
 import { addLeadsToCampaign } from "./composite/add-leads-to-campaign.js";
 import { listCampaigns } from "./composite/list-campaigns.js";
 import { campaignProgression } from "./composite/campaign-progression.js";
+import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
 import { researchLeadById } from "./composite/research-lead-by-id.js";
 import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
@@ -221,6 +222,7 @@ export const compositeReadTools: Tool[] = [
   tourPlan,
   listCampaigns,
   campaignProgression,
+  campaignCallSheet,
   researchLeadById,
   researchLeadByNameFuzzy,
   recallOrderedTitles,

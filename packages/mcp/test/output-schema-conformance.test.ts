@@ -1001,6 +1001,8 @@ const OPT_OUT: Record<string, string> = {
     "Single GET /campaigns returning CampaignWithStatsPayload[]; envelope-level shape.",
   leadbay_campaign_progression:
     "Single GET /campaigns/{id}/leads — paginated CampaignLeadPayload items.",
+  leadbay_campaign_call_sheet:
+    "Joins GET /campaigns/{id}/contacts + /leads into a call-ready payload; per-contact shape exercised by live-campaigns smoke (test/smoke/live-campaigns.test.ts).",
 };
 
 // -----------------------------------------------------------------------

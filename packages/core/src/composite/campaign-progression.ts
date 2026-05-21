@@ -6,8 +6,9 @@
  * governance. Each row has:
  *   - lead: full LeadPayload (contacts, score, state, ai_summary)
  *   - progress: {total_contacts, in_progress, declined, headline} —
- *     the per-lead campaign roll-up (contacts touched, conversations
- *     still active, declined, last interaction type).
+ *     the per-lead campaign roll-up (reachable contacts, conversations
+ *     still active, declined, last interaction type). `total_contacts`
+ *     is contact coverage, not outreach history.
  *   - affiliation: {own_campaigns, other_users_campaign_count} —
  *     overlap detection across the user's own campaigns AND visibility
  *     into how many teammates also have this lead in their campaigns.
@@ -38,6 +39,17 @@ interface PaginatedLeadsResponse {
     };
   }>;
   pagination: { page: number; pages: number; total: number };
+}
+
+function hasOutreachSignal(
+  progress: PaginatedLeadsResponse["items"][number]["progress"] | undefined,
+): boolean {
+  if (!progress) return false;
+  return Boolean(
+    progress.headline ||
+      (progress.in_progress ?? 0) > 0 ||
+      (progress.declined ?? 0) > 0,
+  );
 }
 
 export const campaignProgression: Tool<ProgressionParams> = {
@@ -115,7 +127,7 @@ export const campaignProgression: Tool<ProgressionParams> = {
     let declined = 0;
     for (const row of result.items) {
       const p = row.progress;
-      if ((p?.total_contacts ?? 0) > 0) contacted++;
+      if (hasOutreachSignal(p)) contacted++;
       if ((p?.in_progress ?? 0) > 0) inProgress++;
       if ((p?.declined ?? 0) > 0) declined++;
     }

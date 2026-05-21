@@ -4,7 +4,7 @@ description: "Plan a field sales tour: in one flow, surface follow-ups + fresh D
 ---
 
 
-Plan a field sales tour for me in **<City or region the user is visiting (e.g. 'Limoges', 'Bay Area'). Used as the geo filter for both Monitor and Discover lookups. If not provided in the user's most recent message, ask once before proceeding.>**<if the user named one, render as " (<filename>)" with a leading space; otherwise empty. Source: When the visit is (e.g. 'May 24', 'next Thursday'). Surfaced in the outreach drafts as 'I'll be in <city> on <date>'.>.
+Plan a field sales tour for me in **<City or region the user is visiting (e.g. 'Limoges', 'Bay Area'). Used as the geo filter for both Monitor and Discover lookups. If not provided in the user's most recent message, ask once before proceeding.>**<if the user supplied this argument, render the short parenthetical or inline clause derived from it; otherwise empty. Source: When the visit is (e.g. 'May 24', 'next Thursday'). Surfaced in the outreach drafts as 'I'll be in <city> on <date>'.>.
 
 GATE — DEFER TO TOOL RENDERING. When you call a Leadbay composite that ships its own RENDERING block (every composite in 0.9.0+ does), render the response using that block's recipe verbatim — score bars, glyph palette, column order, hide-list, link priorities, all of it. Do NOT substitute prose, a numbered list, or a different column structure even when an orchestrating prompt's body suggests alternate framing. Prompt-specific commentary (motivational nudges, summaries, next-action recommendations) belongs ABOVE or BELOW the canonical table, never in place of it.
 
@@ -44,7 +44,7 @@ Serialize the prepare_outreach calls (max 3 in parallel — see the long-running
 
 # PHASE 4 — PERSIST AS A CAMPAIGN (optional, ask first)
 
-After drafts, ask me ONCE: "Save these 9 accounts as a campaign called '**<the city (as extracted above)> Tour<the value derived from "date" (dash). Source: When the visit is (e.g. 'May 24', 'next Thursday'). Surfaced in the outreach drafts as 'I'll be in <city> on <date>'.>**'?" If I say yes, call `leadbay_create_campaign({lead_ids: [...all_nine_lead_ids], name: "<the city (as extracted above)> Tour<the date_dash (as extracted above)>"})`. Surface the returned `id` + `name` as a confirmation line, and offer the NEXT STEPS chip "View progression" (which routes to `leadbay_campaign_progression`).
+After drafts, ask me ONCE: "Save these 9 accounts as a campaign called '**<the city (as extracted above)> Tour<if the user supplied this argument, render the dash-prefixed phrase derived from it; otherwise empty. Source: When the visit is (e.g. 'May 24', 'next Thursday'). Surfaced in the outreach drafts as 'I'll be in <city> on <date>'.>**'?" If I say yes, call `leadbay_create_campaign({lead_ids: [...all_nine_lead_ids], name: "<the city (as extracted above)> Tour<the date_dash (as extracted above)>"})`. Surface the returned `id` + `name` as a confirmation line, and offer the NEXT STEPS chip "View progression" (which routes to `leadbay_campaign_progression`).
 
 If I declined the campaign step, end the turn — the map + drafts are enough for an ad-hoc trip.
 
