@@ -511,7 +511,8 @@ async function runLogin(args: string[]): Promise<number> {
       result = await resolveRegion(email, password, pinnedRegion ?? undefined);
     }
   } catch (err: any) {
-    process.stderr.write(`leadbay-mcp login: ${err?.message ?? String(err)}\n`);
+    process.stderr.write(`leadbay-mcp@${VERSION} login: ${err?.message ?? String(err)}\n`);
+    await reportCliFailure("__login__", err);
     return 1;
   }
 
@@ -1154,7 +1155,8 @@ async function runInstall(args: string[]): Promise<number> {
       region = result.region;
     }
   } catch (err: any) {
-    process.stderr.write(`leadbay-mcp install: ${err?.message ?? String(err)}\n`);
+    process.stderr.write(`leadbay-mcp@${VERSION} install: ${err?.message ?? String(err)}\n`);
+    await reportCliFailure("__install_login__", err);
     return 1;
   }
   process.stderr.write(`Logged in to ${region.toUpperCase()} backend.\n\n`);
@@ -1224,11 +1226,22 @@ async function runInstall(args: string[]): Promise<number> {
     results.push({ id: c.id, label: c.label, ...res });
   }
 
-  process.stderr.write("\n=== install summary ===\n");
+  process.stderr.write(`\n=== install summary (leadbay-mcp@${VERSION}) ===\n`);
   let anyOk = false;
   for (const r of results) {
     process.stderr.write(`  ${r.ok ? "✓" : "✗"} ${r.label.padEnd(16)} ${r.message}\n`);
-    if (r.ok) anyOk = true;
+    if (r.ok) {
+      anyOk = true;
+    } else if (!r.message.startsWith("skipped")) {
+      // Real failure (not user-skipped, not the DXT short-circuit). Capture
+      // per-client so Sentry can aggregate "Cursor write keeps failing on
+      // Windows" patterns across users. Synthesizing an Error keeps the
+      // message structured + stamped with the client id for triage.
+      await reportCliFailure(
+        `install:${r.id}`,
+        new Error(`${r.label}: ${r.message}`)
+      );
+    }
   }
   process.stderr.write(
     `\nThe token was written into client config files but never printed to your terminal.\n` +
@@ -1276,6 +1289,7 @@ async function runDoctor(): Promise<number> {
       }>("GET", "/users/me");
       process.stdout.write(
         `Leadbay connection OK.\n` +
+          `  Version:       leadbay-mcp@${VERSION} (node ${process.versions.node}, ${process.platform})\n` +
           `  Region:        ${baseUrl ? "(custom baseUrl)" : region}\n` +
           `  Base URL:      ${client.baseUrl}\n` +
           `  Organization:  ${me.organization.name} (${me.organization.id})\n` +
@@ -1289,8 +1303,10 @@ async function runDoctor(): Promise<number> {
       logger.error?.(`${region}: ${err?.message ?? err}`);
       if (err?.code === "AUTH_EXPIRED" || err?.code === "NOT_AUTHENTICATED") {
         process.stderr.write(
-          `Leadbay: your LEADBAY_TOKEN is not valid for ${region}. ${err.hint}\n`
+          `Leadbay: your LEADBAY_TOKEN is not valid for ${region}. ${err.hint}\n` +
+            `  (leadbay-mcp@${VERSION})\n`
         );
+        await reportCliFailure("__doctor_auth__", err);
         return 1;
       }
       // fall through and try next region
@@ -1298,9 +1314,31 @@ async function runDoctor(): Promise<number> {
     if (baseUrl) break; // custom baseUrl — don't try other regions
   }
   process.stderr.write(
-    "Leadbay doctor: could not reach any Leadbay region with this token. Check the token and your network.\n"
+    `Leadbay doctor: could not reach any Leadbay region with this token. Check the token and your network.\n` +
+      `  (leadbay-mcp@${VERSION})\n`
+  );
+  await reportCliFailure(
+    "__doctor_unreachable__",
+    new Error("doctor: no region reachable with current token")
   );
   return 1;
+}
+
+// Report a CLI-subcommand failure (install / login / doctor) to Sentry
+// before the caller `return`s its exit code. Without this, every error
+// inside runInstall/runLogin/runDoctor exits with stderr-only output —
+// users see the message in their terminal but Leadbay never learns
+// reinstall is broken on their machine. Init is single-shot per call;
+// shutdown is bounded inside telemetry.shutdown() so a network hang
+// can't stall CLI exit.
+async function reportCliFailure(label: string, err: unknown): Promise<void> {
+  try {
+    const bootTelemetry = initTelemetry({ version: VERSION });
+    bootTelemetry.captureException(err, { tool: label });
+    await bootTelemetry.shutdown();
+  } catch {
+    // Never let telemetry mask the underlying CLI failure.
+  }
 }
 
 // Install last-resort handlers so any uncaught exception or unhandled
@@ -1317,7 +1355,7 @@ function installStartupSafetyNets(logger: ToolLogger): void {
 
   const reportAndExit = (label: string, err: unknown): void => {
     const msg = err instanceof Error ? err.stack ?? err.message : String(err);
-    process.stderr.write(`leadbay-mcp: ${label}: ${msg}\n`);
+    process.stderr.write(`leadbay-mcp@${VERSION}: ${label}: ${msg}\n`);
     logger.error?.(`${label}: ${msg}`);
     // Fire-and-forget Sentry capture. Bounded by the same pattern as
     // the bootstrap catch at the entrypoint — telemetry must never

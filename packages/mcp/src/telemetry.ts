@@ -173,8 +173,17 @@ export function initTelemetry(opts: InitOpts): TelemetryHandle {
         sendDefaultPii: false,
         // Tag every captured event with the surface so Sentry views can
         // split MCP issues from web-app issues without per-call work.
+        // Version is also encoded in `release` above, but a dedicated
+        // `mcp_version` tag is filterable from Sentry's issue list without
+        // expanding the release dropdown — load-bearing when triaging
+        // "errors at reinstall on @0.13" vs older clients still on @0.11.
         initialScope: {
-          tags: { source: "mcp" },
+          tags: {
+            source: "mcp",
+            mcp_version: version,
+            node_version: process.versions.node,
+            platform: process.platform,
+          },
         },
       });
       sentryReady = true;
