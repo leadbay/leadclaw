@@ -447,7 +447,7 @@ export const enrichTitles: Tool<EnrichTitlesParams> = {
               "after ~60s; contact.enrichment.done flips to true.",
           next_action: bulkRecord
             ? "Call leadbay_bulk_enrich_status({bulk_id}) after ~60s; pass include_contacts=true for the final read."
-            : "Wait ~60s, then call leadbay_research_lead or leadbay_get_contacts on the leads you care about.",
+            : "Wait ~60s, then call leadbay_research_lead_by_id or leadbay_get_contacts on the leads you care about.",
         };
       } finally {
         // Always clear, but never re-throw from finally (would mask the

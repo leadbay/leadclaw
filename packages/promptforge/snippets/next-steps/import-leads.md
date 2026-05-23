@@ -1,5 +1,7 @@
 ## NEXT STEPS — after an import
 
+{{include:next-steps/ask-user-input-routing}}
+
 | Observation                                    | Suggest                                                       | Calls                                                  |
 |------------------------------------------------|---------------------------------------------------------------|--------------------------------------------------------|
 | Status: running                                | "Check progress"                                              | leadbay_import_status(handle_id)                       |

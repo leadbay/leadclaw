@@ -9,6 +9,7 @@ export {
 } from "./client.js";
 export type { CreateClientConfig, TasteProfileResult } from "./client.js";
 export * from "./types.js";
+export * from "./agent-memory/index.js";
 
 // ─── Granular tools — 1:1 with Leadbay API endpoints ─────────────────────
 
@@ -29,6 +30,7 @@ import { getLeadActivities } from "./tools/get-lead-activities.js";
 import { getLensFilter } from "./tools/get-lens-filter.js";
 import { getLensScoring } from "./tools/get-lens-scoring.js";
 import { listSectors } from "./tools/list-sectors.js";
+import { listLocations } from "./tools/list-locations.js";
 import { getUserPrompt } from "./tools/get-user-prompt.js";
 import { getClarification } from "./tools/get-clarification.js";
 import { getLeadNotes } from "./tools/get-lead-notes.js";
@@ -38,6 +40,11 @@ import { getWebFetch } from "./tools/get-web-fetch.js";
 import { getSelectionIds } from "./tools/get-selection-ids.js";
 import { getEnrichmentJobTitles } from "./tools/get-enrichment-job-titles.js";
 import { listMappableFields } from "./tools/list-mappable-fields.js";
+import { createTopupLink } from "./tools/create-topup-link.js";
+import { openBillingPortal } from "./tools/open-billing-portal.js";
+import { agentMemoryRecall } from "./tools/agent-memory-recall.js";
+import { agentMemoryCapture } from "./tools/agent-memory-capture.js";
+import { agentMemoryReview } from "./tools/agent-memory-review.js";
 
 // New write tools (autoplan §E5) — gated behind LEADBAY_MCP_WRITE=1 in MCP
 import { selectLeads } from "./tools/select-leads.js";
@@ -60,17 +67,26 @@ import { removePushback } from "./tools/remove-pushback.js";
 import { previewBulkEnrichment } from "./tools/preview-bulk-enrichment.js";
 import { launchBulkEnrichment } from "./tools/launch-bulk-enrichment.js";
 import { createCustomField } from "./tools/create-custom-field.js";
+import { likeLead } from "./tools/like-lead.js";
+import { dislikeLead } from "./tools/dislike-lead.js";
 
 // ─── Composite workflow tools — agent-facing surface ─────────────────────
 
 // Existing
-import { researchCompany } from "./composite/research-company.js";
 import { prepareOutreach } from "./composite/prepare-outreach.js";
 
 // New (autoplan §E4 reads + §E6 writes)
 import { pullLeads } from "./composite/pull-leads.js";
 import { pullFollowups } from "./composite/pull-followups.js";
-import { researchLead } from "./composite/research-lead.js";
+import { followupsMap } from "./composite/followups-map.js";
+import { tourPlan } from "./composite/tour-plan.js";
+import { createCampaign } from "./composite/create-campaign.js";
+import { addLeadsToCampaign } from "./composite/add-leads-to-campaign.js";
+import { listCampaigns } from "./composite/list-campaigns.js";
+import { campaignProgression } from "./composite/campaign-progression.js";
+import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
+import { researchLeadById } from "./composite/research-lead-by-id.js";
+import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
@@ -110,28 +126,41 @@ export {
   login, listLenses, discoverLeads, getLeadProfile, getContacts, getQuota,
   getTasteProfile, qualifyLead, enrichContacts, addNote, getLeadActivities,
   // new granular reads
-  getLensFilter, getLensScoring, listSectors, getUserPrompt, getClarification,
+  getLensFilter, getLensScoring, listSectors, listLocations, getUserPrompt, getClarification,
   getLeadNotes, getEpilogueResponses, getProspectingActions, getWebFetch,
   getSelectionIds, getEnrichmentJobTitles,
   listMappableFields,
+  createTopupLink, openBillingPortal,
+  agentMemoryRecall, agentMemoryCapture, agentMemoryReview,
   // new granular writes
   selectLeads, deselectLeads, clearSelection, setActiveLens, createLens,
   updateLens, updateLensFilter, createLensDraft, promoteLens, setUserPrompt,
   clearUserPrompt, pickClarification, dismissClarification, setEpilogueStatus,
   removeEpilogue, setPushback, removePushback, previewBulkEnrichment,
-  launchBulkEnrichment,
+  launchBulkEnrichment, likeLead, dislikeLead,
   createCustomField,
   // existing composite
-  researchCompany, prepareOutreach,
+  prepareOutreach,
   // new composite reads
-  pullLeads, pullFollowups, researchLead, recallOrderedTitles, accountStatus,
+  pullLeads, pullFollowups, followupsMap, tourPlan, listCampaigns,
+  campaignProgression, campaignCallSheet, researchLeadById, researchLeadByNameFuzzy,
+  recallOrderedTitles, accountStatus,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
   answerClarification, reportOutreach, importLeads, importAndQualify,
+  createCampaign, addLeadsToCampaign,
 };
 
 // ─── Tool catalogues ─────────────────────────────────────────────────────
+
+// Agent memory tools are always exposed: local-file recall/capture/review is
+// part of the agent protocol, not an advanced backend API surface.
+export const agentMemoryTools: Tool[] = [
+  agentMemoryRecall,
+  agentMemoryCapture,
+  agentMemoryReview,
+];
 
 // Granular reads (advanced — gated by LEADBAY_MCP_ADVANCED=1 in MCP).
 export const granularReadTools: Tool[] = [
@@ -145,6 +174,7 @@ export const granularReadTools: Tool[] = [
   getLensFilter,
   getLensScoring,
   listSectors,
+  listLocations,
   getUserPrompt,
   getClarification,
   getLeadNotes,
@@ -154,6 +184,8 @@ export const granularReadTools: Tool[] = [
   getSelectionIds,
   getEnrichmentJobTitles,
   listMappableFields,
+  createTopupLink,
+  openBillingPortal,
 ];
 
 // Granular writes (advanced + write — gated by both LEADBAY_MCP_ADVANCED=1
@@ -188,6 +220,7 @@ export const granularWriteTools: Tool[] = [
 // includes login + reads + writes for OpenClaw which always exposes everything.
 export const granularTools: Tool[] = [
   login,
+  ...agentMemoryTools,
   ...granularReadTools,
   ...granularWriteTools,
 ];
@@ -199,7 +232,13 @@ granularTools.forEach((t) => {
 export const compositeReadTools: Tool[] = [
   pullLeads,
   pullFollowups,
-  researchLead,
+  followupsMap,
+  tourPlan,
+  listCampaigns,
+  campaignProgression,
+  campaignCallSheet,
+  researchLeadById,
+  researchLeadByNameFuzzy,
   recallOrderedTitles,
   accountStatus,
   bulkEnrichStatus,
@@ -210,8 +249,14 @@ export const compositeReadTools: Tool[] = [
   // it for discoverability; expose it always-on so agents can find custom fields
   // without needing LEADBAY_MCP_ADVANCED=1.
   listMappableFields,
-  // Keep the existing composites available too.
-  researchCompany,
+  // Billing / top-up tools — granular-shaped but ALWAYS exposed because
+  // they're the canonical recovery path from a QUOTA_EXCEEDED wall. If
+  // they were gated behind LEADBAY_MCP_ADVANCED=1 the agent would
+  // know about the wall but not the door out. Read-only from the
+  // agent's POV (creating a Stripe session URL doesn't charge anyone;
+  // the user pays in their browser).
+  createTopupLink,
+  openBillingPortal,
   prepareOutreach,
 ];
 
@@ -232,6 +277,14 @@ export const compositeWriteTools: Tool[] = [
   // addNote is granular-shaped but file-import prompts depend on it to preserve
   // meaningful source-file notes after imports return lead ids.
   addNote,
+  // likeLead/dislikeLead are granular-shaped but should always be available
+  // to the agent without requiring LEADBAY_MCP_ADVANCED=1.
+  likeLead,
+  dislikeLead,
+  // Campaign write composites — persist a hand-picked cohort of leads.
+  // Backend POST endpoints; gated behind LEADBAY_MCP_WRITE=1 in MCP.
+  createCampaign,
+  addLeadsToCampaign,
 ];
 
 // Backward-compat alias for existing consumers.

@@ -10,7 +10,7 @@ export function researchADomainInvariants(evidence: MCPEvidence): InvariantResul
     "domains" in importCall.input;
   return [
     { name: "called_at_least_once.leadbay_import_and_qualify", pass: calls.includes("leadbay_import_and_qualify") },
-    { name: "called_at_least_once.leadbay_research_lead", pass: calls.includes("leadbay_research_lead") },
+    { name: "called_at_least_once.leadbay_research_lead_by_id", pass: calls.includes("leadbay_research_lead_by_id") },
     {
       name: "import_and_qualify_received_domains_arg",
       pass: Boolean(importHasDomainArg),
@@ -20,7 +20,7 @@ export function researchADomainInvariants(evidence: MCPEvidence): InvariantResul
       name: "called_in_order.import_then_research",
       pass:
         calls.indexOf("leadbay_import_and_qualify") !== -1 &&
-        calls.indexOf("leadbay_research_lead") > calls.indexOf("leadbay_import_and_qualify"),
+        calls.indexOf("leadbay_research_lead_by_id") > calls.indexOf("leadbay_import_and_qualify"),
     },
   ];
 }

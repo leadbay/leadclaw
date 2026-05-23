@@ -4,11 +4,16 @@ description: "Run the canonical follow-up check-in: surface KNOWN leads from the
 ---
 
 
+## MEMORY
+
+Before responding, glance at any `_meta.agent_memory.summary` returned by tool calls earlier in this session and reflect its top signals in your reasoning ("Filtering by your stated preference for healthcare"). After any material new taste signal from the user this conversation (sector, region, deal size, communication style, qualification rule, explicit retraction), call `leadbay_agent_memory_capture` to persist it: `source:"user_stated"` if literal, `source:"inferred"` with confidence <=6 if inferred.
+
+
 Run the Leadbay follow-up check-in for me. Treat this prompt the same way for any equivalent ask: "leads I should follow up with", "already known leads", "what's overdue", "before my trip to [city]", "leads I haven't contacted", "who should I re-engage today".
 
 # Resilience rules for Leadbay long-running tools
 
-These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
+These four rules apply to every Leadbay workflow that calls `leadbay_pull_leads`, `leadbay_bulk_qualify_leads`, `leadbay_research_lead_by_id`, `leadbay_import_and_qualify`, or `leadbay_enrich_titles`. **Treat timeouts and stream-closed errors as transient, not as signals to replan.**
 
 ## Rule 1 — Pin the lens
 
@@ -18,9 +23,9 @@ After your first `leadbay_pull_leads` call, capture `response.lens.id` into your
 
 `leadbay_bulk_qualify_leads` and `leadbay_import_and_qualify` accept `wait_for_completion:false`, which returns `{status:'running', qualify_id}` immediately. Then poll `leadbay_qualify_status` (or `leadbay_import_status`) every ~10s until the job completes. **Use the async pattern by default** — the blocking default can exceed the MCP client's per-call timeout on large batches and produce a misleading `"Request timed out"` even though the server is still working.
 
-## Rule 3 — Serialize `leadbay_research_lead` fan-out
+## Rule 3 — Serialize `leadbay_research_lead_by_id` fan-out
 
-`leadbay_research_lead` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
+`leadbay_research_lead_by_id` is composite and reads many sub-resources. Calling it on 10 leads in parallel can saturate the transport and produce `"Tool permission stream closed"` errors that look like permission failures but are really backpressure. **Call it sequentially**, or at most 3 in parallel. If one call fails with a stream/timeout error, retry that one call once before moving on; on a second failure, note the lead and continue — do not abandon the remaining leads.
 
 ## Rule 4 — Retry, don't replan
 
@@ -41,7 +46,28 @@ Same resume-check semantics as `leadbay_daily_check_in` Phase 0 — if you see p
 
 Call `leadbay_pull_followups` (NOT `leadbay_pull_leads` — those are different entry points; see §1.6 of the prospecting overview). If the user mentioned a city, sector, recency window, or other filter, build a `FilterItem` and pass it as `set_filter` so the result is narrowed (and the filter persists for the user's next session). If the user said something generic ("anyone I should follow up on?"), call with no `set_filter` to get the default Monitor view.
 
-For geo filters specifically: resolve the user's city name to an `admin_area_id`. The MCP doesn't yet expose an admin-area lookup, so in the interim ask the user to pick the geo from the Leadbay app's filter UI if the city isn't in the popular-cities lookup — do NOT guess an id.
+For geo filters specifically: prefer the `city` shortcut on `leadbay_pull_followups({city: "Berlin"})` — the composite resolves the free-text city via `/geo/search`, returns ambiguities to disambiguate when needed (status: "ambiguous_locations" → pick an id → re-call with `city_id`), then merges the resolved admin_area into the Monitor filter as `location_ids`. If the user has already given you a numeric id, pass it as `city_id`. Don't guess admin_area ids — let the resolver do it.
+
+**TRAVEL / IN-PERSON ROUTING** — when the user's intent is geographic and visual ("I'm going to NYC next week", "leads I should visit in person", "this week's trip", "show me followups in <city>", "plan my itinerary", "trip itinerary", "show on a map", "leads in Texas / California / France", or any phrasing that asks for a map / geographic / trip-planning view — INCLUDING state-, country-, and region-level place names):
+
+1. Call **`leadbay_followups_map`** (same params as `pull_followups`: `city` / `city_id` / `set_filter`). Same response shape — just the explicit entry-point so the agent and the host know to route geographically.
+2. Output a **per-lead place-card block** for each top follow-up, in this exact format — modern chat hosts (Claude / cowork) detect addresses + company names and surface them as a beautiful Google-Place-card carousel with our notes as the "Notes from Claude" section. Lean INTO that surface; don't fight it.
+
+   ```
+   ### <Company Name> · <City>, <State or Country>
+
+   ★ <one-sentence summary: score + sector fit + why-now>. <Contact ask:> reach **[<First Last>](<linkedin_page or constructed people-search URL>)**, <role>. ☎ <phone>.
+   ```
+
+   - Bold + heading-formatted company name so the host's place-card detector lifts the right token.
+   - City on the SAME line as the company (semantic glue for place lookup).
+   - Notes paragraph: short, salesperson voice — score callout, sector/fit, contact ask, channel hint.
+   - Contact name MUST be a markdown link. Use the contact's `linkedin_page` when present; otherwise build `https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company-stripped-of-suffixes>` (URL-encode). Strip `Inc / LLC / Corp / GmbH / Ltd / Co` from the company name before searching. Same rules as the canonical `pull_leads` table renderer.
+   - Phone (when present) as bare `+1 212-555-0100` or `(212) 555-0100` — every modern chat renderer auto-linkifies to `tel:`. Don't wrap in markdown.
+
+3. **Don't repeat the canonical follow-ups table in this mode** — the carousel IS the visual. One short intro sentence ("Five lead visits across NYC for your trip next week — three in Midtown, plus Long Island and one in NJ.") + the per-lead blocks is the full output.
+
+4. Pushback / next-step / outcome language about each lead goes in the prose. The carousel's "Notes from Claude" surfaces what you write here, so make the one sentence count.
 
 # PHASE 2 — RENDER THE CANONICAL TABLE
 
@@ -111,19 +137,14 @@ Markers: `★` recommended, `💎` hot in web_insights key_people. Channel pills
 
 ## Linking a contact's name
 
-Two LinkedIn URLs exist and must never be conflated: the **company's** LinkedIn page and an **individual person's** profile.
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax `[Name](URL)`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
 
-When the response carries a real contact LinkedIn URL — `contact.linkedin_page` is a string that starts with `https://` (the MCP coerces the legacy literal `"null"` string to real null before you see it) — link the contact's name to that URL.
+URL priority (first applicable wins):
 
-Otherwise fall back to a LinkedIn people-search URL:
+1. **Real profile** — `contact.linkedin_page` when it's a string starting with `https://` (the MCP coerces the legacy literal `"null"` string to real null before you see it).
+2. **Constructed people-search** — `https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing ` °` to the rendered name ONLY when this fallback is in use AND `social_presence.linkedin == false`. Never append `°` when a real `linkedin_page` was used.
 
-```
-https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>
-```
-
-URL-encode the params. Strip Inc / LLC / Corp / Ltd / GmbH suffixes from the company name. Append a trailing ` °` to the rendered name ONLY when the fallback is in use AND `social_presence.linkedin == false` (no company LinkedIn → search may not resolve). Never append `°` when a real `linkedin_page` was used.
-
-Never link a person's name to the company's LinkedIn page (and vice versa). The two surfaces are different — conflating them quietly degrades the workflow.
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
 
 ## Linking the company
 
@@ -141,7 +162,7 @@ ABOVE the table, add a 1–3 sentence "Where to start today" paragraph that name
 
 Unlike `leadbay_daily_check_in` which deep-dives on every promising lead in Phase 4, this prompt waits for the user to point at a row. Reason: follow-up batches are typically larger and the user is triaging recall, not researching cold.
 
-When the user picks a row, call `leadbay_research_lead` on that single lead (or `leadbay_research_company` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
+When the user picks a row, call `leadbay_research_lead_by_id` on that single lead (or `leadbay_research_lead_by_name_fuzzy` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
 
 # CROSS-MODE PIVOT
 

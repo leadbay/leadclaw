@@ -48,11 +48,11 @@ describe("tools/list — default (composite reads + writes since 0.3.0)", () => 
 
     // 0.3.0: composite reads + writes both exposed by default.
     expect(names).toContain("leadbay_pull_leads");
-    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_research_lead_by_id");
     expect(names).toContain("leadbay_account_status");
     expect(names).toContain("leadbay_recall_ordered_titles");
     // Existing composites (kept for back-compat)
-    expect(names).toContain("leadbay_research_company");
+    expect(names).toContain("leadbay_research_lead_by_name_fuzzy");
     expect(names).toContain("leadbay_prepare_outreach");
     // Composite writes — exposed under the new default.
     expect(names).toContain("leadbay_report_outreach");
@@ -95,7 +95,7 @@ describe("tools/list — read-only mode (LEADBAY_MCP_WRITE=0 / includeWrite=fals
     const names = new Set((await mcpClient.listTools()).tools.map((t) => t.name));
     // Reads still exposed.
     expect(names).toContain("leadbay_pull_leads");
-    expect(names).toContain("leadbay_research_lead");
+    expect(names).toContain("leadbay_research_lead_by_id");
     expect(names).toContain("leadbay_account_status");
     // Writes hidden.
     expect(names).not.toContain("leadbay_report_outreach");
@@ -268,7 +268,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
   const FULL_EXPOSURE = new Set([
     "leadbay_account_status",
     "leadbay_pull_leads",
-    "leadbay_research_lead",
+    "leadbay_research_lead_by_id",
     "leadbay_recall_ordered_titles",
     "leadbay_bulk_qualify_leads",
     "leadbay_enrich_titles",
@@ -281,7 +281,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
   const READ_ONLY = new Set([
     "leadbay_account_status",
     "leadbay_pull_leads",
-    "leadbay_research_lead",
+    "leadbay_research_lead_by_id",
     "leadbay_recall_ordered_titles",
   ]);
 
@@ -298,7 +298,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
     const { buildServerInstructions } = await import("../src/server.js");
     const out = buildServerInstructions(FULL_EXPOSURE);
     expect(out).toMatch(/leadbay_pull_leads/);
-    expect(out).toMatch(/leadbay_research_lead/);
+    expect(out).toMatch(/leadbay_research_lead_by_id/);
     expect(out).toMatch(/leadbay_account_status/);
   });
 
@@ -339,7 +339,7 @@ describe("buildServerInstructions — dynamic LLM guidance", () => {
     expect(out).toMatch(/LEADBAY_MCP_WRITE=0/);
     // Still references the composite read flow.
     expect(out).toMatch(/leadbay_pull_leads/);
-    expect(out).toMatch(/leadbay_research_lead/);
+    expect(out).toMatch(/leadbay_research_lead_by_id/);
   });
 
   it("buildServer attaches dynamic instructions to the Server (read-only mode)", async () => {
@@ -415,7 +415,11 @@ describe("resolveClientFromEnv — region auto-probe", () => {
       LEADBAY_REGION: process.env.LEADBAY_REGION,
       LEADBAY_BASE_URL: process.env.LEADBAY_BASE_URL,
     };
-    process.env.LEADBAY_TOKEN = env.LEADBAY_TOKEN;
+    // Assigning `undefined` to process.env.X coerces to the string
+    // "undefined" (truthy) — delete the key instead so the missing-token
+    // branch in resolveClientFromEnv actually triggers.
+    if (env.LEADBAY_TOKEN === undefined) delete process.env.LEADBAY_TOKEN;
+    else process.env.LEADBAY_TOKEN = env.LEADBAY_TOKEN;
     if (env.LEADBAY_REGION === undefined) delete process.env.LEADBAY_REGION;
     else process.env.LEADBAY_REGION = env.LEADBAY_REGION;
     if (env.LEADBAY_BASE_URL === undefined) delete process.env.LEADBAY_BASE_URL;
@@ -434,15 +438,23 @@ describe("resolveClientFromEnv — region auto-probe", () => {
 
   it("explicit LEADBAY_REGION=us skips the probe", async () => {
     const { requests } = mockHttp([]);
-    const c = await callResolve({ LEADBAY_TOKEN: "t", LEADBAY_REGION: "us" });
-    expect(c.baseUrl).toBe("https://api-us.leadbay.app");
+    const { client, authState } = await callResolve({
+      LEADBAY_TOKEN: "t",
+      LEADBAY_REGION: "us",
+    });
+    expect(client.baseUrl).toBe("https://api-us.leadbay.app");
+    expect(authState).toBe("ok");
     expect(requests).toHaveLength(0);
   });
 
   it("explicit LEADBAY_REGION=fr skips the probe", async () => {
     const { requests } = mockHttp([]);
-    const c = await callResolve({ LEADBAY_TOKEN: "t", LEADBAY_REGION: "fr" });
-    expect(c.baseUrl).toBe("https://api-fr.leadbay.app");
+    const { client, authState } = await callResolve({
+      LEADBAY_TOKEN: "t",
+      LEADBAY_REGION: "fr",
+    });
+    expect(client.baseUrl).toBe("https://api-fr.leadbay.app");
+    expect(authState).toBe("ok");
     expect(requests).toHaveLength(0);
   });
 
@@ -466,44 +478,77 @@ describe("resolveClientFromEnv — region auto-probe", () => {
     // share the same path, the first arriving request grabs the first script.
     // To make this test deterministic we rely on Promise.any: if us rejects
     // and fr resolves, fr wins.
-    const c = await callResolve({ LEADBAY_TOKEN: "t" });
+    const { client, authState } = await callResolve({ LEADBAY_TOKEN: "t" });
     // Whichever baseUrl resolves first with 200 is the winner.
     expect(["https://api-us.leadbay.app", "https://api-fr.leadbay.app"]).toContain(
-      c.baseUrl
+      client.baseUrl
     );
+    expect(authState).toBe("ok");
   });
 
-  it("both regions 401 → exits with auth error (non-zero)", async () => {
+  it("both regions 401 → returns broken-client (server still boots)", async () => {
+    // Regression test for the silent-`initialize`-crash fix: before this
+    // change, the AUTH_EXPIRED probe-failure branch called process.exit(1),
+    // killing the MCP process mid-handshake and surfacing on the host as
+    // a bare "Server disconnected" with no diagnostic. Now it returns a
+    // broken-client so the JSON-RPC handshake completes and the auth
+    // failure surfaces on first tool call.
     mockHttp([
       { method: "GET", path: "/1.5/users/me", status: 401, body: {} },
       { method: "GET", path: "/1.5/users/me", status: 401, body: {} },
     ]);
-    const exitSpy = vi
-      .spyOn(process, "exit")
-      .mockImplementation(((code?: number) => {
-        throw new Error(`process.exit(${code})`);
-      }) as any);
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
-      await expect(callResolve({ LEADBAY_TOKEN: "t" })).rejects.toThrow(/process\.exit\(1\)/);
+      const { client, authState } = await callResolve({ LEADBAY_TOKEN: "t" });
+      expect(authState).toBe("expired");
+      // The broken client exists (server boots), but every API call
+      // rejects with AUTH_EXPIRED so the agent gets a clear envelope.
+      await expect(client.request("GET", "/anything")).rejects.toMatchObject({
+        error: true,
+        code: "AUTH_EXPIRED",
+        hint: expect.stringMatching(/LEADBAY_TOKEN|leadbay-mcp login/),
+      });
       expect(
         stderrSpy.mock.calls.some(([m]) =>
           /authentication token expired/i.test(String(m))
         )
       ).toBe(true);
     } finally {
-      exitSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
+  });
+
+  it("missing LEADBAY_TOKEN → returns broken-client with AUTH_MISSING", async () => {
+    // Regression test for the silent-`initialize`-crash fix: the
+    // token-missing branch used to process.exit(1), same as the
+    // AUTH_EXPIRED branch above.
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const { client, authState } = await callResolve({});
+      expect(authState).toBe("missing");
+      await expect(client.request("GET", "/anything")).rejects.toMatchObject({
+        error: true,
+        code: "AUTH_MISSING",
+        hint: expect.stringMatching(/LEADBAY_TOKEN/),
+      });
+      expect(
+        stderrSpy.mock.calls.some(([m]) =>
+          /LEADBAY_TOKEN environment variable is required/.test(String(m))
+        )
+      ).toBe(true);
+    } finally {
       stderrSpy.mockRestore();
     }
   });
 
   it("explicit LEADBAY_BASE_URL also skips the probe", async () => {
     const { requests } = mockHttp([]);
-    const c = await callResolve({
+    const { client, authState } = await callResolve({
       LEADBAY_TOKEN: "t",
       LEADBAY_BASE_URL: "https://staging.example.com",
     });
-    expect(c.baseUrl).toBe("https://staging.example.com");
+    expect(client.baseUrl).toBe("https://staging.example.com");
+    expect(authState).toBe("ok");
     expect(requests).toHaveLength(0);
   });
 });

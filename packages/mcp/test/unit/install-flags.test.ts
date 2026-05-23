@@ -12,42 +12,49 @@ import { buildClaudeCodeAddArgs } from "../../src/bin.js";
 
 describe("buildClaudeCodeAddArgs — Claude Code registration argv", () => {
   it("includes --scope user (so Leadbay is visible from any project)", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", true);
+    const args = buildClaudeCodeAddArgs("tok", "us", true, true);
     const idx = args.indexOf("--scope");
     expect(idx).toBeGreaterThan(0);
     expect(args[idx + 1]).toBe("user");
   });
 
   it("registers the leadbay server name", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", true);
+    const args = buildClaudeCodeAddArgs("tok", "us", true, true);
     expect(args.slice(0, 3)).toEqual(["mcp", "add", "leadbay"]);
   });
 
   it("emits the token and region as --env pairs", () => {
-    const args = buildClaudeCodeAddArgs("tok-abc", "fr", true);
+    const args = buildClaudeCodeAddArgs("tok-abc", "fr", true, true);
     expect(args).toContain("LEADBAY_TOKEN=tok-abc");
     expect(args).toContain("LEADBAY_REGION=fr");
   });
 
+  it("always emits LEADBAY_TELEMETRY_ENABLED so MCP-client UIs render it as a toggle", () => {
+    const onArgs = buildClaudeCodeAddArgs("tok", "us", true, true);
+    expect(onArgs).toContain("LEADBAY_TELEMETRY_ENABLED=true");
+    const offArgs = buildClaudeCodeAddArgs("tok", "us", true, false);
+    expect(offArgs).toContain("LEADBAY_TELEMETRY_ENABLED=false");
+  });
+
   it("default (includeWrite=true) does NOT inject LEADBAY_MCP_WRITE — relies on the new default", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", true);
+    const args = buildClaudeCodeAddArgs("tok", "us", true, true);
     expect(args.some((a) => a.startsWith("LEADBAY_MCP_WRITE"))).toBe(false);
   });
 
   it("--no-write (includeWrite=false) injects LEADBAY_MCP_WRITE=0", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", false);
+    const args = buildClaudeCodeAddArgs("tok", "us", false, true);
     expect(args).toContain("LEADBAY_MCP_WRITE=0");
   });
 
-  it("pins the @leadbay/mcp@0.3 npx target", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", true);
+  it("pins the @leadbay/mcp@0.13 npx target", () => {
+    const args = buildClaudeCodeAddArgs("tok", "us", true, true);
     const sep = args.indexOf("--");
     expect(sep).toBeGreaterThan(0);
-    expect(args.slice(sep + 1)).toEqual(["npx", "-y", "@leadbay/mcp@0.3"]);
+    expect(args.slice(sep + 1)).toEqual(["npx", "-y", "@leadbay/mcp@0.13"]);
   });
 
   it("token and region are NOT placed after the `--` separator (would be passed to npx, not claude)", () => {
-    const args = buildClaudeCodeAddArgs("tok", "us", true);
+    const args = buildClaudeCodeAddArgs("tok", "us", true, true);
     const sep = args.indexOf("--");
     const afterSep = args.slice(sep + 1);
     expect(afterSep.some((a) => a.includes("LEADBAY_TOKEN"))).toBe(false);

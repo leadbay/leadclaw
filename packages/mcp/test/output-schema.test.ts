@@ -48,7 +48,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
     const listed = await mcpClient.listTools();
     const TOP5 = [
       "leadbay_pull_leads",
-      "leadbay_research_lead",
+      "leadbay_research_lead_by_id",
       "leadbay_account_status",
       "leadbay_bulk_qualify_leads",
       "leadbay_report_outreach",

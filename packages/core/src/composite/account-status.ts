@@ -1,5 +1,6 @@
 import type { LeadbayClient } from "../client.js";
 import type { Tool, ToolContext, QuotaStatusPayload } from "../types.js";
+import { withAgentMemoryMeta } from "../agent-memory/index.js";
 
 import { leadbay_account_status as ACCOUNT_STATUS_DESCRIPTION } from "../tool-descriptions.generated.js";
 export const accountStatus: Tool<Record<string, never>> = {
@@ -53,7 +54,31 @@ export const accountStatus: Tool<Record<string, never>> = {
       },
       _meta: {
         type: "object",
-        properties: { region: { type: "string" } },
+        properties: {
+          region: { type: "string" },
+          agent_memory: { type: "object" },
+        },
+      },
+      // Auto-update block. Populated by the MCP server wrapper (NOT this
+      // composite) when a newer release is published on GitHub AND the
+      // user hasn't suppressed it. When present, the agent should prompt
+      // the user via ask_user_input_v0 with three options and route the
+      // chosen action through leadbay_acknowledge_update.
+      update_available: {
+        type: ["object", "null"],
+        properties: {
+          current_version: { type: "string" },
+          latest_version: { type: "string" },
+          mcpb_url: {
+            type: "string",
+            description: "Direct download URL for the .mcpb installer asset.",
+          },
+          release_url: {
+            type: "string",
+            description: "GitHub release page (changelog).",
+          },
+        },
+        required: ["current_version", "latest_version", "mcpb_url", "release_url"],
       },
     },
     required: ["user", "organization"],
@@ -73,7 +98,7 @@ export const accountStatus: Tool<Record<string, never>> = {
       );
     }
 
-    return {
+    return withAgentMemoryMeta(client, {
       user: {
         email: me.email ?? null,
         name: me.name ?? null,
@@ -96,6 +121,6 @@ export const accountStatus: Tool<Record<string, never>> = {
       _meta: {
         region: client.region,
       },
-    };
+    }, ctx, me.organization.id);
   },
 };

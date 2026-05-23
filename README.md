@@ -35,7 +35,7 @@ Start a conversation — the agent will ask for your Leadbay email and password 
 ### Via MCP (Claude Desktop, Cursor, Cowork, any MCP client)
 
 ```bash
-npx -y @leadbay/mcp@0.7 install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us
 ```
 
 The installer auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code), prompts you per-target, and writes the token into each client's config. Add `--no-write` to disable the composite write tools. Full per-client setup, env vars, troubleshooting, and a tour of the MCP primitives is in [`packages/mcp/README.md`](packages/mcp/README.md).
@@ -88,21 +88,16 @@ The plugin automatically uses your **active lens** (the last lens you used in Le
 
 For lead profiles, `leadbay_get_lead_profile` bundles three API calls (lead details + AI qualification + contacts) into a single response. If some data isn't available yet, it returns partial results instead of failing.
 
-## Example workflows
+## Workflows
 
-**Discover and research leads:**
-```
-leadbay_discover_leads → leadbay_get_lead_profile (for interesting leads)
-```
+The canonical inventory of what the MCP supports — supported / partial / planned / blocked-on-backend — is **[WORKFLOWS.md](WORKFLOWS.md)**. Use it to triage incoming asks: find the row that matches, or add a new one. A small audit asserts every cited tool/prompt and test path is real, so the table can't silently drift.
 
-**Get contact information:**
-```
-leadbay_get_quota → leadbay_get_contacts → leadbay_enrich_contacts → (wait ~60s) → leadbay_get_contacts
-```
+Quick taste of what's in there:
 
-**Qualify leads without AI scores:**
 ```
-leadbay_discover_leads → leadbay_qualify_lead (for unscored leads) → (wait ~60s) → leadbay_get_lead_profile
+leadbay_discover_leads → leadbay_get_lead_profile          # discover & research
+leadbay_get_quota → leadbay_get_contacts → leadbay_enrich_contacts → leadbay_get_contacts   # enrich contacts
+leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach   # travel/geo follow-ups
 ```
 
 **Check public X/Twitter signals with TweetClaw:**

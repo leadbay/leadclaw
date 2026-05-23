@@ -188,7 +188,7 @@ describe("score_0_to_10 backwards-compat alias (P1.3)", () => {
     // verification lives in core's tests against fixtures.
     const { mcpClient } = await connect();
     const listed = await mcpClient.listTools();
-    const t = listed.tools.find((tool) => tool.name === "leadbay_research_lead");
+    const t = listed.tools.find((tool) => tool.name === "leadbay_research_lead_by_id");
     expect(t).toBeDefined();
     // Annotation pinned in iter 2; just confirm research_lead is on the wire.
     expect(t!.annotations).toBeDefined();

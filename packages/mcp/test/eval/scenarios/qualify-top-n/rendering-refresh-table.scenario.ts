@@ -118,10 +118,10 @@ export const SCENARIO: ScenarioFixture<{ count: string }> = {
       "issued a leadbay_pull_leads refresh after the qualifier returned",
       "rendered the refreshed leads as a markdown TABLE with score-bar glyphs ▰/❖/▱ — NOT a numbered prose list",
       "added a 'Standouts from this batch' commentary line ABOVE the table for the 3 highest-scoring rows (Apex, Bayside, Cedar)",
-      "did NOT call leadbay_research_lead — wait for user go",
+      "did NOT call leadbay_research_lead_by_id — wait for user go",
     ],
     required_calls: ["leadbay_bulk_qualify_leads", "leadbay_pull_leads"],
     required_byproducts: ["Standouts from this batch", "▰"],
-    forbidden_calls: ["leadbay_research_lead", "leadbay_report_outreach"],
+    forbidden_calls: ["leadbay_research_lead_by_id", "leadbay_report_outreach"],
   },
 };

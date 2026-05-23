@@ -1,5 +1,117 @@
 # Changelog — @leadbay/mcp
 
+## 0.13.0 — 2026-05-21
+
+- **Agent memory v1**: added always-on recall/capture/review tools backed by
+  local append-only JSONL at `~/.leadbay/memory/{account_id}/`.
+- Leads-touching tool responses now attach `_meta.agent_memory.summary` with
+  the consolidated top signals unless `LEADBAY_AGENT_MEMORY=off` is set.
+- Server instructions, prompt descriptions, and workflow prompts now teach the
+  memory protocol, including capture of new taste signals and review-gated
+  retractions.
+- Added `agent-memory://summary` resource and PostHog events for memory
+  capture/recall/prune.
+- **Pin bumps**: every active `@leadbay/mcp@0.12` install/runtime reference in
+  docs, generated client config, DXT, MCP Registry metadata, and Claude plugin
+  metadata is now `@0.13`.
+
+## 0.12.1 — 2026-05-21
+
+MCPB hotfix for Claude Desktop.
+
+- **Fix packaged-server startup**: the MCPB bundle now injects a Node `createRequire` shim before esbuild's ESM wrapper so CommonJS dependencies can still require Node built-ins such as `perf_hooks`. This fixes the Claude Desktop disconnect where the server exited during initialization.
+- **Packaging guardrail**: `@leadbay/dxt build` now runs the staged `server/index.js --version` before zipping, and the smoke suite extracts the MCPB and completes a real MCP initialize/tools-list handshake.
+- **Manifest refresh**: MCPB manifests now declare `manifest_version: "0.3"` and the smoke assertions match the current MCPB manifest spec.
+
+## 0.12.0 — 2026-05-21
+
+Campaign and field-sales workflow release.
+
+- **Campaign workflows**: adds campaign creation/listing, add-leads, progression summaries, and a `leadbay_campaign_call_sheet` composite that returns phone-ready, LinkedIn-ready, and map-ready lead/contact payloads.
+- **Agent routing + skills**: adds the `leadbay_work_campaign`, `leadbay_plan_tour_in_city`, and `leadbay_setup_team_prospecting` prompt/skill flows so agents start with readiness checks, route to the right workflow tool, and keep outreach reporting grounded in verified user action.
+- **Progression accuracy**: contacted/already-contacted summaries now use outreach/prospecting signals instead of treating contact coverage as outreach completion.
+- **Coverage**: adds workflow audits, prompt-eval coverage for `leadbay_work_campaign`, live campaign smoke coverage, and focused unit tests for the new campaign progression/call-sheet composites.
+- **Pin bumps**: every `@leadbay/mcp@0.11` install/runtime reference in docs, generated client config, DXT, and Claude plugin metadata is now `@0.12`.
+
+## 0.11.0 — 2026-05-20
+
+In-server auto-update flow: the MCP server now self-polls GitHub releases (24h throttle, ETag-aware, in-flight guarded) and surfaces an `update_available` block on `leadbay_account_status` when a newer version is published — both at boot AND on every tool call, so long-running Claude Desktop sessions still pick up new releases without restart.
+
+- **New tool — `leadbay_acknowledge_update`**: records the user's choice from the `ask_user_input_v0` prompt. `action: 'install'` returns the `.mcpb` download URL (Claude Desktop's native installer opens on click); `'remind_tomorrow'` snoozes 24h; `'skip'` permanently suppresses that version. State persists to `~/.leadbay/update-state.json` (0o600, atomic write, symlink-rejecting; mirrors `bulk-store.ts`).
+- **Five new PostHog events** for the funnel + conversion: `mcp_update_check`, `mcp_update_prompted`, `mcp_update_install_clicked`, `mcp_update_dismissed`, `mcp_version_updated` (fires on the next boot under a newer `VERSION` constant — works regardless of how the user upgraded: `.mcpb`, npm, npx).
+- **Routing instruction** appended to `buildServerInstructions`: when `update_available` is present on `leadbay_account_status`, the agent prompts via `ask_user_input_v0` with three options and routes the choice through `leadbay_acknowledge_update`. Opt-out: `LEADBAY_UPDATE_CHECK_DISABLED=1`.
+- **Pin bumps**: every `@leadbay/mcp@0.10` reference across `bin.ts`, `server.json`, `README.md`, `packages/dxt/manifest.template.json`, `.claude-plugin/.../plugin.json`, and the root `README.md` is now `@0.11`.
+
+## 0.10.1 — 2026-05-20
+
+Documentation + version-pin sweep paired with hardening the release pipeline. No functional changes to the published binary.
+
+- **Pin bumps**: every `npx -y @leadbay/mcp@<old>` reference in `bin.ts` (install command output, error hints, doctor instructions, generated client configs), `README.md`, `server.json` (MCP Registry manifest), `packages/dxt/manifest.template.json`, and `.claude-plugin/plugins/leadbay/.claude-plugin/plugin.json` is now `@0.10`. New installs land on the latest minor.
+- **Release pipeline migrated to npm Trusted Publishers OIDC** (`.github/workflows/release.yml`): npm revoked Classic tokens on Dec 9 2025 and Granular tokens with the "Bypass 2FA" flag still hit known publish-rejection bugs ([npm/cli#9268](https://github.com/npm/cli/issues/9268)). The publish step now uses OIDC via the [Trusted Publishers binding](https://docs.npmjs.com/trusted-publishers) configured per-package on npmjs.com. Runtime bumped to Node 24 in publish jobs for the bundled npm ≥ 11.5 that speaks the OIDC handshake (Node 22's npm 10 can't, and self-upgrade via `npm install -g npm@latest` consistently breaks on the runner image).
+- **Auto-release** (existing `.github/workflows/auto-tag.yml` — unchanged in this release, documented here): merges to `main` that bump `packages/mcp/package.json#version` automatically push `mcp-v<ver>` and dispatch `release.yml` on the tag, which publishes to npm + MCP Registry + uploads the .dxt to a GitHub Release. No manual tagging needed.
+
+## 0.10.0 — 2026-05-19
+
+First stable cut of the 0.10 line. Consolidates everything since 0.9.1: host-native widget rendering, structured routing schema, the top-up flow, like/dislike write tools, the `research_lead` split, and PostHog + Sentry telemetry. See dev-iteration commits for granular per-PR history; this is the npm-shipped consolidation.
+
+### Host-native widgets + chat-native rendering (#42)
+
+Iframe widget rendering via MCP Apps `_meta.ui` is **removed entirely** — it short-circuited Claude's native widget routing and never blended with chat themes. All tools now render via two surfaces only: (1) chat-native markdown (the canonical `RENDERING` block every tool description carries — tables, cards, chips, headings; inherits the chat's theme + dark-mode for free), and (2) Claude's three first-party widgets when the host exposes them: `places_map_display_v0` (≥2 locations / travel intent), `message_compose_v1` (outreach drafts), `ask_user_input_v0` (NEXT STEPS / clarifications). Same widget-routing pattern applies on ChatGPT via `_meta.openai/outputTemplate`. The `Tool.ui` field is removed from the `Tool` interface — DO NOT re-introduce it.
+
+Hosts that auto-detect addresses in agent prose (Claude.ai web, cowork, Claude Desktop) now get fed per-lead blocks shaped for their Google-Place-card carousel — see the `leadbay_followup_check_in` "TRAVEL / IN-PERSON ROUTING" block as the canonical example.
+
+### Structured routing schema in promptforge (#42)
+
+Every user-facing tool description follows a new 5-section convention enforced by promptforge + audit tests:
+
+```
+[1] ## WHEN TO USE   ← auto-emitted from frontmatter.routing
+[2] ## RENDER (quick) ← auto-emitted from frontmatter.rendering_hint
+---
+[3] <free-form body>
+[4] {{include:rendering/…}}
+[5] {{include:next-steps/…}}
+```
+
+Routing frontmatter is structured YAML: `triggers`, `anti_triggers` (with `route_to` cross-references), `prefer_when` decision hint, and ≥3 positive + ≥3 negative example messages per [Anthropic's skill-author guide](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills). The audit (`routing-block.test.ts`) asserts the `## WHEN TO USE` block lands within the first 600 chars (the context-truncation window every host honors), anti-trigger `route_to` values resolve to registered tool names, and the example floor (≥2 of each) holds for every routed tool. Backfilled on the 7 user-facing composites in this release.
+
+### Top-up flow + billing tools always-on (#42)
+
+`leadbay_create_topup_link` (POST `/stripe/topup_checkout` → Stripe checkout URL) and `leadbay_open_billing_portal` are now **always exposed** in `compositeReadTools` (not gated behind `LEADBAY_MCP_ADVANCED=1`) because they're the canonical recovery path from a `QUOTA_EXCEEDED` wall. Without them, the agent would know about the wall but not the door out.
+
+`QUOTA_EXCEEDED` error hints now explicitly offer top-up as the path that clears the throttle immediately (vs. waiting for the daily/weekly/monthly window reset). The new `QUOTA_AND_TOPUP_PARAGRAPH` in the server instructions tells the agent to OFFER top-up on every quota wall and, after the user signals they've topped up, RESUME the originally-failed call rather than gate-keeping on a stale `account_status` snapshot.
+
+New composite `leadbay_followups_map` for travel / itinerary / state-level intent — handles NYC/SF/LA city aliases and a universal `city` arg that resolves state/country/region levels server-side.
+
+### `research_lead` split (#43)
+
+`leadbay_research_lead` / `leadbay_research_company` are replaced by a pair whose **input mode is in the name itself**:
+
+- `leadbay_research_lead_by_id` — exact UUID lookup; rich composite carrying qualification + signals + firmographics + two-tier contacts + unified `recent_activities` + engagement counts + `web_insights_fetched_at` + `_meta`. The `_meta.has_reachable_contact` flag is the one-shot signal that drives NEXT STEPS (false → propose `leadbay_enrich_titles`; true → propose `leadbay_prepare_outreach`).
+- `leadbay_research_lead_by_name_fuzzy` — thin wrapper that resolves a `companyName` against the active lens's top-50 wishlist by substring (highest score wins), then delegates to `_by_id`.
+
+Routing collapses to a syntactic choice (UUID vs. name) instead of a semantic guess, which was the source of misroutes when an agent had both a name and a partial ID.
+
+### `leadbay_like_lead` + `leadbay_dislike_lead` write tools (#41)
+
+The thumbs-up / thumbs-down actions already available on the Leadbay website are now MCP tools. Agents can send positive and negative lead signals back to the Leadbay scoring engine to improve future batch quality.
+
+- `leadbay_like_lead` — POSTs to `/leads/{id}/like`. Fires on "this one looks good", "thumbs up", "I like this".
+- `leadbay_dislike_lead` — POSTs to `/leads/{id}/dislike`. Fires on "not relevant", "wrong industry", "thumbs down". Distinct from `leadbay_set_pushback` (temporary deferral, not a permanent negative signal).
+
+Both ship in the default write surface (no `LEADBAY_MCP_ADVANCED=1` required); gated by `LEADBAY_MCP_WRITE=1` (default ON since 0.3.0). Descriptions carry the new structured `routing` + `rendering_hint` frontmatter.
+
+### PostHog + Sentry telemetry (#44, closes #3631)
+
+Every tool invocation now fires an `mcp tool called` event to PostHog (same project as the frontend, project id 23333, EU instance), with quota walls surfaced as `mcp quota hit` and successful top-up checkout-link generation as `mcp topup link created`. Unexpected throws (TypeError, network failures, parse bugs) report to a new MCP-specific Sentry DSN; expected `LeadbayError` envelopes (QUOTA_EXCEEDED, NOT_FOUND, AUTH_EXPIRED, FORBIDDEN, BILLING_SUSPENDED, API_ERROR) stay in PostHog only.
+
+- **Identity by email**: PostHog `distinctId = me.email` so MCP events consolidate with web-app events under the same person. Person properties (`leadbay_id`, `leadbay_organization`, `leadbay_organization_id`, etc.) match the frontend's `usePostHog.tsx` shape. **Events are NOT anonymous** — explicitly stated in `--help`, the install banner, and README.
+- **`$groups.organization` attached** so org-level rollups work out of the box.
+- **Privacy**: we capture `tool`, `duration_ms`, `ok`, `format`, `bytes`, `error_code` — never tool argument bodies, response bodies, lead emails, or Stripe URLs (unit test enforces).
+- **Opt-out as a first-class toggle**: `leadbay-mcp install` always writes `LEADBAY_TELEMETRY_ENABLED=true` into your client's env block (next to `LEADBAY_TOKEN` / `LEADBAY_REGION`), so MCP-client config UIs (Claude Desktop, Cursor) render it as a toggle the user can flip without editing files. Pass `--no-telemetry` to install with telemetry off, or flip the env value to `"false"` anytime. Accepted: `true|1|yes|on` (enable), `false|0|no|off` (disable), case-insensitive. Also disabled when `NODE_ENV=test`.
+- **Override**: `LEADBAY_POSTHOG_KEY` and `LEADBAY_SENTRY_DSN` env vars override the baked-in defaults.
+- **stdio safety**: both SDKs are configured to never write to stdout (the JSON-RPC channel). Sentry runs without its default integrations (no console capture) and shutdown is bounded at 2s to never block process exit.
+
 ## 0.9.1 — 2026-05-16
 
 **B23 fix — prompts no longer override per-tool RENDERING blocks**: 0.9.0 shipped RENDERING + NEXT STEPS blocks on every composite tool description. But agents still rendered prose for the daily-leads workflow, because the orchestrating `leadbay_daily_check_in` prompt's Phase 3 directed motivational one-line summaries that "won" over the per-tool RENDERING block in pull_leads. Phase 3 is rewritten to defer to the canonical pull_leads table layout (score bars, three columns, hide-list) and to add a 2–4 sentence "Today's nudges" paragraph ABOVE the table for the 3 most-promising rows — never in place of it. The same pattern is applied to `leadbay_qualify_top_n` (Phase 3 re-pulls newly-qualified leads via pull_leads and renders the canonical table, with a "Standouts from this batch" line above) and `leadbay_research_a_domain` (Phase 2 renders the research-company-card layout for the deep-dive result, with a 2–3 sentence summary above).

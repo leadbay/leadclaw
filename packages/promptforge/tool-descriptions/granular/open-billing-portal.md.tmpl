@@ -1,0 +1,23 @@
+---
+name: leadbay_open_billing_portal
+kind: tool-description
+short_description: |
+  Generate a Stripe customer-portal URL the user can open to manage
+  their Leadbay subscription — upgrade / downgrade plan, change
+  payment method, view invoices.
+annotations:
+  readOnlyHint: true
+  destructiveHint: false
+  idempotentHint: false
+  openWorldHint: true
+---
+Generate a one-shot Stripe customer-portal URL. Wraps `GET /1.5/stripe/portal` → `{url}`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
+
+Sibling of `leadbay_create_topup_link`. Use cases differ:
+
+- **Top-up** (`leadbay_create_topup_link`) = one-shot purchase of AI credits to clear an immediate quota throttle. Doesn't change the plan.
+- **Billing portal** (this tool) = ongoing subscription management. Plan upgrades persist; they raise the recurring window caps (daily/weekly/monthly) rather than buying a one-time bucket.
+
+{{include:headers/tool-when-to-use}} when the user asks to upgrade / downgrade / change plan; manage payment methods; view invoices; or "open my billing".
+
+{{include:headers/tool-when-not-to-use}} for one-off credit top-ups (use `leadbay_create_topup_link`); for read-only quota state (use `leadbay_account_status` / `leadbay_get_quota`).

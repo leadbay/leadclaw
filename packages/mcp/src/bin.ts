@@ -8,9 +8,13 @@ import {
   LeadbayClient,
   resolveRegion,
   type CreateClientConfig,
+  type LeadbayError,
   type ToolLogger,
 } from "@leadbay/core";
 import { buildServer } from "./server.js";
+import { initTelemetry } from "./telemetry.js";
+import { createDefaultUpdateStateStore } from "./update-state.js";
+import { checkForUpdate, recordRunningVersion } from "./update-check.js";
 
 // __LEADBAY_MCP_VERSION__ is replaced at build time by tsup with the string
 // literal from packages/mcp/package.json#version. Single source of truth —
@@ -53,16 +57,24 @@ ENV VARS
                          journaled in-process and return {mocked: true, would_call: {...}}.
   LEADBAY_MOCK_DIR       (optional) Fixture directory. Default: ./.context/leadbay-live-shapes/
   LEADBAY_LOG_LEVEL      (optional) "debug" | "info" | "error" (default "error"). Logs to stderr.
+  LEADBAY_TELEMETRY_ENABLED  (optional) Default "true". Sends product usage events
+                         (tool name, duration, ok flag, error code) to PostHog and
+                         unexpected errors to Sentry, helping Leadbay improve the MCP.
+                         Events are tied to your Leadbay account email (so MCP usage
+                         consolidates with web-app usage in our analytics). Tool
+                         arguments, response bodies, and lead PII are NEVER captured.
+                         Set to "false" to opt out. See README "Privacy & telemetry".
 
 EXAMPLE Claude Desktop config (~/Library/Application Support/Claude/claude_desktop_config.json)
   {
     "mcpServers": {
       "leadbay": {
         "command": "npx",
-        "args": ["-y", "@leadbay/mcp@0.3"],
+        "args": ["-y", "@leadbay/mcp@0.13"],
         "env": {
           "LEADBAY_TOKEN": "lb_...",
-          "LEADBAY_REGION": "us"
+          "LEADBAY_REGION": "us",
+          "LEADBAY_TELEMETRY_ENABLED": "true"
         }
       }
     }
@@ -117,6 +129,13 @@ export function parseWriteEnv(): boolean {
   return true;
 }
 
+// Token-missing handler for CLI subcommands (doctor, etc.). Interactive
+// commands SHOULD print to stderr and exit non-zero — the user typed the
+// command, they're watching the terminal, and a hard exit is the
+// expected UX. The MCP stdio mode in resolveClientFromEnv takes the
+// opposite tack (broken-client + keep running) because the user there
+// isn't watching a terminal; they're watching a "Server disconnected"
+// banner with no diagnostic.
 function exitWithTokenError(): never {
   process.stderr.write(
     "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
@@ -128,9 +147,82 @@ function exitWithTokenError(): never {
   process.exit(1);
 }
 
-export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayClient> {
+// "Auth state" — describes the outcome of resolveClientFromEnv. The MCP
+// server always boots; auth errors surface as tool-call errors against a
+// broken-client (`expired`/`missing`) so the host shows the server as
+// connected and the agent gets a clear error envelope to render. See
+// makeBrokenClient below.
+export type AuthState = "ok" | "missing" | "expired" | "probe_failed";
+
+export interface ResolvedClient {
+  client: LeadbayClient;
+  authState: AuthState;
+}
+
+// LeadbayClient subclass whose every request method rejects with a
+// pre-baked LeadbayError. The MCP server uses this on startup-auth
+// failures so it can finish the JSON-RPC handshake and surface the
+// failure on first tool call instead of dying mid-`initialize`.
+class BrokenLeadbayClient extends LeadbayClient {
+  private readonly stubError: LeadbayError;
+  constructor(stubError: LeadbayError, baseUrl: string, region: "us" | "fr") {
+    // Placeholder token so the base class's no-token branch (which throws
+    // a different, less-helpful error) is skipped — every request goes
+    // through our overrides below.
+    super(baseUrl, "broken-token-startup-auth-failure", region);
+    this.stubError = stubError;
+  }
+  override async request<T>(): Promise<T> {
+    throw this.stubError;
+  }
+  override async requestVoid(): Promise<void> {
+    throw this.stubError;
+  }
+  override async requestRawBinary<T>(): Promise<T> {
+    throw this.stubError;
+  }
+}
+
+export function makeBrokenClient(
+  stubError: LeadbayError,
+  region: "us" | "fr"
+): LeadbayClient {
+  const baseUrl = region === "fr"
+    ? "https://api-fr.leadbay.app"
+    : "https://api-us.leadbay.app";
+  return new BrokenLeadbayClient(stubError, baseUrl, region);
+}
+
+export async function resolveClientFromEnv(logger: ToolLogger): Promise<ResolvedClient> {
   const token = process.env.LEADBAY_TOKEN;
-  if (!token) exitWithTokenError();
+  if (!token) {
+    // Don't process.exit — Claude Desktop / Cursor would surface this as
+    // "Server disconnected" with no actionable info. Return a broken
+    // client so the server still answers `initialize` + `tools/list`,
+    // and the first tool call returns this AUTH_MISSING envelope which
+    // the agent can render to the user.
+    process.stderr.write(
+      "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
+        "  1. Run: npx -y @leadbay/mcp install --email <you> --region <us|fr>\n" +
+        "  2. Set it in your MCP client config (e.g. claude_desktop_config.json).\n" +
+        "\n" +
+        "Run `leadbay-mcp --help` for the full config template.\n"
+    );
+    const regionEnv = process.env.LEADBAY_REGION;
+    const region: "us" | "fr" = regionEnv === "fr" ? "fr" : "us";
+    return {
+      client: makeBrokenClient(
+        {
+          error: true,
+          code: "AUTH_MISSING",
+          message: "LEADBAY_TOKEN environment variable is not set.",
+          hint: "Run `npx -y @leadbay/mcp install --email <you> --region <us|fr>` to mint a token, then set LEADBAY_TOKEN in your MCP client config.",
+        },
+        region
+      ),
+      authState: "missing",
+    };
+  }
 
   const regionEnv = process.env.LEADBAY_REGION;
   const explicitRegion: "us" | "fr" | undefined =
@@ -142,7 +234,7 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
     const config: CreateClientConfig = { token };
     if (baseUrl) config.baseUrl = baseUrl;
     if (explicitRegion) config.region = explicitRegion;
-    return createClient(config);
+    return { client: createClient(config), authState: "ok" };
   }
 
   // Auto-probe path: token gets sent to BOTH api-us.leadbay.app and
@@ -164,7 +256,8 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
   };
 
   try {
-    return await Promise.any([probe("us"), probe("fr")]);
+    const client = await Promise.any([probe("us"), probe("fr")]);
+    return { client, authState: "ok" };
   } catch (err: any) {
     // Both failed. The AggregateError exposes each leaf error.
     const errors: any[] = err?.errors ?? [];
@@ -172,11 +265,27 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
       (e) => e?.code === "AUTH_EXPIRED" || e?.code === "NOT_AUTHENTICATED"
     );
     if (firstAuth) {
+      // Don't process.exit — same reasoning as the missing-token branch
+      // above. Surface AUTH_EXPIRED as a tool-call error against a
+      // broken-client. Default to `us` for the base URL so the failure
+      // _meta carries a sensible region tag (the token didn't work in
+      // either, so there's no "right" answer here).
       process.stderr.write(
         `leadbay-mcp: ${firstAuth.message}. ${firstAuth.hint}\n` +
           "Tip: verify your LEADBAY_TOKEN is valid and, if you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr.\n"
       );
-      process.exit(1);
+      return {
+        client: makeBrokenClient(
+          {
+            error: true,
+            code: firstAuth.code,
+            message: firstAuth.message,
+            hint: "Verify your LEADBAY_TOKEN is valid. If you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr to skip auto-probing. Mint a fresh token with `leadbay-mcp login --email <you> --region <us|fr>`.",
+          },
+          "us"
+        ),
+        authState: "expired",
+      };
     }
     // Non-auth failures (network, DNS, etc.) — fall back to us so the
     // server can still start and surface the error on first tool call.
@@ -184,7 +293,10 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<LeadbayC
     process.stderr.write(
       `leadbay-mcp: region auto-detection failed (${firstMsg}). Defaulting to us; set LEADBAY_REGION to skip probing.\n`
     );
-    return createClient({ token, region: "us" });
+    return {
+      client: createClient({ token, region: "us" }),
+      authState: "probe_failed",
+    };
   }
 }
 
@@ -399,7 +511,8 @@ async function runLogin(args: string[]): Promise<number> {
       result = await resolveRegion(email, password, pinnedRegion ?? undefined);
     }
   } catch (err: any) {
-    process.stderr.write(`leadbay-mcp login: ${err?.message ?? String(err)}\n`);
+    process.stderr.write(`leadbay-mcp@${VERSION} login: ${err?.message ?? String(err)}\n`);
+    await reportCliFailure("__login__", err);
     return 1;
   }
 
@@ -412,7 +525,7 @@ async function runLogin(args: string[]): Promise<number> {
     mcpServers: {
       leadbay: {
         command: "npx",
-        args: ["-y", "@leadbay/mcp@0.3"],
+        args: ["-y", "@leadbay/mcp@0.13"],
         env: {
           LEADBAY_TOKEN: result.token,
           LEADBAY_REGION: result.region,
@@ -449,7 +562,7 @@ async function runLogin(args: string[]): Promise<number> {
         `  claude mcp add leadbay --scope user \\\n` +
         `    --env LEADBAY_TOKEN=${result.token} \\\n` +
         `    --env LEADBAY_REGION=${result.region} \\\n` +
-        `    -- npx -y @leadbay/mcp@0.3\n\n` +
+        `    -- npx -y @leadbay/mcp@0.13\n\n` +
         `Restart your MCP client to pick up the new server.\n`
     );
     return 0;
@@ -566,7 +679,7 @@ async function runLogin(args: string[]): Promise<number> {
         `  claude mcp add leadbay --scope user \\\n` +
         `    --env LEADBAY_TOKEN=$(jq -r .mcpServers.leadbay.env.LEADBAY_TOKEN ${quotedPath}) \\\n` +
         `    --env LEADBAY_REGION=${result.region} \\\n` +
-        `    -- npx -y @leadbay/mcp@0.3\n`
+        `    -- npx -y @leadbay/mcp@0.13\n`
     );
   }
   process.stderr.write(
@@ -794,7 +907,8 @@ async function readChoice(prompt: string, def = true): Promise<boolean> {
 export function buildClaudeCodeAddArgs(
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): string[] {
   const args = [
     "mcp",
@@ -806,19 +920,25 @@ export function buildClaudeCodeAddArgs(
     `LEADBAY_TOKEN=${token}`,
     "--env",
     `LEADBAY_REGION=${region}`,
+    // Always written explicitly (not just when opting out) so MCP-client
+    // config UIs can render it as a toggle the user can flip without
+    // editing the file by hand.
+    "--env",
+    `LEADBAY_TELEMETRY_ENABLED=${telemetryEnabled ? "true" : "false"}`,
   ];
   if (!includeWrite) args.push("--env", `LEADBAY_MCP_WRITE=0`);
-  args.push("--", "npx", "-y", "@leadbay/mcp@0.3");
+  args.push("--", "npx", "-y", "@leadbay/mcp@0.13");
   return args;
 }
 
 async function installInClaudeCode(
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): Promise<{ ok: boolean; message: string }> {
   const cp = await import("node:child_process");
-  const args = buildClaudeCodeAddArgs(token, region, includeWrite);
+  const args = buildClaudeCodeAddArgs(token, region, includeWrite, telemetryEnabled);
   return await new Promise((resolve) => {
     const child = cp.spawn("claude", args, { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
@@ -848,7 +968,8 @@ async function installInJsonConfig(
   configPath: string,
   token: string,
   region: "us" | "fr",
-  includeWrite: boolean
+  includeWrite: boolean,
+  telemetryEnabled: boolean
 ): Promise<{ ok: boolean; message: string }> {
   try {
     const { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } = await import("node:fs");
@@ -872,13 +993,15 @@ async function installInJsonConfig(
     const env: Record<string, string> = {
       LEADBAY_TOKEN: token,
       LEADBAY_REGION: region,
+      // Always written so MCP-client config UIs can render it as a toggle.
+      LEADBAY_TELEMETRY_ENABLED: telemetryEnabled ? "true" : "false",
     };
     // Default in 0.3.0 is writes-on; only set the env when explicitly disabled.
     if (!includeWrite) env.LEADBAY_MCP_WRITE = "0";
 
     parsed.mcpServers.leadbay = {
       command: "npx",
-      args: ["-y", "@leadbay/mcp@0.3"],
+      args: ["-y", "@leadbay/mcp@0.13"],
       env,
     };
 
@@ -907,7 +1030,7 @@ async function runInstall(args: string[]): Promise<number> {
   if (!email) {
     process.stderr.write(
       "Usage: leadbay-mcp install --email you@example.com [--region us|fr]\n" +
-        "                          [--allow-region-fallback] [--no-write]\n" +
+        "                          [--allow-region-fallback] [--no-write] [--no-telemetry]\n" +
         "                          [--target claude-code,claude-desktop,cursor]\n" +
         "                          [--yes] [--force-legacy]\n" +
         "  Mints a token AND registers the MCP server with your installed clients (at user scope).\n" +
@@ -915,6 +1038,10 @@ async function runInstall(args: string[]): Promise<number> {
         "  --no-write          Disable composite write tools (refine_prompt, report_outreach,\n" +
         "                      adjust_audience, etc.). They are ON by default since 0.3.0;\n" +
         "                      pass --no-write for read-only agents.\n" +
+        "  --no-telemetry      Opt out of product usage events (PostHog + Sentry).\n" +
+        "                      Defaults to ON: helps Leadbay improve the MCP. Events are\n" +
+        "                      tied to your Leadbay email; tool args, response bodies,\n" +
+        "                      and lead PII are NEVER captured.\n" +
         "  --include-write     (deprecated since 0.3.0; now a no-op — writes are on by default).\n" +
         "  --yes               Don't ask before installing into each detected client.\n" +
         "  --force-legacy      Write to claude_desktop_config.json even when Claude Desktop 2026\n" +
@@ -1028,7 +1155,8 @@ async function runInstall(args: string[]): Promise<number> {
       region = result.region;
     }
   } catch (err: any) {
-    process.stderr.write(`leadbay-mcp install: ${err?.message ?? String(err)}\n`);
+    process.stderr.write(`leadbay-mcp@${VERSION} install: ${err?.message ?? String(err)}\n`);
+    await reportCliFailure("__install_login__", err);
     return 1;
   }
   process.stderr.write(`Logged in to ${region.toUpperCase()} backend.\n\n`);
@@ -1045,6 +1173,24 @@ async function runInstall(args: string[]): Promise<number> {
   } else {
     process.stderr.write(
       "Composite write tools DISABLED (read-only agent). Re-run without --no-write to enable.\n\n"
+    );
+  }
+
+  // Telemetry is ON by default; --no-telemetry opts out. Always written
+  // explicitly to the env block so MCP-client UIs render it as a toggle.
+  const telemetryEnabled = !hasFlag(args, "no-telemetry");
+  if (telemetryEnabled) {
+    process.stderr.write(
+      "Product usage events ENABLED — helps Leadbay improve the MCP. We capture\n" +
+        "  per-tool-call metrics (name, duration, ok/error code) and unexpected exceptions.\n" +
+        "  Events are tied to your Leadbay email (so MCP usage consolidates with web-app\n" +
+        "  usage in our analytics) — they are NOT anonymous. Tool arguments, response\n" +
+        "  bodies, and lead PII are NEVER sent. Flip the toggle\n" +
+        "  LEADBAY_TELEMETRY_ENABLED=false in your client's env block to opt out anytime.\n\n"
+    );
+  } else {
+    process.stderr.write(
+      "Product usage events DISABLED. Re-run without --no-telemetry to enable.\n\n"
     );
   }
 
@@ -1071,24 +1217,35 @@ async function runInstall(args: string[]): Promise<number> {
     }
     let res: { ok: boolean; message: string };
     if (c.id === "claude-code") {
-      res = await installInClaudeCode(token, region, includeWrite);
+      res = await installInClaudeCode(token, region, includeWrite, telemetryEnabled);
     } else {
       // claude-desktop and cursor both use the same JSON shape.
       const path = c.detail.split(" ")[0];
-      res = await installInJsonConfig(path, token, region, includeWrite);
+      res = await installInJsonConfig(path, token, region, includeWrite, telemetryEnabled);
     }
     results.push({ id: c.id, label: c.label, ...res });
   }
 
-  process.stderr.write("\n=== install summary ===\n");
+  process.stderr.write(`\n=== install summary (leadbay-mcp@${VERSION}) ===\n`);
   let anyOk = false;
   for (const r of results) {
     process.stderr.write(`  ${r.ok ? "✓" : "✗"} ${r.label.padEnd(16)} ${r.message}\n`);
-    if (r.ok) anyOk = true;
+    if (r.ok) {
+      anyOk = true;
+    } else if (!r.message.startsWith("skipped")) {
+      // Real failure (not user-skipped, not the DXT short-circuit). Capture
+      // per-client so Sentry can aggregate "Cursor write keeps failing on
+      // Windows" patterns across users. Synthesizing an Error keeps the
+      // message structured + stamped with the client id for triage.
+      await reportCliFailure(
+        `install:${r.id}`,
+        new Error(`${r.label}: ${r.message}`)
+      );
+    }
   }
   process.stderr.write(
     `\nThe token was written into client config files but never printed to your terminal.\n` +
-      `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.3 doctor\n` +
+      `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.13 doctor\n` +
       `Restart your MCP client(s) to pick up the new server.\n` +
       `If you ever leak the token, run \`leadbay-mcp login --email <you> --region <us|fr>\` to mint a fresh one (which invalidates the prior session).\n`
   );
@@ -1132,6 +1289,7 @@ async function runDoctor(): Promise<number> {
       }>("GET", "/users/me");
       process.stdout.write(
         `Leadbay connection OK.\n` +
+          `  Version:       leadbay-mcp@${VERSION} (node ${process.versions.node}, ${process.platform})\n` +
           `  Region:        ${baseUrl ? "(custom baseUrl)" : region}\n` +
           `  Base URL:      ${client.baseUrl}\n` +
           `  Organization:  ${me.organization.name} (${me.organization.id})\n` +
@@ -1145,8 +1303,10 @@ async function runDoctor(): Promise<number> {
       logger.error?.(`${region}: ${err?.message ?? err}`);
       if (err?.code === "AUTH_EXPIRED" || err?.code === "NOT_AUTHENTICATED") {
         process.stderr.write(
-          `Leadbay: your LEADBAY_TOKEN is not valid for ${region}. ${err.hint}\n`
+          `Leadbay: your LEADBAY_TOKEN is not valid for ${region}. ${err.hint}\n` +
+            `  (leadbay-mcp@${VERSION})\n`
         );
+        await reportCliFailure("__doctor_auth__", err);
         return 1;
       }
       // fall through and try next region
@@ -1154,9 +1314,67 @@ async function runDoctor(): Promise<number> {
     if (baseUrl) break; // custom baseUrl — don't try other regions
   }
   process.stderr.write(
-    "Leadbay doctor: could not reach any Leadbay region with this token. Check the token and your network.\n"
+    `Leadbay doctor: could not reach any Leadbay region with this token. Check the token and your network.\n` +
+      `  (leadbay-mcp@${VERSION})\n`
+  );
+  await reportCliFailure(
+    "__doctor_unreachable__",
+    new Error("doctor: no region reachable with current token")
   );
   return 1;
+}
+
+// Report a CLI-subcommand failure (install / login / doctor) to Sentry
+// before the caller `return`s its exit code. Without this, every error
+// inside runInstall/runLogin/runDoctor exits with stderr-only output —
+// users see the message in their terminal but Leadbay never learns
+// reinstall is broken on their machine. Init is single-shot per call;
+// shutdown is bounded inside telemetry.shutdown() so a network hang
+// can't stall CLI exit.
+async function reportCliFailure(label: string, err: unknown): Promise<void> {
+  try {
+    const bootTelemetry = initTelemetry({ version: VERSION });
+    bootTelemetry.captureException(err, { tool: label });
+    await bootTelemetry.shutdown();
+  } catch {
+    // Never let telemetry mask the underlying CLI failure.
+  }
+}
+
+// Install last-resort handlers so any uncaught exception or unhandled
+// rejection during startup (or after server.connect) leaves a visible
+// stack trace on stderr + a Sentry event before the process exits.
+// Without these, Node's default kills the process after a deprecation
+// warning that some hosts don't surface — leaving the user staring at
+// "Server disconnected" with no clue why. Called from main(); also
+// exported for tests (via the symbol exists; not currently asserted).
+let startupSafetyNetsInstalled = false;
+function installStartupSafetyNets(logger: ToolLogger): void {
+  if (startupSafetyNetsInstalled) return;
+  startupSafetyNetsInstalled = true;
+
+  const reportAndExit = (label: string, err: unknown): void => {
+    const msg = err instanceof Error ? err.stack ?? err.message : String(err);
+    process.stderr.write(`leadbay-mcp@${VERSION}: ${label}: ${msg}\n`);
+    logger.error?.(`${label}: ${msg}`);
+    // Fire-and-forget Sentry capture. Bounded by the same pattern as
+    // the bootstrap catch at the entrypoint — telemetry must never
+    // block the failure exit.
+    try {
+      const bootTelemetry = initTelemetry({ version: VERSION });
+      bootTelemetry.captureException(err, { tool: "__startup__" });
+      // Don't await shutdown — process.exit(1) below flushes stdio;
+      // Sentry's internal flush will best-effort post in the small
+      // window before the process actually dies.
+      void bootTelemetry.shutdown();
+    } catch {
+      // Swallow — never let telemetry mask the underlying failure.
+    }
+    process.exit(1);
+  };
+
+  process.on("uncaughtException", (err) => reportAndExit("uncaughtException", err));
+  process.on("unhandledRejection", (err) => reportAndExit("unhandledRejection", err));
 }
 
 async function main(): Promise<void> {
@@ -1182,7 +1400,32 @@ async function main(): Promise<void> {
 
   // Stdio MCP mode (default).
   const logger = makeStderrLogger(parseLogLevel(process.env.LEADBAY_LOG_LEVEL));
-  const client = await resolveClientFromEnv(logger);
+
+  // Safety nets installed before any startup I/O so a silent crash during
+  // the JSON-RPC `initialize` handshake (which would otherwise show up on
+  // the host as a bare "Server disconnected" with no diagnostic) leaves a
+  // real stack on stderr + Sentry. Stdio writes are flushed synchronously
+  // before exit because we use the sync `process.exit` path; without these
+  // handlers, Node's default for unhandledRejection (since v15) is to log
+  // a deprecation warning then terminate with code 1 and no stack.
+  installStartupSafetyNets(logger);
+
+  // Telemetry (PostHog + Sentry). ON by default; opt-out via
+  // LEADBAY_TELEMETRY_DISABLED=1. See packages/mcp/src/telemetry.ts.
+  const telemetry = initTelemetry({ version: VERSION, logger });
+  const { client, authState } = await resolveClientFromEnv(logger);
+  // Non-blocking identify — kicks off /users/me (cached if region
+  // auto-probe already paid for it). Events captured before identity
+  // resolves are buffered and flushed once me.email lands. With a broken
+  // client (authState != "ok"), resolveMe rejects but telemetry.identify
+  // has its own catch and flushes events anonymously.
+  telemetry.identify(client);
+  // Bucket disconnects by auth-state in PostHog so a regression in the
+  // startup-auth path is visible without reading the user's logs.
+  telemetry.captureStartup({
+    auth_state: authState,
+    region: client.region,
+  });
   const includeAdvanced = process.env.LEADBAY_MCP_ADVANCED === "1";
   const includeWrite = parseWriteEnv();
 
@@ -1190,18 +1433,60 @@ async function main(): Promise<void> {
   // Fails loudly unless LEADBAY_BULK_STORE_ALLOW_MEMORY=1 is set.
   const bulkTracker = await createDefaultBulkStore({ logger });
 
+  // Auto-update state — best-effort; falls back to in-memory when
+  // ~/.leadbay is unwritable. Created BEFORE the version-check kicks
+  // off below so checkForUpdate can persist its result.
+  const updateStateStore = await createDefaultUpdateStateStore({ logger });
+  // Fire-and-forget: detect "this boot is on a newer version than the
+  // previous boot" → emit `mcp version updated` PostHog event. Works
+  // even when offline. Runs before the GitHub check so the event fires
+  // promptly on a fresh upgrade.
+  void recordRunningVersion(VERSION, updateStateStore, telemetry).catch((err) => {
+    logger.warn?.(
+      `update_state.record_version_failed ${err?.message ?? err}`
+    );
+  });
+  // Fire-and-forget GitHub releases check. Throttled to ~1h via state.
+  // Hard opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
+  if (process.env.LEADBAY_UPDATE_CHECK_DISABLED !== "1") {
+    void checkForUpdate({
+      currentVersion: VERSION,
+      stateStore: updateStateStore,
+      telemetry,
+      logger,
+    }).catch((err) => {
+      logger.warn?.(`update_check.unexpected ${err?.message ?? err}`);
+    });
+  }
+
   const server = buildServer(client, {
     includeAdvanced,
     includeWrite,
     logger,
     bulkTracker,
     version: VERSION,
+    telemetry,
+    updateStateStore,
   });
   const transport = new StdioServerTransport();
   logger.info?.(
-    `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability})`
+    `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability}, auth_state=${authState})`
   );
   await server.connect(transport);
+
+  // Shutdown hooks: flush PostHog + Sentry bounded at 2s each so a network
+  // hang can't block process exit. stdio-end fires when the MCP client
+  // (Claude Desktop, Cursor) disconnects — same effect as SIGTERM.
+  const shutdown = async (code: number) => {
+    try {
+      await telemetry.shutdown();
+    } finally {
+      process.exit(code);
+    }
+  };
+  process.once("SIGINT", () => void shutdown(130));
+  process.once("SIGTERM", () => void shutdown(143));
+  process.stdin.once("end", () => void shutdown(0));
 }
 
 // Run main() only when invoked as a CLI. realpath on both sides handles
@@ -1218,8 +1503,18 @@ const isEntrypoint = (() => {
 })();
 
 if (isEntrypoint) {
-  main().catch((err) => {
+  main().catch(async (err) => {
     process.stderr.write(`leadbay-mcp: ${err?.message ?? err}\n`);
+    // Best-effort Sentry capture for bootstrap failures (token missing,
+    // region probe fully failed, etc.). Standalone init so the catch site
+    // doesn't depend on main() having reached the telemetry handle.
+    try {
+      const bootTelemetry = initTelemetry({ version: VERSION });
+      bootTelemetry.captureException(err, { tool: "__bootstrap__" });
+      await bootTelemetry.shutdown();
+    } catch {
+      // Swallow — telemetry must never block the failure exit.
+    }
     process.exit(1);
   });
 }

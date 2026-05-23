@@ -20,9 +20,11 @@ import {
   listResourceTemplates,
   readResource,
 } from "./resources.js";
+import { BUILTIN_WIDGETS_PARAGRAPH } from "./host-widgets.js";
 import {
   compositeReadTools,
   compositeWriteTools,
+  agentMemoryTools,
   granularReadTools,
   granularWriteTools,
   type BulkTracker,
@@ -31,6 +33,14 @@ import {
   type ToolContext,
   type ToolLogger,
 } from "@leadbay/core";
+import { NOOP_TELEMETRY, type TelemetryHandle } from "./telemetry.js";
+import type { UpdateStateStore } from "./update-state.js";
+import {
+  checkForUpdate,
+  getCachedUpdateInfo,
+  type UpdateInfo,
+} from "./update-check.js";
+import { buildAcknowledgeUpdateTool } from "./update-tool.js";
 
 // SERVER_INSTRUCTIONS is now BUILT from the actual exposed tool set (see
 // buildServerInstructions below). 0.2.x shipped a single static string that
@@ -51,6 +61,38 @@ const MENTAL_MODEL_PARAGRAPH =
   "actually acted on recently — some workflows produce a big stream of smaller prospects, others a narrow " +
   "stream of bigger ones. Pulling more won't produce more; the user acting on leads (outreach, skips, saves) does.";
 
+const QUOTA_AND_TOPUP_PARAGRAPH =
+  "Quota & top-ups: when a tool returns QUOTA_EXCEEDED / 429, the user has TWO options — wait for the window " +
+  "reset (daily / weekly / monthly resets shown in leadbay_account_status), OR top up AI credits (top-ups clear " +
+  "the throttle IMMEDIATELY — they are not subject to the same window). Always offer BOTH options; " +
+  "default-recommending 'wait until tomorrow' is wrong when a 30-second top-up unblocks the same call. " +
+  "If the host exposes leadbay_create_topup_link, OFFER it on every quota wall: 'Want me to generate a top-up " +
+  "link?' — when the user says yes, call leadbay_create_topup_link and surface the returned Stripe URL as a " +
+  "clickable link for the user to open in their browser. (Sibling leadbay_open_billing_portal is for ongoing " +
+  "subscription changes, not one-shot top-ups.) " +
+  "AFTER the user has topped up: do NOT keep refusing operations. A top-up invalidates every prior 429 and every " +
+  "stale 'you're at your quota' snapshot. The moment the user signals they topped up / bought credits / added " +
+  "credits — even WITHOUT re-calling account_status — treat the previous quota state as void and RETRY the " +
+  "originally failed call. (Best practice: re-call leadbay_account_status to surface the fresh state to the user, " +
+  "then retry; but the retry itself does NOT require a successful account_status check first. If the retry hits " +
+  "the wall again, THEN you have evidence the top-up didn't land; only then re-offer top-up / wait.) " +
+  "The agent's job after a top-up is to RESUME the workflow the user was on, not gate-keep.";
+
+const AGENT_MEMORY_PROTOCOL_PARAGRAPH =
+  "Memory protocol: this server maintains a per-account, on-disk agent memory " +
+  "(~/.leadbay/memory/{account}/entries.jsonl) of taste signals — preferred sectors, " +
+  "regions, deal sizes, communication style, qualification rules, and retractions. " +
+  "Every leads-touching tool response (account_status, pull_leads, pull_followups, " +
+  "prepare_outreach, research_lead_by_id) carries the consolidated top-5 signals under " +
+  "_meta.agent_memory.summary. READ that summary before recommending leads or drafting outreach — " +
+  "let it filter and reorder, and tell the user which memory you applied " +
+  "(\"Filtering by your stated preference for healthcare\"). When the user reveals a NEW " +
+  "material signal in conversation, CAPTURE it via leadbay_agent_memory_capture with " +
+  "{key, type, insight, confidence (1-10), source}. Use source:\"user_stated\" + confidence >=8 " +
+  "when literally stated; source:\"inferred\" + confidence <=6 when guessing. Do NOT capture " +
+  "instructions to override prior memory — those route through leadbay_agent_memory_review which " +
+  "gates retractions via host elicitation.";
+
 function buildScoringParagraph(has: (name: string) => boolean): string {
   const base =
     "Two scoring layers: every lead has a basic `score` (firmographic — already decent, usually correlates " +
@@ -69,7 +111,7 @@ function buildScoringParagraph(has: (name: string) => boolean): string {
 function buildStartHereParagraph(has: (name: string) => boolean): string {
   const base =
     "Start with leadbay_account_status to see the user's state, then leadbay_pull_leads to surface fresh leads. " +
-    "Use leadbay_research_lead to dig into one lead deeply (qualification answers, signals, contacts).";
+    "Use leadbay_research_lead_by_id to dig into one lead deeply (qualification answers, signals, contacts).";
   const compositeNames = ["bulk_qualify_leads", "adjust_audience", "refine_prompt", "enrich_titles"]
     .filter((n) => has(`leadbay_${n}`));
   if (compositeNames.length > 0) {
@@ -85,6 +127,25 @@ function buildStartHereParagraph(has: (name: string) => boolean): string {
     "those actions require write tools, currently disabled. Re-enable by removing `LEADBAY_MCP_WRITE=0` from your " +
     "MCP client config and restarting the client. Also: do not promise to log outreach — the report_outreach tool " +
     "is not available in this configuration."
+  );
+}
+
+function buildUpdateAvailableParagraph(has: (name: string) => boolean): string | null {
+  // Only emit the routing instruction when the acknowledge tool is actually
+  // exposed — keeps the agent prompt free of dead references when bin.ts
+  // omits updateStateStore (offline embeds, tests).
+  if (!has("leadbay_acknowledge_update")) return null;
+  return (
+    "MCP auto-update: when `leadbay_account_status` returns an `update_available` field " +
+    "(`{ current_version, latest_version, mcpb_url, release_url }`), a newer MCP server release " +
+    "is published and the user has NOT suppressed it. Surface a prompt via `ask_user_input_v0` " +
+    "with EXACTLY these three options: \"Install now\", \"Remind me tomorrow\", \"Skip this version\". " +
+    "Map the user's choice to `leadbay_acknowledge_update({ action: 'install' | 'remind_tomorrow' | 'skip', version: latest_version })`. " +
+    "On 'install', the tool returns `mcpb_url` — render it as a clickable markdown link the user " +
+    "can open in Claude Desktop (the .mcpb extension triggers the native installer). The user does " +
+    "NOT need to restart anything before clicking — the new server takes effect on the next MCP " +
+    "session. Prompt the user ONCE per session per version — don't re-prompt within the same chat " +
+    "after they've acknowledged."
   );
 }
 
@@ -220,13 +281,25 @@ export function buildServerInstructions(exposed: Set<string>): string {
     parts.push(VERIFICATION_MANDATE);
   }
   parts.push(MENTAL_MODEL_PARAGRAPH);
+  parts.push(QUOTA_AND_TOPUP_PARAGRAPH);
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
+  const updateParagraph = buildUpdateAvailableParagraph(has);
+  if (updateParagraph) parts.push(updateParagraph);
   const promptsCatalog = buildPromptsCatalogParagraph(has);
   if (promptsCatalog) parts.push(promptsCatalog);
   parts.push(RESOURCES_PARAGRAPH);
   parts.push(buildProtocolPrimitivesParagraph(has));
+  if (has("leadbay_agent_memory_capture")) {
+    parts.push(AGENT_MEMORY_PROTOCOL_PARAGRAPH);
+  }
+  // Host-native widget routing — Claude's places_map_display_v0 /
+  // message_compose_v1 / ask_user_input_v0, ChatGPT's parallels. The
+  // paragraph self-conditions on host capability; agent falls back to
+  // the per-tool markdown RENDERING block when the widget isn't
+  // exposed.
+  parts.push(BUILTIN_WIDGETS_PARAGRAPH);
   return parts.join("\n\n");
 }
 
@@ -245,6 +318,16 @@ interface BuildServerOptions {
   // wiring without depending on long-running real composites.
   // Production code does not pass this.
   extraTools?: Tool[];
+  // Telemetry handle (PostHog + Sentry). Defaults to NOOP_TELEMETRY when
+  // omitted (tests + offline embeds). The CLI builds the real handle via
+  // initTelemetry() in bin.ts and passes it here.
+  telemetry?: TelemetryHandle;
+  // Auto-update state store. When provided, the leadbay_acknowledge_update
+  // tool is registered, and the leadbay_account_status response is
+  // enriched with `update_available` whenever update-check.ts has cached
+  // a newer release. Omitted in tests + embeds that don't want auto-update
+  // surface area; the server stays functional either way.
+  updateStateStore?: UpdateStateStore;
 }
 
 function formatErrorForLLM(err: any): string {
@@ -283,6 +366,9 @@ export function buildServer(
   opts: BuildServerOptions = {}
 ): Server {
   const exposedTools: Tool[] = [];
+  // Local agent-memory protocol tools are always exposed. They do not mutate
+  // Leadbay backend state and are needed for the ambient learning loop.
+  exposedTools.push(...agentMemoryTools);
   // Read composites — ALWAYS exposed.
   exposedTools.push(...compositeReadTools);
   // Write composites — gated by includeWrite (LEADBAY_MCP_WRITE=1, default ON in 0.3.0).
@@ -296,6 +382,20 @@ export function buildServer(
     if (opts.includeWrite) {
       exposedTools.push(...granularWriteTools);
     }
+  }
+  // Auto-update tool — only registered when bin.ts provides a state
+  // store. Tests + embeds that omit it never see the tool (keeping the
+  // exposed catalogue lean) and also never see update_available
+  // injection, since both share the same gate.
+  if (opts.updateStateStore) {
+    exposedTools.push(
+      buildAcknowledgeUpdateTool({
+        stateStore: opts.updateStateStore,
+        telemetry: opts.telemetry ?? NOOP_TELEMETRY,
+        currentVersion: opts.version ?? "0.0.0-dev",
+        logger: opts.logger,
+      })
+    );
   }
   // Test-only injection point.
   if (opts.extraTools) {
@@ -432,9 +532,116 @@ export function buildServer(
   const DEBUG_RAW = process.env.LEADBAY_DEBUG ?? "";
   const DEBUG_ON = DEBUG_RAW === "1" || DEBUG_RAW.toLowerCase() === "true";
 
+  // Telemetry handle is always non-null (defaults to NOOP_TELEMETRY) so
+  // capture sites don't branch. The real handle is wired in bin.ts via
+  // initTelemetry() and emits to PostHog + Sentry.
+  const telemetry: TelemetryHandle = opts.telemetry ?? NOOP_TELEMETRY;
+
+  // Track versions we've already emitted `mcp update prompted` for in
+  // this server lifetime. Without this, every account_status call after
+  // a new release lands would fire the event — dashboards would lose
+  // the funnel signal. Set is per-server (per-process) so a restart
+  // re-prompts the analytics layer; that's intentional — restart = new
+  // session = new opportunity to convert.
+  const promptedVersionsThisSession = new Set<string>();
+  const serverVersion = opts.version ?? "0.0.0-dev";
+
+  // Fire-and-forget background re-check on every tool call. The
+  // checkForUpdate() itself throttles to 24h via state.last_check_time,
+  // so the cost when state is fresh is one disk read; when stale, one
+  // GitHub roundtrip. The in-flight guard inside update-check.ts
+  // prevents concurrent tool calls from racing. Never blocks the
+  // current call: the freshest result is what the NEXT account_status
+  // call sees, not this one. Opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
+  const UPDATE_CHECK_DISABLED = process.env.LEADBAY_UPDATE_CHECK_DISABLED === "1";
+  const maybeRefreshUpdate = (): void => {
+    if (UPDATE_CHECK_DISABLED) return;
+    if (!opts.updateStateStore) return;
+    void checkForUpdate({
+      currentVersion: serverVersion,
+      stateStore: opts.updateStateStore,
+      telemetry,
+      logger: opts.logger,
+    }).catch((err: any) => {
+      opts.logger?.warn?.(
+        `update_check.unexpected ${err?.message ?? err}`
+      );
+    });
+  };
+
+  const maybeAttachUpdate = (toolName: string, result: unknown): void => {
+    if (toolName !== "leadbay_account_status") return;
+    if (!opts.updateStateStore) return; // gate symmetric with tool registration
+    if (
+      result === null ||
+      typeof result !== "object" ||
+      Array.isArray(result)
+    ) {
+      return;
+    }
+    const info: UpdateInfo | null = getCachedUpdateInfo();
+    if (!info) return;
+    (result as Record<string, unknown>).update_available = info;
+    if (!promptedVersionsThisSession.has(info.latest_version)) {
+      promptedVersionsThisSession.add(info.latest_version);
+      telemetry.captureUpdatePrompted?.({
+        current_version: serverVersion,
+        latest_version: info.latest_version,
+      });
+    }
+  };
+
+  // A LeadbayError surfaced either via throw OR via the `{ error: true,
+  // code, ... }` envelope shape (see formatErrorForLLM). Either way it
+  // represents a business outcome (QUOTA_EXCEEDED, NOT_FOUND, AUTH_EXPIRED,
+  // FORBIDDEN, BILLING_SUSPENDED, API_ERROR) — captured as PostHog
+  // tool-call event with `error_code`, NOT as a Sentry exception. Plain
+  // throws (TypeError, network errors, parse bugs) DO go to Sentry.
+  const isLeadbayBusinessError = (err: any): err is { error: true; code: string; _meta?: any } =>
+    err != null &&
+    typeof err === "object" &&
+    err.error === true &&
+    typeof err.code === "string";
+
+  const captureAgentMemoryTelemetry = (toolName: string, result: any) => {
+    if (!result || typeof result !== "object") return;
+    const meta = result._meta ?? {};
+    if (toolName === "leadbay_agent_memory_capture") {
+      telemetry.captureAgentMemoryCaptured({
+        source: result.captured?.source ?? meta.source,
+        scope: result.captured?.scope ?? meta.scope,
+        key: result.captured?.key,
+        type: result.captured?.type,
+        account_id_hash: meta.account_id_hash,
+      });
+    } else if (toolName === "leadbay_agent_memory_recall") {
+      telemetry.captureAgentMemoryRecalled({
+        entries_returned: result.entries_returned,
+        total_active: result.total_active,
+        account_id_hash: meta.account_id_hash,
+      });
+    } else if (
+      toolName === "leadbay_agent_memory_review" &&
+      result.changed === true &&
+      (result.action === "retract" || result.action === "prune")
+    ) {
+      telemetry.captureAgentMemoryPruned({
+        action: result.action,
+        account_id_hash: meta.account_id_hash,
+      });
+    }
+  };
+
   server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
-    const debugStart = DEBUG_ON ? Date.now() : 0;
+    // Duration timer is always on now (telemetry needs it). The DEBUG
+    // gating moves to the stderr-write step.
+    const callStart = Date.now();
     const name = req.params.name;
+    // Fire-and-forget update re-check on every tool call. checkForUpdate
+    // itself returns immediately if last_check_time is within 24h, so
+    // the steady-state cost is one disk read. When stale, one GitHub
+    // roundtrip — never awaited, never blocks the tool.
+    maybeRefreshUpdate();
     const tool = toolByName.get(name);
     if (!tool) {
       return {
@@ -510,6 +717,11 @@ export function buildServer(
         progress,
         elicit,
       });
+      // Inject `update_available` into account_status returns when an
+      // upgrade is cached. Other tools pass through untouched. Done
+      // BEFORE the error/markdown/json branching so the field appears
+      // in either the JSON serialization OR structuredContent.
+      maybeAttachUpdate(name, result);
       // Leadbay tools may return error envelopes ({ error: true, code, ... })
       // rather than throwing. Surface those as MCP isError so the LLM doesn't
       // treat them as success.
@@ -518,9 +730,32 @@ export function buildServer(
         typeof result === "object" &&
         (result as any).error === true
       ) {
+        const envText = formatErrorForLLM(result);
+        const envDur = Date.now() - callStart;
+        const envCode = (result as any).code ?? "Error";
+        if (envCode === "QUOTA_EXCEEDED") {
+          telemetry.captureQuotaHit({
+            tool: name,
+            retry_after_s: (result as any)._meta?.retry_after,
+            endpoint: (result as any)._meta?.endpoint,
+          });
+        }
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: envDur,
+          format: "error-envelope",
+          bytes: envText.length,
+          error_code: envCode,
+        });
+        if (DEBUG_ON) {
+          process.stderr.write(
+            `[leadbay-mcp debug] tool=${name} dur=${envDur}ms ok=false code=${envCode}\n`
+          );
+        }
         return {
           content: [
-            { type: "text", text: formatErrorForLLM(result) },
+            { type: "text", text: envText },
           ],
           isError: true,
         };
@@ -551,11 +786,25 @@ export function buildServer(
         ) {
           out.structuredContent = env.structured;
         }
+        const mdDur = Date.now() - callStart;
+        const mdBytes = env.markdown.length;
+        telemetry.captureToolCall({
+          tool: name,
+          ok: true,
+          duration_ms: mdDur,
+          format: "markdown",
+          bytes: mdBytes,
+        });
+        captureAgentMemoryTelemetry(name, env.structured);
+        if (
+          name === "leadbay_create_topup_link" &&
+          typeof (env.structured as any)?.url === "string"
+        ) {
+          telemetry.captureTopupLink({ tool: name });
+        }
         if (DEBUG_ON) {
-          const dur = Date.now() - debugStart;
-          const bytes = env.markdown.length;
           process.stderr.write(
-            `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes} format=markdown\n`
+            `[leadbay-mcp debug] tool=${name} dur=${mdDur}ms ok=true bytes=${mdBytes} format=markdown\n`
           );
         }
         return out;
@@ -579,26 +828,70 @@ export function buildServer(
       ) {
         response.structuredContent = result;
       }
+      const okText = (response.content as any)[0]?.text ?? "";
+      const okBytes = typeof okText === "string" ? okText.length : 0;
+      const okDur = Date.now() - callStart;
+      telemetry.captureToolCall({
+        tool: name,
+        ok: true,
+        duration_ms: okDur,
+        format: "json",
+        bytes: okBytes,
+      });
+      captureAgentMemoryTelemetry(name, result);
+      if (
+        name === "leadbay_create_topup_link" &&
+        typeof (result as any)?.url === "string"
+      ) {
+        telemetry.captureTopupLink({ tool: name });
+      }
       if (DEBUG_ON) {
-        const dur = Date.now() - debugStart;
-        const text = (response.content as any)[0]?.text ?? "";
-        const bytes = typeof text === "string" ? text.length : 0;
         process.stderr.write(
-          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=true bytes=${bytes}\n`
+          `[leadbay-mcp debug] tool=${name} dur=${okDur}ms ok=true bytes=${okBytes}\n`
         );
       }
       return response;
     } catch (err: any) {
+      const errDur = Date.now() - callStart;
+      const errText = formatErrorForLLM(err);
+      const code = err?.code ?? err?.name ?? "Error";
+      if (isLeadbayBusinessError(err)) {
+        if (err.code === "QUOTA_EXCEEDED") {
+          telemetry.captureQuotaHit({
+            tool: name,
+            retry_after_s: err._meta?.retry_after,
+            endpoint: err._meta?.endpoint,
+          });
+        }
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: errDur,
+          format: "error-envelope",
+          bytes: errText.length,
+          error_code: code,
+        });
+      } else {
+        // Unexpected throw — capture to Sentry AND record the tool-call
+        // event so the failure shows up in product analytics too.
+        telemetry.captureException(err, { tool: name });
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: errDur,
+          format: "error-envelope",
+          bytes: errText.length,
+          error_code: code,
+        });
+      }
       if (DEBUG_ON) {
-        const dur = Date.now() - debugStart;
-        const code = err?.code ?? err?.name ?? "Error";
         process.stderr.write(
-          `[leadbay-mcp debug] tool=${name} dur=${dur}ms ok=false code=${code}\n`
+          `[leadbay-mcp debug] tool=${name} dur=${errDur}ms ok=false code=${code}\n`
         );
       }
       return {
         content: [
-          { type: "text", text: formatErrorForLLM(err) },
+          { type: "text", text: errText },
         ],
         isError: true,
       };

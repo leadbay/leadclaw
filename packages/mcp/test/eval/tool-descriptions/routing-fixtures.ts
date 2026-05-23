@@ -37,19 +37,19 @@ export const ROUTING_FIXTURES: RoutingFixture[] = [
   // Research lead
   {
     intent: "Tell me everything about lead 7d3f-abcd-1234, signals and contacts.",
-    expected_tool: "leadbay_research_lead",
-    forbidden_tools: ["leadbay_research_company"],
+    expected_tool: "leadbay_research_lead_by_id",
+    forbidden_tools: ["leadbay_research_lead_by_name_fuzzy"],
   },
-  { intent: "Deep dive on this lead id.", expected_tool: "leadbay_research_lead" },
-  { intent: "What contacts do we know for lead_001?", expected_tool: "leadbay_research_lead" },
+  { intent: "Deep dive on this lead id.", expected_tool: "leadbay_research_lead_by_id" },
+  { intent: "What contacts do we know for lead_001?", expected_tool: "leadbay_research_lead_by_id" },
 
   // Research company (without an existing leadId)
   {
     intent: "I want everything Leadbay knows about acme.com — import and research it.",
-    expected_tool: "leadbay_research_company",
+    expected_tool: "leadbay_research_lead_by_name_fuzzy",
     forbidden_tools: ["leadbay_pull_leads"],
   },
-  { intent: "Research a company by its primary domain.", expected_tool: "leadbay_research_company" },
+  { intent: "Research a company by its primary domain.", expected_tool: "leadbay_research_lead_by_name_fuzzy" },
 
   // Bulk qualify
   { intent: "Qualify the top 10 unqualified leads.", expected_tool: "leadbay_bulk_qualify_leads" },

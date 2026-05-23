@@ -7,7 +7,7 @@ description: "Log outreach (an email I sent, a call I made, a meeting I had) on 
 IRON LAW — VERIFICATION REQUIRED. Before calling leadbay_report_outreach, you MUST collect one of: a gmail message id (verification.source = 'gmail_message_id'), a calendar event id (verification.source = 'calendar_event_id'), or a literal one-sentence user confirmation (verification.source = 'user_confirmed', verification.ref = the user's exact words). Skipping or fabricating verification poisons the human team's pipeline.
 
 
-Log this outreach on Leadbay lead <The lead UUID. Get it from leadbay_pull_leads or leadbay_research_lead. If not provided in the user's most recent message, ask once before proceeding.>:
+Log this outreach on Leadbay lead <The lead UUID. Get it from leadbay_pull_leads or leadbay_research_lead_by_id. If not provided in the user's most recent message, ask once before proceeding.>:
 Summary: <1-2 sentences describing what I did (e.g. 'Sent intro email to CTO citing recent Hornsea contract'). If not provided in the user's most recent message, ask once before proceeding.>
 
 # PHASE 1 — COLLECT VERIFICATION (ask the user EXACTLY once)

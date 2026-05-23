@@ -74,9 +74,14 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24 ships with npm 11.5+ which speaks Trusted Publishers
+          # OIDC natively. Node 22's bundled npm 10.x cannot do the OIDC
+          # handshake, and in-place self-upgrade (`npm i -g npm@latest`)
+          # consistently breaks with MODULE_NOT_FOUND on the runner image.
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
-          always-auth: true
+          # NO `always-auth: true` — that writes a .npmrc `_authToken=${NODE_AUTH_TOKEN}`
+          # line which preempts the Trusted Publishers OIDC handshake.
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -102,9 +107,25 @@ jobs:
           echo "Aligned: $REF = $PKG_VERSION"
 
       - name: Publish
+        # Uses npm Trusted Publishers (OIDC). Requirements (all must hold):
+        #   1. `id-token: write` permission (granted at job level above)
+        #   2. Trusted Publisher binding configured on npmjs.com for
+        #      @leadbay/mcp pointing at leadbay/leadclaw + release.yml
+        #   3. npm CLI ≥ 11.5.1 (we `npm install -g npm@latest` below;
+        #      the runner's bundled npm 10.x doesn't speak OIDC)
+        #   4. NO NODE_AUTH_TOKEN env var — not even empty string. Per
+        #      the npm migration guide, an empty value is treated as
+        #      "use this token", which preempts OIDC. We deliberately
+        #      omit the env block entirely.
+        #   5. NO `_authToken=` line in any .npmrc (we don't pass
+        #      `always-auth: true` to setup-node above, so no auth line
+        #      is written into $RUNNER_TEMP/.npmrc).
         working-directory: packages/mcp
         run: |
           set -euo pipefail
+          # Node 24's bundled npm is ≥11.5 — sufficient for Trusted
+          # Publishers OIDC. No self-upgrade dance required.
+          echo "npm $(npm --version) at $(which npm)"
           VERSION=$(node -p "require('./package.json').version")
           # Idempotent: if @leadbay/mcp@$VERSION is already on npm, skip.
           if npm view "@leadbay/mcp@$VERSION" version --silent 2>/dev/null; then
@@ -116,8 +137,6 @@ jobs:
           else
             npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build .dxt bundle
         # Same gate as the tag-verify step: runs on any tag ref, including
@@ -199,9 +218,11 @@ jobs:
           version: 10
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24 for bundled npm 11.5+ (Trusted Publishers OIDC).
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
-          always-auth: true
+          # See @leadbay/mcp publish-job comment: always-auth writes an
+          # _authToken= line that preempts Trusted Publishers OIDC.
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -223,9 +244,14 @@ jobs:
           echo "Aligned: $TAG = $PKG = $MAN"
 
       - name: Publish to npm
+        # Trusted Publishers OIDC — see @leadbay/mcp publish job for the
+        # full set of preconditions. Requires Trusted Publisher binding
+        # configured on npmjs.com for @leadbay/leadclaw pointing at
+        # leadbay/leadclaw + release.yml.
         working-directory: packages/leadclaw
         run: |
           set -euo pipefail
+          echo "npm $(npm --version) at $(which npm)"
           VERSION=$(node -p "require('./package.json').version")
           # Idempotent: if @leadbay/leadclaw@$VERSION is already on npm, skip.
           # Handles the retry-after-ClawHub-failure case without manual intervention.
@@ -238,8 +264,6 @@ jobs:
           else
             npm publish --access public --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install ClawHub CLI
         if: github.event.inputs.dry_run != 'true'

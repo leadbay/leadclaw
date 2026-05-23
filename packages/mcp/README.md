@@ -21,10 +21,31 @@ A Model Context Protocol server that lets Claude Desktop, Cursor, Claude Code, a
 
 > **0.3.0 behavior change** — composite write tools (`refine_prompt`, `report_outreach`, `adjust_audience`, `bulk_qualify_leads`, `enrich_titles`, `answer_clarification`, `import_leads`) are **ON by default**. Set `LEADBAY_MCP_WRITE=0` (or `--no-write` on `install`) to restore the previous read-only behavior. `leadbay-mcp install` now also registers Claude Code at `--scope user` so Leadbay is visible from any project. See [MIGRATION.md](./MIGRATION.md).
 
+## Agent memory
+
+Leadbay MCP keeps a local, per-account agent memory at
+`~/.leadbay/memory/{account_id}/`. It stores append-only JSONL learnings
+about user taste signals such as preferred sectors, regions, deal size,
+communication style, and qualification rules.
+
+The memory tools are always exposed:
+
+- `leadbay_agent_memory_recall` reads the consolidated top signals.
+- `leadbay_agent_memory_capture` appends a new learning after the user reveals
+  a material preference.
+- `leadbay_agent_memory_review` lists entries and gates retractions or org
+  promotion through user confirmation.
+
+The main leads-touching tools (`leadbay_account_status`,
+`leadbay_pull_leads`, `leadbay_pull_followups`,
+`leadbay_prepare_outreach`, `leadbay_research_lead_by_id`) also attach
+`_meta.agent_memory.summary` automatically. Set `LEADBAY_AGENT_MEMORY=off`
+to suppress this ambient metadata.
+
 ## 1. Install (one command)
 
 ```bash
-npx -y @leadbay/mcp@0.6 install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us
 # (you'll be prompted for your password — it's not echoed)
 ```
 
@@ -67,14 +88,14 @@ Claude Desktop 2026 ships the DXT (Desktop Extension) system — the legacy `cla
 
 If you installed Node from the official [nodejs.org](https://nodejs.org) `.pkg`, `/usr/local/lib/node_modules` is root-owned. Any of these works:
 
-- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.6 ...` — no global install needed.
+- **Use `npx` (recommended, no global install):** all examples above use `npx -y @leadbay/mcp@0.13 ...` — no global install needed.
 - **`sudo npm install -g @leadbay/mcp`** (enter your macOS password).
 - **Use a Node version manager** — [nvm](https://github.com/nvm-sh/nvm), [volta](https://volta.sh), [fnm](https://github.com/Schniz/fnm). They install Node under your home directory, so `npm install -g` works without sudo.
 
 ### If you'd rather mint a token without auto-install
 
 ```bash
-npx -y @leadbay/mcp@0.6 login \
+npx -y @leadbay/mcp@0.13 login \
   --email you@yourcompany.com \
   --region us
 ```
@@ -92,7 +113,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.6"],
+      "args": ["-y", "@leadbay/mcp@0.13"],
       "env": {
         "LEADBAY_TOKEN": "<paste-token-from-step-1>",
         "LEADBAY_REGION": "us"
@@ -113,7 +134,7 @@ In Cursor settings, add the MCP server:
   "mcp.servers": {
     "leadbay": {
       "command": "npx",
-      "args": ["-y", "@leadbay/mcp@0.6"],
+      "args": ["-y", "@leadbay/mcp@0.13"],
       "env": { "LEADBAY_TOKEN": "<paste-token>", "LEADBAY_REGION": "us" }
     }
   }
@@ -126,7 +147,7 @@ In Cursor settings, add the MCP server:
 claude mcp add leadbay --scope user \
   --env LEADBAY_TOKEN=<paste-token> \
   --env LEADBAY_REGION=us \
-  -- npx -y @leadbay/mcp@0.6
+  -- npx -y @leadbay/mcp@0.13
 ```
 
 > **`--scope user`** registers Leadbay globally for your account (visible from any project). Without it, `claude mcp add` defaults to project-local scope and the server only appears in conversations opened from the directory where you ran the command.
@@ -138,7 +159,7 @@ claude mcp add leadbay --scope user \
 Before starting Claude, run:
 
 ```bash
-LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.6 doctor
+LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.13 doctor
 ```
 
 Expected output:
@@ -366,20 +387,20 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 | `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Claude Desktop "loading forever" on first use | `npx` cold-start fetching the package | First run takes ~10s. Prefer `npm install -g @leadbay/mcp` for faster startup. |
 | Claude Desktop doesn't show Leadbay tools | Server crashed at startup | Check `~/Library/Logs/Claude/mcp*.log` (macOS) or `%APPDATA%\Claude\logs\mcp*.log` (Windows). |
-| Claude Code can't find Leadbay in a new conversation | MCP server installed at project scope (default before 0.3.0) | Re-run with `--scope user`: `claude mcp remove leadbay && claude mcp add leadbay --scope user --env LEADBAY_TOKEN=… --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.6` |
+| Claude Code can't find Leadbay in a new conversation | MCP server installed at project scope (default before 0.3.0) | Re-run with `--scope user`: `claude mcp remove leadbay && claude mcp add leadbay --scope user --env LEADBAY_TOKEN=… --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.13` |
 | Agent reports "tool not found" for `refine_prompt` / `adjust_audience` etc. | Pre-0.3.0 install with `LEADBAY_MCP_WRITE` unset (writes were off) | Either re-run `npx @leadbay/mcp install` or remove `LEADBAY_MCP_WRITE=0` from your client config (writes are on by default in 0.3.0+) |
 
 ## 5. Upgrade & rotation
 
-**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.6"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
+**Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.13"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
 
-**Rotate token**: re-run `npx -y @leadbay/mcp@0.6 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
+**Rotate token**: re-run `npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
 
 ## 6. Advanced
 
 ### Exposing the granular tools and disabling write tools
 
-By default the server exposes the **composite workflow tools** — both reads (`leadbay_pull_leads`, `leadbay_research_lead`, `leadbay_account_status`, `leadbay_recall_ordered_titles`, `leadbay_research_company`, `leadbay_prepare_outreach`, `leadbay_qualify_status`, `leadbay_list_mappable_fields`) and writes (`leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, `leadbay_refine_prompt`, `leadbay_report_outreach`, `leadbay_adjust_audience`, `leadbay_answer_clarification`, `leadbay_import_leads`, `leadbay_import_and_qualify`). These work well with most prompts.
+By default the server exposes the **composite workflow tools** — both reads (`leadbay_pull_leads`, `leadbay_research_lead_by_id`, `leadbay_account_status`, `leadbay_recall_ordered_titles`, `leadbay_research_lead_by_name_fuzzy`, `leadbay_prepare_outreach`, `leadbay_qualify_status`, `leadbay_list_mappable_fields`) and writes (`leadbay_bulk_qualify_leads`, `leadbay_enrich_titles`, `leadbay_refine_prompt`, `leadbay_report_outreach`, `leadbay_adjust_audience`, `leadbay_answer_clarification`, `leadbay_import_leads`, `leadbay_import_and_qualify`). These work well with most prompts.
 
 To **disable the write tools** (run a strictly read-only agent), set `LEADBAY_MCP_WRITE=0`. The server's system prompt will adapt to omit references to those tools.
 
@@ -459,9 +480,49 @@ Use `dry_run: true` to validate domain formatting and wizard reachability withou
 - The `leadbay_login` tool from the OpenClaw adapter is **not** registered on MCP: exposing a credential-taking tool to an LLM is a prompt-injection risk. Use the token path above.
 - The `leadbay_add_note` and `leadbay_enrich_contacts` tools are write actions flagged `optional: true`. If your client supports per-tool opt-in, leave them disabled until you need them.
 
-### Privacy
+### Privacy & telemetry
 
-Contact data fetched through this server stays local to your MCP client session. No analytics or telemetry is sent by `@leadbay/mcp`. Requests to Leadbay are subject to the [Leadbay privacy policy](https://www.leadbay.ai/privacy-policy).
+`@leadbay/mcp` sends product usage events to PostHog and reports unexpected errors to Sentry — same posture as the Leadbay web app. PostHog measures product usage (which tools fire, durations, error rates); Sentry catches crashes we'd otherwise never see.
+
+**These events are NOT anonymous.** Each event is tied to your Leadbay account email (`distinctId = me.email`) so your MCP activity consolidates with your web-app activity under the same identity in our analytics — that's the same identity model the web app already uses. If you'd rather not have your MCP usage attributed to you, opt out (see below).
+
+**What we send to PostHog** (per tool call):
+
+| Event | When | Properties |
+|---|---|---|
+| `mcp tool called` | Every tool invocation | `tool`, `ok`, `duration_ms`, `format`, `bytes`, `error_code` (if failed) |
+| `mcp quota hit` | When the API returns `QUOTA_EXCEEDED` (HTTP 429/402) | `tool`, `retry_after_s`, `endpoint` |
+| `mcp topup link created` | When `leadbay_create_topup_link` returns a checkout URL | `tool` (the URL itself is **never** captured) |
+
+After your first authenticated call, your PostHog `distinctId` is set to your Leadbay account email so MCP events consolidate with web-app events for the same person. Events also carry `$groups.organization` so org-level rollups work.
+
+**What we never send**: tool argument bodies, response bodies, lead emails / phones, Stripe URLs, lens descriptions, qualification answers.
+
+**Errors to Sentry**: only unexpected throws (TypeError, network failures, parse bugs). Expected business outcomes — quota walls, missing resources, auth expiry, billing suspension — stay in PostHog only.
+
+**Opt out** — `leadbay-mcp install` writes `LEADBAY_TELEMETRY_ENABLED=true` into your MCP client's env block by default. Most clients (Claude Desktop, Cursor) render env-var booleans as a toggle in their settings UI, so you can flip it without editing the file. To opt out at install time, pass `--no-telemetry`; to opt out manually, flip the env value to `"false"`:
+
+```jsonc
+{
+  "mcpServers": {
+    "leadbay": {
+      "command": "npx",
+      "args": ["-y", "@leadbay/mcp@0.13"],
+      "env": {
+        "LEADBAY_TOKEN": "u.…",
+        "LEADBAY_REGION": "us",
+        "LEADBAY_TELEMETRY_ENABLED": "false"
+      }
+    }
+  }
+}
+```
+
+Accepted values: `"true"|"1"|"yes"|"on"` enable; `"false"|"0"|"no"|"off"` disable (case-insensitive). Unset / unrecognized values default to enabled.
+
+**Override the destinations** with `LEADBAY_POSTHOG_KEY=<your-project-key>` and/or `LEADBAY_SENTRY_DSN=<your-dsn>` if you'd rather pipe to your own projects. Telemetry is also disabled automatically when `NODE_ENV=test`.
+
+Contact data fetched through this server stays local to your MCP client session — telemetry never carries it. Requests to Leadbay are subject to the [Leadbay privacy policy](https://www.leadbay.ai/privacy-policy).
 
 ## 7. For maintainers — publishing
 

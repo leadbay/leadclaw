@@ -1,0 +1,30 @@
+---
+name: leadbay_create_topup_link
+kind: tool-description
+short_description: |
+  Generate a Stripe checkout URL the user can open to top up AI credits.
+  Use this when a 429 / QUOTA_EXCEEDED blocks an operation — offer
+  top-up as the immediate alternative to "wait until window reset",
+  then surface the returned URL so the user can pay in their browser.
+annotations:
+  readOnlyHint: true
+  destructiveHint: false
+  idempotentHint: false
+  openWorldHint: true
+---
+Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps `POST /1.5/stripe/topup_checkout` → `{url}`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
+
+**When a quota window is hit, offer top-up as the FIRST option.** A top-up clears the throttle immediately (no need to wait for the daily/weekly/monthly window reset). The flow:
+
+1. Operation returns QUOTA_EXCEEDED / 429.
+2. Tell the user which window was hit (from `leadbay_account_status` / `leadbay_get_quota`) and offer BOTH options: "wait until `<resets_at>`" OR "top up at app.leadbay.ai (I can generate the link)".
+3. If the user accepts top-up, call `leadbay_create_topup_link` and surface the returned `url` as a clickable link.
+4. Tell the user to complete checkout in their browser. After they return saying "I topped up" / "bought credits" / "added credits", call `leadbay_account_status` to confirm the refreshed state, then RETRY the originally failed call.
+
+Do NOT call this tool defensively before any quota error — only after a real 429 or in response to the user's explicit "I want to top up" / "I'll buy credits". The URL is single-use and rotating it without the user asking just clutters the conversation.
+
+`leadbay_open_billing_portal` is the companion tool for ongoing subscription management (upgrade / downgrade / payment methods) via the Stripe customer portal.
+
+{{include:headers/tool-when-to-use}} when a quota error has blocked the user's intent and they want to keep working today rather than wait for the window reset; OR when the user explicitly asks for a top-up link.
+
+{{include:headers/tool-when-not-to-use}} pre-flight (the agent is not paying — the user is); for subscription / plan changes use `leadbay_open_billing_portal` instead; for read-only quota diagnostics use `leadbay_account_status` / `leadbay_get_quota`.

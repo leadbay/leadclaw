@@ -5,6 +5,34 @@ short_description: |
   Prepare an outreach brief for a single lead — full lead block,
   recommended contact (post-enrichment shape), channel readiness, and
   AI angles in one call. Self-polling enrichment.
+routing:
+  triggers:
+    - "draft outreach for <Contact>"
+    - "write an email to <Contact>"
+    - "outreach package for <Company>"
+  anti_triggers:
+    - phrase: "research before drafting"
+      route_to: leadbay_research_lead_by_id
+    - phrase: "log sent outreach"
+      route_to: leadbay_report_outreach
+    - phrase: "bulk enrich contacts"
+      route_to: leadbay_enrich_titles
+  prefer_when: "single picked lead/contact; action-imminent drafting context"
+  examples:
+    positive:
+      - "Draft an email to Sarah at Acme."
+      - "I'm about to call Acme's CTO — prep me."
+    negative:
+      - "I just sent that email — log it."
+      - "Research the Acme lead before I commit."
+rendering_hint: |
+  Route the draft through `message_compose_v1` (Claude's email composer)
+  with 2–3 strategic variants — labels describe STRATEGY, not tone
+  ("Push for alignment", "Reference M&A signal", "Soft intro — peer
+  reference"). Above the composer, emit ONE short markdown paragraph
+  with score callout + sector fit + linked contact name + bare phone /
+  email. Do NOT paste the email body into chat prose alongside.
+next_steps: prepare-outreach
 annotations:
   readOnlyHint: true
   destructiveHint: false
@@ -21,7 +49,54 @@ The first call to this tool on a lead records a `LEAD_VIEWED`-style prospecting 
 
 {{include:headers/tool-when-to-use}} when the agent is about to draft outreach for ONE specific lead and needs everything to compose — channels + angles + history context.
 
-{{include:headers/tool-when-not-to-use}} across many leads — use leadbay_enrich_titles for bulk; for general lead detail use leadbay_research_lead (richer signals); to actually log the outreach action use leadbay_report_outreach (requires verification).
+{{include:headers/tool-when-not-to-use}} across many leads — use leadbay_enrich_titles for bulk; for general lead detail use leadbay_research_lead_by_id (richer signals); to actually log the outreach action use leadbay_report_outreach (requires verification).
+
+---
+
+## RENDER — host-native message composer is the PRIMARY surface
+
+`message_compose_v1` is the canonical surface for outreach drafts on this tool. The composer gives the user inline edit + send affordances and beats any prose code-fenced draft. **If the host exposes `message_compose_v1`, route every draft through it.** Don't paste email body or call-opener body into chat prose alongside — the composer IS the visual.
+
+Above the composer, emit ONE short markdown context paragraph: the lead's score callout + sector fit + recommended-contact name (LinkedIn-markdown-linked) + bare phone/email pills. That gives the user the "why this lead" context. The composer below carries the actionable draft.
+
+**Single draft:**
+
+```
+message_compose_v1({
+  kind: "email",
+  summary_title: "Outreach to <Contact Name> at <Company>",
+  variants: [{
+    label: "Lead with the M&A signal",
+    subject: "<one-line subject — references the angle>",
+    body: "<5-8 sentence email; salesperson voice; references signal + a clear next step>"
+  }]
+})
+```
+
+**Strategic options (preferred when split_ai_summary surfaces multiple angles):**
+
+```
+message_compose_v1({
+  kind: "email",
+  summary_title: "Three angles for <Company> outreach",
+  variants: [
+    { label: "Push for alignment",  subject: "...", body: "..." },
+    { label: "Reference the M&A signal", subject: "...", body: "..." },
+    { label: "Soft intro — peer reference", subject: "...", body: "..." }
+  ]
+})
+```
+
+Constraints:
+- **Labels describe STRATEGY, not tone.** "Push for alignment", "Reference M&A signal", "Lead with peer reference" — not "Friendly" / "Formal" / "Aggressive".
+- **2–3 variants when strategic options are clearly distinct.** One variant when you have a single best-angle draft.
+- Subject required for `kind: "email"`. Phone/call openers use `kind: "other"` with the opener in `body`.
+
+The composer becomes the single visual. **Don't also paste the email body into chat prose** — that's just noise next to the composer.
+
+For phone-only contacts (no email enriched), use `kind: "other"` with a 60-second call opener.
+
+{{include:gates/builtin-widgets}}
 
 ---
 

@@ -5,6 +5,28 @@ short_description: |
   Show the user's account state — admin rights, language, last-active lens,
   current quota usage across daily/weekly/monthly windows for
   llm_completion / ai_rescore / web_fetch, plus regeneration flags.
+routing:
+  triggers:
+    - "what's my account status"
+    - "how much quota do I have"
+    - "what lens am I on"
+    - "I topped up / I bought credits / I added credits"
+  anti_triggers:
+    - phrase: "show me leads"
+      route_to: leadbay_pull_leads
+  prefer_when: "meta question about account, quota, active lens, or top-up recovery"
+  examples:
+    positive:
+      - "What's my account status?"
+      - "How much quota do I have left this week?"
+    negative:
+      - "Show me today's leads."
+      - "What should I follow up on?"
+rendering_hint: |
+  Compact markdown: org name + admin badge on line 1; active lens on
+  line 2; per-window quota usage as `(used / cap)` chips for
+  llm_completion · ai_rescore · web_fetch. Surface regeneration flag
+  prominently if mid-regen.
 annotations:
   readOnlyHint: true
   destructiveHint: false
@@ -13,6 +35,12 @@ annotations:
 ---
 Show the user's account state — admin rights, language, last-active lens, current quota usage across daily/weekly/monthly windows for llm_completion / ai_rescore / web_fetch resources, and whether the org's intelligence is mid-regeneration. Quota windows also hint at the user's consumption pace: heavy recent activity (ai_rescore / web_fetch near their window limits) is a signal that Leadbay will deliver a larger fresh batch next time the user logs back in, since batch size is paced by real consumption.
 
-{{include:headers/tool-when-to-use}} at the start of a session to know what the agent can/can't do, or after a 429 to explain to the user which resource window was exhausted and when it resets.
+**Top-ups always beat waiting.** When a quota window is hit, the user has two options: wait for the window reset (`resets_at` in each quota entry) OR top up AI credits. Top-ups clear the throttle IMMEDIATELY; they are not subject to the same window. When you tell the user about a 429 / quota exhaustion, ALWAYS surface both options — "wait until <reset>" or "top up now (I can generate the link)" — and let them pick. Never default-recommend "wait until tomorrow" when a 30-second top-up unblocks the same operation.
 
-{{include:headers/tool-when-not-to-use}} as a pre-flight gate before bulk ops — operations themselves return 429; this tool is for context, not gating.
+**Offer the top-up link via `leadbay_create_topup_link`.** When the user accepts the top-up offer, call `leadbay_create_topup_link` and surface the returned Stripe checkout URL as a clickable link. The user completes payment in their browser; nothing is charged just by generating the URL. For ongoing subscription changes (plan upgrade / payment method), use `leadbay_open_billing_portal` instead.
+
+**After a user tops up, do NOT keep refusing — RETRY.** If the user signals they topped up / bought credits / added credits, the previous QUOTA_EXCEEDED is invalidated the moment the Stripe webhook lands. RE-CALL `leadbay_account_status` to pick up the new state AND retry the originally failed call. The retry itself does not require a successful account_status check first — a topped-up user has cleared the throttle whether or not your cached snapshot reflects it yet. If the retry hits the wall again, only then re-offer top-up / wait. **A stale quota snapshot is never a reason to gate-keep a topped-up user.**
+
+{{include:headers/tool-when-to-use}} at the start of a session to know what the agent can/can't do, after a 429 to explain to the user which resource window was exhausted and when it resets (and to offer the top-up alternative), and after the user signals a top-up so the agent can resume the interrupted workflow.
+
+{{include:headers/tool-when-not-to-use}} as a pre-flight gate before bulk ops — operations themselves return 429; this tool is for context, not gating. And: a recent quota snapshot showing "exhausted" is NOT a reason to refuse a write call when the user has just topped up — re-call this tool first, then proceed.

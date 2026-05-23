@@ -334,7 +334,7 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
-    toolName: "leadbay_research_lead",
+    toolName: "leadbay_research_lead_by_id",
     arguments: { leadId: "lead-1", lensId: 42 },
     setupMocks: () => {
       mockHttp([
@@ -572,8 +572,8 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
-    toolName: "leadbay_research_company",
-    arguments: { leadId: "lead-1" },
+    toolName: "leadbay_research_lead_by_name_fuzzy",
+    arguments: { companyName: "Acme" },
     setupMocks: () => {
       mockHttp([
         // resolveDefaultLens → /me
@@ -587,6 +587,18 @@ const CASES: ConformanceCase[] = [
             last_requested_lens: 42,
           },
         },
+        // discoverLeads wishlist fan-out for fuzzy resolution
+        {
+          method: "GET",
+          path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+          status: 200,
+          body: {
+            items: [
+              { id: "lead-1", name: "Acme", score: 80 },
+            ],
+            pagination: { page: 0, pages: 1, total: 1 },
+          },
+        },
         // POST /interactions (fire-and-forget)
         {
           method: "POST",
@@ -594,7 +606,7 @@ const CASES: ConformanceCase[] = [
           status: 200,
           body: {},
         },
-        // getLeadProfile main payload via lens-prefixed path
+        // research_lead_by_id main payload via lens-prefixed path
         {
           method: "GET",
           path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,
@@ -711,6 +723,27 @@ const CASES: ConformanceCase[] = [
           body: [
             { id: 1, name: "Default", is_last_active: true, description: null },
           ],
+        },
+      ]);
+    },
+  },
+  {
+    toolName: "leadbay_list_locations",
+    arguments: { q: "Paris" },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: /\/1\.5\/geo\/search/,
+          status: 200,
+          body: {
+            results: [
+              { id: "416102", country: "US", level: 8, name: "Paris", parent_ids: ["416102", "416103"] },
+            ],
+            parents: [
+              { id: "416103", country: "US", level: 6, name: "Edgar County", parent_ids: [] },
+            ],
+          },
         },
       ]);
     },
@@ -905,6 +938,12 @@ describe("structuredContent conformance — every outputSchema declarer (iter17)
 // (with reason) — a new declarer can't sneak in without explicit choice.
 // -----------------------------------------------------------------------
 const OPT_OUT: Record<string, string> = {
+  // followups_map is a thin wrapper around pull_followups (same execute,
+  // same input/output schema; the only delta is the ui.resourceUri
+  // binding). pull_followups already has a conformance case; adding a
+  // duplicate would just double-cover the same code path.
+  leadbay_followups_map:
+    "Delegates execute + input/output schemas to leadbay_pull_followups verbatim — only the ui.resourceUri differs (binding test covers it).",
   // Bulk-status pollers require a populated BulkTracker context to reach
   // the success path; the existing per-tool tests in core/test/unit
   // exercise the success shape. The schema is still asserted by tools/list
@@ -942,6 +981,28 @@ const OPT_OUT: Record<string, string> = {
     "Requires resolveTasteProfile path with multi-call coordination; covered in composite paths.",
   leadbay_create_lens:
     "Returns full LensPayload — backend-shape mock larger than the conformance-signal warrants.",
+  leadbay_create_topup_link:
+    "Single-field {url} response from POST /stripe/topup_checkout; the conformance signal is trivially the URL string. Live-probed shape lives in the tool source comment.",
+  leadbay_open_billing_portal:
+    "Single-field {url} response from GET /stripe/portal; sibling of create_topup_link with identical conformance signal.",
+  // Tour planning + campaign trio (added for #3630 US1/US3). Each composes
+  // existing tools or wraps a single live-probed POST/GET — the conformance
+  // signal would just re-assert pullFollowups/pullLeads or the snake_case
+  // CampaignPayload shape, which is documented in
+  // .context/campaigns-probe/API.md. Per-tool execution shapes are
+  // exercised by the live smoke E2E (test/smoke/live.test.ts).
+  leadbay_tour_plan:
+    "Glue over pullFollowups + pullLeads — conformance signal duplicates those tools'.",
+  leadbay_create_campaign:
+    "Single POST /campaigns wrapping the live-probed CampaignPayload shape.",
+  leadbay_add_leads_to_campaign:
+    "Single POST /campaigns/{id}/leads with {added, already_present} response.",
+  leadbay_list_campaigns:
+    "Single GET /campaigns returning CampaignWithStatsPayload[]; envelope-level shape.",
+  leadbay_campaign_progression:
+    "Single GET /campaigns/{id}/leads — paginated CampaignLeadPayload items.",
+  leadbay_campaign_call_sheet:
+    "Joins GET /campaigns/{id}/contacts + /leads into a call-ready payload; per-contact shape exercised by live-campaigns smoke (test/smoke/live-campaigns.test.ts).",
 };
 
 // -----------------------------------------------------------------------

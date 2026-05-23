@@ -25,7 +25,7 @@ import { buildServerInstructions } from "../../src/server.js";
 const READS = [
   "leadbay_account_status",
   "leadbay_pull_leads",
-  "leadbay_research_lead",
+  "leadbay_research_lead_by_id",
   "leadbay_recall_ordered_titles",
 ];
 

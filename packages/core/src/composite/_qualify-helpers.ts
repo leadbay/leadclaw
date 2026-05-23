@@ -38,7 +38,7 @@ export interface QualifyResult {
      */
     avg_qualification_boost: number | null;
   } | null;
-  /** Per-question breakdown — mirrors leadbay_research_lead's qualification[] shape.
+  /** Per-question breakdown — mirrors leadbay_research_lead_by_id's qualification[] shape.
    *  Order matches the org's ai_agent_questions catalog when available; otherwise
    *  alphabetical by question text. Stable across calls so LLM agents can
    *  position-index reliably. */
