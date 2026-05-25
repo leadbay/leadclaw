@@ -51,7 +51,7 @@ export const leadbay_add_leads_to_campaign: string = `## WHEN TO USE
 
 Trigger phrases: "add leads to <name> campaign", "attach these to <campaign>", "put these in Q2 Push", "add to existing campaign".
 
-Do NOT use for: "create a new campaign" → \`leadbay_create_campaign\`; "remove lead from campaign" → \`leadbay_create_campaign\`; "list campaigns" → \`leadbay_list_campaigns\`.
+Do NOT use for: "create a new campaign" → \`leadbay_create_campaign\`; "remove lead from campaign" → \`leadbay_remove_leads_from_campaign\`; "list campaigns" → \`leadbay_list_campaigns\`.
 
 Prefer when: existing campaign plus lead ids to attach; for a new campaign, use create_campaign
 
@@ -89,7 +89,7 @@ Attach a list of \`lead_ids\` to an existing campaign. Wraps \`POST /campaigns/{
 
 WHEN TO USE: the user has an existing campaign (created earlier in the session or visible via \`leadbay_list_campaigns\`) and wants to attach more leads to it.
 
-WHEN NOT TO USE: to create a NEW campaign (use \`leadbay_create_campaign\` with \`lead_ids\` seeded); to list campaigns (\`leadbay_list_campaigns\`); to view per-lead progression (\`leadbay_campaign_progression\`); to remove leads (not currently exposed in the MCP — direct backend \`DELETE /campaigns/{id}/leads\` would be needed).
+WHEN NOT TO USE: to create a NEW campaign (use \`leadbay_create_campaign\` with \`lead_ids\` seeded); to list campaigns (\`leadbay_list_campaigns\`); to view per-lead progression (\`leadbay_campaign_progression\`); to remove leads (use \`leadbay_remove_leads_from_campaign\`).
 
 **Response**: \`{added: number, already_present: number}\`. Use both counts in the confirmation — silent dedup hides useful information from the user.
 `;
@@ -2049,6 +2049,53 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_remove_epilogue
 
+// region: leadbay_remove_leads_from_campaign
+export const leadbay_remove_leads_from_campaign: string = `## WHEN TO USE
+
+Trigger phrases: "remove lead from campaign", "take this out of <campaign>", "remove these from Q2 Push", "delete lead from campaign", "clean up campaign".
+
+Do NOT use for: "add leads to campaign" → \`leadbay_add_leads_to_campaign\`; "create a new campaign" → \`leadbay_create_campaign\`; "list campaigns" → \`leadbay_list_campaigns\`.
+
+Prefer when: user wants to detach one or more leads from an existing campaign
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Examples that SHOULD invoke this tool:
+- "Remove the Austin lead from my Q2 Push campaign."
+- "Take these 3 unqualified leads out of the Limoges Tour."
+- "Clean up campaign 1f12 — remove leads that bounced."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add the top 5 to my Q2 Push."
+- "Create a new campaign with these 9 leads."
+- "What campaigns do I have?"
+
+## RENDER (quick)
+
+One-line confirmation: ✅ Removed N leads from <campaign-name>
+(M were not in the campaign). If \`removed === 0 && not_present > 0\`
+("none were in the campaign"), surface that as a no-op note.
+Offer NEXT STEPS chip for "View progression" (campaign_progression)
+or "Add different leads" (add_leads_to_campaign).
+
+---
+
+Detach a list of \`lead_ids\` from an existing campaign. Wraps \`DELETE /campaigns/{id}/leads\`. The backend returns \`{removed, not_present}\` — leads not currently in the campaign are silently counted in \`not_present\` without throwing an error, so callers can safely retry.
+
+**Lead UUID source**: pass UUIDs returned from \`leadbay_pull_leads\`, \`leadbay_campaign_call_sheet\`, or \`leadbay_campaign_progression\`. Fabricated or unknown IDs are counted in \`not_present\`.
+
+**Why batch**: prefer one call with N leads over N calls with one lead each — the backend rebuilds campaign membership server-side on each call.
+
+---
+
+WHEN TO USE: the user wants to detach leads from an existing campaign — e.g. to clean out bounced contacts, remove disqualified leads, or correct an accidental add.
+
+WHEN NOT TO USE: to add leads (use \`leadbay_add_leads_to_campaign\`); to create a new campaign (\`leadbay_create_campaign\`); to view campaign status (\`leadbay_campaign_progression\`).
+
+**Response**: \`{removed: number, not_present: number}\`. Always surface both counts.
+`;
+// endregion: leadbay_remove_leads_from_campaign
+
 // region: leadbay_remove_pushback
 export const leadbay_remove_pushback: string = `Clear an active pushback on one or more leads. They re-enter \`leadbay_pull_followups\` immediately. Use when the user changes their mind ("actually let's reach out now"), or when external context shifts (the company announces hiring / funding / a new product that makes them ripe sooner than the deferral window expected).
 
@@ -2821,6 +2868,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_recall_ordered_titles,
   leadbay_refine_prompt,
   leadbay_remove_epilogue,
+  leadbay_remove_leads_from_campaign,
   leadbay_remove_pushback,
   leadbay_report_friction,
   leadbay_report_outreach,
