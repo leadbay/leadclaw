@@ -9,8 +9,12 @@
 //
 // Flow each invocation:
 //   1. read UpdateState from ~/.leadbay/update-state.json
-//   2. if last_check_time < 24h ago AND we already know latest_version,
-//      seed the in-memory cache from state and skip the HTTP hop
+//   2. if last_check_time < 24h ago AND we already know latest_version AND
+//      !force, seed the in-memory cache from state and skip the HTTP hop.
+//      The bin.ts boot call passes force=true so a fresh session always
+//      hits the wire — the on-disk throttle is shared across processes,
+//      so without force a Claude Desktop restart inside the 24h window
+//      would inherit a stale "latest" from the previous process.
 //   3. otherwise: GET api.github.com/repos/leadbay/leadclaw/releases/latest
 //      with If-None-Match: <state.etag> if present
 //      - 304: refresh last_check_time, keep latest_known_*
@@ -145,6 +149,13 @@ export interface CheckForUpdateOpts {
   telemetry: TelemetryHandle;
   logger?: ToolLogger;
   now?: () => number;
+  /**
+   * Bypass the 24h throttle. Set at process boot (bin.ts) so a freshly
+   * launched MCP always hits GitHub — otherwise a check persisted by the
+   * previous process within the last 24h would gate the new session out
+   * of detecting a release that landed in the meantime.
+   */
+  force?: boolean;
   /** Test-only override of the upstream URL. */
   releasesUrl?: string;
   /** Test-only override of global fetch. */
@@ -178,7 +189,7 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
   const state = await opts.stateStore.read();
 
   const within = now() - state.last_check_time < CHECK_THROTTLE_MS;
-  if (within && state.latest_known_version && state.latest_known_mcpb_url && state.latest_known_release_url) {
+  if (!opts.force && within && state.latest_known_version && state.latest_known_mcpb_url && state.latest_known_release_url) {
     // Throttled — seed cache from disk + return.
     const cached = buildInfoIfUpgrade(
       currentVersion,

@@ -136,6 +136,51 @@ describe("checkForUpdate — throttle", () => {
     expect(info?.mcpb_url).toBe("https://example.com/leadbay-0.10.2.mcpb");
     expect(getCachedUpdateInfo()?.latest_version).toBe("0.10.2");
   });
+
+  // Regression: a previous process inside the 24h window persisted
+  // last_check_time + latest_known_version="0.10.2". A NEW process boots
+  // after release 0.10.3 ships. Without force=true at boot, the new
+  // session inherits the throttle and never learns 0.10.3 exists.
+  it("force=true bypasses the throttle so fresh boots learn about new releases", async () => {
+    const store = new UpdateStateStore({ backend: "memory" });
+    const now = 1_700_000_000_000;
+    await store.write({
+      last_check_time: now - 60_000, // 60s ago — well within 24h
+      latest_known_version: "0.10.2",
+      latest_known_mcpb_url: "https://example.com/leadbay-0.10.2.mcpb",
+      latest_known_release_url: "https://example.com/releases/0.10.2",
+      suppressed_versions: [],
+    });
+    const fetchImpl = fakeFetch([
+      {
+        status: 200,
+        etag: 'W/"fresh"',
+        body: {
+          tag_name: "mcp-v0.10.3",
+          html_url: "https://example.com/releases/0.10.3",
+          assets: [
+            {
+              name: "leadbay-0.10.3.mcpb",
+              browser_download_url: "https://example.com/0.10.3.mcpb",
+            },
+          ],
+        },
+      },
+    ]);
+    const info = await checkForUpdate({
+      currentVersion: "0.10.2",
+      stateStore: store,
+      telemetry: NOOP_TELEMETRY,
+      now: () => now,
+      fetchImpl,
+      force: true,
+    });
+    expect(info?.latest_version).toBe("0.10.3");
+    expect(info?.mcpb_url).toBe("https://example.com/0.10.3.mcpb");
+    const s = await store.read();
+    expect(s.latest_known_version).toBe("0.10.3");
+    expect(s.last_check_time).toBe(now);
+  });
 });
 
 describe("checkForUpdate — 200 OK newer release", () => {

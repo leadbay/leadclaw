@@ -1446,7 +1446,10 @@ async function main(): Promise<void> {
       `update_state.record_version_failed ${err?.message ?? err}`
     );
   });
-  // Fire-and-forget GitHub releases check. Throttled to ~1h via state.
+  // Fire-and-forget GitHub releases check. force=true so a fresh boot
+  // always hits GitHub — the 24h throttle is for the per-tool-call
+  // recheck in long-running processes (server.ts), not for new sessions
+  // that need to learn about releases shipped since the prior process.
   // Hard opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
   if (process.env.LEADBAY_UPDATE_CHECK_DISABLED !== "1") {
     void checkForUpdate({
@@ -1454,6 +1457,7 @@ async function main(): Promise<void> {
       stateStore: updateStateStore,
       telemetry,
       logger,
+      force: true,
     }).catch((err) => {
       logger.warn?.(`update_check.unexpected ${err?.message ?? err}`);
     });
