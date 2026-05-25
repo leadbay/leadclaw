@@ -8,7 +8,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 |---|---|---|
 | `places_map_display_v0` (Claude) | Result has ≥2 leads with `location.city` set, and the user's intent is geographic / "in person" / travel | `{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}` per location |
 | `message_compose_v1` (Claude) | You're about to draft outreach (email / message / call opener) | `{kind: "email", summary_title, variants: [{label, body, subject}]}` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
-| `ask_user_input_v0` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | `{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}`; max 3 questions per call |
+| `ask_user_input_v0` (Claude) | **DEFAULT for every turn ending with a choice, clarification, or next-step.** Emit whenever 2–4 plausible follow-ups exist AND the user hasn't already named the next action. Also use for disambiguation ("which lens?", "which contact?", "enrich now or later?"). One tap beats typing. | `{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}`; max 3 questions per call |
 
 ChatGPT exposes the same routing pattern via `_meta.openai/outputTemplate`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
 
@@ -17,3 +17,4 @@ ChatGPT exposes the same routing pattern via `_meta.openai/outputTemplate`. We d
 - Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
 - When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
 - One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+- **`ask_user_input_v0` is the strongest default of the three** — applicable on nearly every turn. Closing with "let me know what you want next" = missed widget. Convert it.

@@ -212,27 +212,21 @@ Do not enumerate the affected leads — that's the job of \`leadbay_pull_leads\`
 
 ## NEXT STEPS — after kicking off bulk qualification
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -367,7 +361,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 |---|---|---|
 | \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
-| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+| \`ask_user_input_v0\` (Claude) | **DEFAULT for every turn ending with a choice, clarification, or next-step.** Emit whenever 2–4 plausible follow-ups exist AND the user hasn't already named the next action. Also use for disambiguation ("which lens?", "which contact?", "enrich now or later?"). One tap beats typing. | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
 
 ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
 
@@ -376,6 +370,7 @@ ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We
 - Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
 - When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
 - One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+- **\`ask_user_input_v0\` is the strongest default of the three** — applicable on nearly every turn. Closing with "let me know what you want next" = missed widget. Convert it.
 
 
 ---
@@ -846,7 +841,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 |---|---|---|
 | \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
-| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+| \`ask_user_input_v0\` (Claude) | **DEFAULT for every turn ending with a choice, clarification, or next-step.** Emit whenever 2–4 plausible follow-ups exist AND the user hasn't already named the next action. Also use for disambiguation ("which lens?", "which contact?", "enrich now or later?"). One tap beats typing. | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
 
 ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
 
@@ -855,6 +850,7 @@ ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We
 - Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
 - When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
 - One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+- **\`ask_user_input_v0\` is the strongest default of the three** — applicable on nearly every turn. Closing with "let me know what you want next" = missed widget. Convert it.
 
 
 ---
@@ -1039,27 +1035,21 @@ Defer the full list of imported leads to \`leadbay_pull_leads\` or \`leadbay_res
 
 ## NEXT STEPS — after an import
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -1115,27 +1105,21 @@ Defer the full list of imported leads to \`leadbay_pull_leads\` or \`leadbay_res
 
 ## NEXT STEPS — after an import
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -1494,7 +1478,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 |---|---|---|
 | \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
-| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+| \`ask_user_input_v0\` (Claude) | **DEFAULT for every turn ending with a choice, clarification, or next-step.** Emit whenever 2–4 plausible follow-ups exist AND the user hasn't already named the next action. Also use for disambiguation ("which lens?", "which contact?", "enrich now or later?"). One tap beats typing. | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
 
 ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
 
@@ -1503,6 +1487,7 @@ ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We
 - Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
 - When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
 - One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+- **\`ask_user_input_v0\` is the strongest default of the three** — applicable on nearly every turn. Closing with "let me know what you want next" = missed widget. Convert it.
 
 
 ---
@@ -1575,27 +1560,21 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the outreach brief
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -1785,27 +1764,21 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the follow-ups table
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -1953,27 +1926,21 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after rendering the pull_leads table
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -2266,27 +2233,21 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the research card
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -2457,27 +2418,21 @@ When the response carries \`social_urls\` (the post-fix multi-platform URL block
 
 ## NEXT STEPS — after the research card
 
-**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+**ALWAYS render NEXT STEPS via \`ask_user_input_v0\`.** Default, not opt-in. Unless the user already named the next action this turn, emit the widget so they tap-select. Prose bullets are fallback only on host error. Any turn that would end with "want me to do X or Y?" must be the widget instead — the widget IS the question.
 
-The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then:
 
 \`\`\`
 ask_user_input_v0({
   questions: [{
     question: "What next?",
     type: "single_select",
-    options: [
-      "<Suggest column from row 1>",
-      "<Suggest column from row 2>",
-      "<Suggest column from row 3>"
-    ]
+    options: ["<Suggest 1>", "<Suggest 2>", "<Suggest 3>"]
   }]
 })
 \`\`\`
 
-When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
-
-**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, labels ≤6 words, max 3 questions. Table stays internal; never recite it.
 
 ---
 
@@ -2712,7 +2667,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 |---|---|---|
 | \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
-| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+| \`ask_user_input_v0\` (Claude) | **DEFAULT for every turn ending with a choice, clarification, or next-step.** Emit whenever 2–4 plausible follow-ups exist AND the user hasn't already named the next action. Also use for disambiguation ("which lens?", "which contact?", "enrich now or later?"). One tap beats typing. | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
 
 ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
 
@@ -2721,6 +2676,7 @@ ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We
 - Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
 - When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
 - One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+- **\`ask_user_input_v0\` is the strongest default of the three** — applicable on nearly every turn. Closing with "let me know what you want next" = missed widget. Convert it.
 
 
 ---
