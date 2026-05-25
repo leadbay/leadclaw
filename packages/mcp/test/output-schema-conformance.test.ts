@@ -1015,7 +1015,7 @@ const OPT_OUT: Record<string, string> = {
   leadbay_add_leads_to_campaign:
     "Single POST /campaigns/{id}/leads with {added, already_present} response.",
   leadbay_remove_leads_from_campaign:
-    "Single DELETE /campaigns/{id}/leads with {removed, not_present} response.",
+    "Single DELETE /campaigns/{id}/leads — backend returns 204, synthetic {removed} count returned.",
   leadbay_list_campaigns:
     "Single GET /campaigns returning CampaignWithStatsPayload[]; envelope-level shape.",
   leadbay_campaign_progression:

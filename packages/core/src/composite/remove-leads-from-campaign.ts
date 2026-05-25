@@ -1,9 +1,9 @@
 /**
  * leadbay_remove_leads_from_campaign — DELETE /campaigns/{id}/leads
  *
- * Removes one or more leads from a campaign. The backend returns
- * `{removed, not_present}` so the agent can surface the no-op count
- * separately ("2 removed, 1 was not in the campaign").
+ * Removes one or more leads from a campaign. The backend returns 204
+ * (no body), so we return a synthetic {removed} count based on how
+ * many lead_ids were submitted.
  */
 import type { LeadbayClient } from "../client.js";
 import type { Tool } from "../types.js";
@@ -13,11 +13,6 @@ import { leadbay_remove_leads_from_campaign as REMOVE_LEADS_DESCRIPTION } from "
 interface RemoveLeadsParams {
   campaign_id: string;
   lead_ids: string[];
-}
-
-interface RemoveLeadsResponse {
-  removed: number;
-  not_present: number;
 }
 
 export const removeLeadsFromCampaign: Tool<RemoveLeadsParams> = {
@@ -41,7 +36,7 @@ export const removeLeadsFromCampaign: Tool<RemoveLeadsParams> = {
       lead_ids: {
         type: "array",
         description:
-          "Lead UUIDs to remove. Unknown UUIDs are counted in `not_present` — they do not cause an error.",
+          "Lead UUIDs to remove. Pass IDs sourced from Leadbay tools; invalid IDs are handled by the backend.",
         items: { type: "string" },
         minItems: 1,
       },
@@ -52,10 +47,9 @@ export const removeLeadsFromCampaign: Tool<RemoveLeadsParams> = {
   outputSchema: {
     type: "object",
     properties: {
-      removed: { type: "number", description: "Leads successfully detached from the campaign." },
-      not_present: { type: "number", description: "Lead IDs that were not in the campaign — no-op." },
+      removed: { type: "number", description: "Number of leads submitted for removal (backend returns 204, no per-lead breakdown)." },
     },
-    required: ["removed", "not_present"],
+    required: ["removed"],
   },
   execute: async (client: LeadbayClient, params: RemoveLeadsParams) => {
     if (!params.lead_ids || params.lead_ids.length === 0) {
@@ -65,11 +59,11 @@ export const removeLeadsFromCampaign: Tool<RemoveLeadsParams> = {
         "Pass at least one lead UUID to remove.",
       );
     }
-    const result = await client.request<RemoveLeadsResponse>(
+    await client.requestVoid(
       "DELETE",
       `/campaigns/${params.campaign_id}/leads`,
       { lead_ids: params.lead_ids },
     );
-    return result;
+    return { removed: params.lead_ids.length };
   },
 };

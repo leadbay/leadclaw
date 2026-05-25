@@ -2072,17 +2072,15 @@ Examples that should NOT invoke this tool (sound similar, route elsewhere):
 
 ## RENDER (quick)
 
-One-line confirmation: ✅ Removed N leads from <campaign-name>
-(M were not in the campaign). If \`removed === 0 && not_present > 0\`
-("none were in the campaign"), surface that as a no-op note.
+One-line confirmation: ✅ Removed N leads from <campaign-name>.
 Offer NEXT STEPS chip for "View progression" (campaign_progression)
 or "Add different leads" (add_leads_to_campaign).
 
 ---
 
-Detach a list of \`lead_ids\` from an existing campaign. Wraps \`DELETE /campaigns/{id}/leads\`. The backend returns \`{removed, not_present}\` — leads not currently in the campaign are silently counted in \`not_present\` without throwing an error, so callers can safely retry.
+Detach a list of \`lead_ids\` from an existing campaign. Wraps \`DELETE /campaigns/{id}/leads\`. The backend returns 204 with no body when the mutation succeeds, so this tool returns a synthetic \`{removed}\` count equal to the number of submitted lead IDs.
 
-**Lead UUID source**: pass UUIDs returned from \`leadbay_pull_leads\`, \`leadbay_campaign_call_sheet\`, or \`leadbay_campaign_progression\`. Fabricated or unknown IDs are counted in \`not_present\`.
+**Lead UUID source**: pass UUIDs returned from \`leadbay_pull_leads\`, \`leadbay_campaign_call_sheet\`, or \`leadbay_campaign_progression\`.
 
 **Why batch**: prefer one call with N leads over N calls with one lead each — the backend rebuilds campaign membership server-side on each call.
 
@@ -2092,7 +2090,7 @@ WHEN TO USE: the user wants to detach leads from an existing campaign — e.g. t
 
 WHEN NOT TO USE: to add leads (use \`leadbay_add_leads_to_campaign\`); to create a new campaign (\`leadbay_create_campaign\`); to view campaign status (\`leadbay_campaign_progression\`).
 
-**Response**: \`{removed: number, not_present: number}\`. Always surface both counts.
+**Response**: \`{removed: number}\` — synthetic count equal to the number of \`lead_ids\` submitted (backend returns 204 with no body).
 `;
 // endregion: leadbay_remove_leads_from_campaign
 
