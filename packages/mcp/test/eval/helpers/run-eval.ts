@@ -133,6 +133,28 @@ export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> 
     sessionResult.evidence.per_criterion = judgeOutcome.value.per_criterion;
   }
 
+  if (judgeOutcome.ok) {
+    const s = judgeOutcome.value.scores;
+    const lines = [
+      `\n── eval: ${scenario.name} ──────────────────────────────`,
+      `  mission_match:          ${s.mission_match}/5`,
+      `  instruction_adherence:  ${s.instruction_adherence}/5`,
+      `  no_fabrication:         ${s.no_fabrication}/5`,
+      `  tool_selection_fit:     ${s.tool_selection_fit}/5`,
+    ];
+    if (judgeOutcome.value.per_criterion?.length) {
+      lines.push("  criteria:");
+      for (const c of judgeOutcome.value.per_criterion) {
+        lines.push(`    [${c.pass ? "✓" : "✗"}] ${c.criterion}`);
+        if (!c.pass) lines.push(`        → ${c.reasoning}`);
+      }
+    }
+    lines.push(`  tools called: ${sessionResult.evidence.tool_calls.map((t) => t.name).join(" → ")}`);
+    lines.push(`  turns: ${sessionResult.evidence.turns.length}  duration: ${(sessionResult.durationMs / 1000).toFixed(1)}s`);
+    lines.push("──────────────────────────────────────────────────");
+    console.log(lines.join("\n"));
+  }
+
   const breakdown: Record<string, number> = {};
   for (const c of sessionResult.evidence.tool_calls) {
     breakdown[c.name] = (breakdown[c.name] ?? 0) + 1;
