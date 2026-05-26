@@ -5,7 +5,8 @@
   "description": "Model Context Protocol (MCP) server for Leadbay — AI lead discovery, qualification, and enrichment for Claude Desktop, Cursor, and Claude Code.",
   "type": "module",
   "bin": {
-    "leadbay-mcp": "dist/bin.js"
+    "leadbay-mcp": "dist/bin.js",
+    "leadbay-mcp-http": "dist/http-server.js"
   },
   "files": [
     "dist/",
@@ -26,8 +27,10 @@
     "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
+    "@hono/node-server": "^1.13.7",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@sentry/node": "^9.0.0",
+    "hono": "^4.6.14",
     "posthog-node": "^4.5.0"
   },
   "devDependencies": {

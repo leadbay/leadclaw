@@ -8,7 +8,7 @@ const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), 
 // consumers — no main, no types, no dts emission. Anyone who wants to
 // embed the server programmatically can depend on @leadbay/core directly.
 export default defineConfig({
-  entry: ["src/bin.ts"],
+  entry: ["src/bin.ts", "src/http-server.ts"],
   format: ["esm"],
   dts: false,
   outDir: "dist",
