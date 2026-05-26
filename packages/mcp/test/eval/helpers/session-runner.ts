@@ -124,9 +124,30 @@ function hashForId(s: string): string {
   return createHash("sha256").update(s).digest("hex").slice(0, 16);
 }
 
+/**
+ * Resolve the Anthropic client to use for the session.
+ * Priority: explicit client > ANTHROPIC_API_KEY env var > error.
+ * (Claude CLI is single-turn only and cannot drive a multi-turn session loop.)
+ */
+function resolveSessionClient(explicit?: Anthropic): Anthropic {
+  if (explicit) return explicit;
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (key) return new Anthropic({ apiKey: key });
+  // The session runner dispatches tool calls in-process to a mocked LeadbayClient.
+  // The claude CLI runs in a subprocess and cannot reach those in-process handlers,
+  // so multi-turn sessions always require the Anthropic SDK.
+  throw new Error(
+    "Session runner requires ANTHROPIC_API_KEY. " +
+    "The claude CLI cannot drive multi-turn sessions because tool calls are dispatched " +
+    "in-process to a mocked LeadbayClient that a subprocess cannot reach. " +
+    "Set ANTHROPIC_API_KEY=sk-ant-... to run evals. " +
+    "The judge (mission-match-judge.ts) uses the claude CLI and works without a key.",
+  );
+}
+
 export async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
   const startedAt = Date.now();
-  const client = opts.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" });
+  const client = resolveSessionClient(opts.client);
   const model = opts.model ?? DEFAULT_MODEL;
   const max_turns = opts.budget_max_turns ?? opts.max_turns ?? DEFAULT_MAX_TURNS;
   const session_id = randomUUID();

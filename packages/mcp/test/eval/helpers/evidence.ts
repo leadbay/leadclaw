@@ -57,6 +57,12 @@ export interface InvariantResult {
   reason?: string;
 }
 
+export interface CriterionVerdict {
+  criterion: string;
+  pass: boolean;
+  reasoning: string;
+}
+
 export interface JudgeScores {
   mission_match: number;
   instruction_adherence: number;
@@ -87,6 +93,7 @@ export interface MCPEvidence {
   judge_scores?: JudgeScores;
   judge_reasoning?: string;
   failure_modes_present?: string[];
+  per_criterion?: CriterionVerdict[];
 
   // L4 — Optional luxury narrative.
   narrative?: string;

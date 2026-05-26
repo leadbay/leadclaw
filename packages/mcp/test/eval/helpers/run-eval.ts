@@ -6,6 +6,14 @@
  *
  * This factors out boilerplate so the 6 per-prompt eval files stay short
  * (~30 lines each) and only encode prompt-specific bits.
+ *
+ * Backend selection (in priority order):
+ *   1. ANTHROPIC_API_KEY set → SDK runner (session-runner.ts) — fastest, full
+ *      token counts. Used in CI.
+ *   2. claude CLI in PATH → CLI runner (cli-session-runner.ts) — uses the
+ *      user's Claude.ai subscription, no API key needed. Works inside Claude
+ *      Code. Spins up a real MCP server process with fixtures baked in.
+ *   3. Neither → clear error.
  */
 import { expect, beforeAll } from "vitest";
 import { resolve } from "node:path";
@@ -14,6 +22,8 @@ import { dirname } from "node:path";
 import { getPrompt } from "../../../src/prompts.js";
 import { mockHttp } from "../../harness.js";
 import { runSession } from "./session-runner.js";
+import { runSessionCLI } from "./cli-session-runner.js";
+import { hasCLI } from "./llm-judge-shared.js";
 import { isPyramidComplete, type MCPEvidence, type InvariantResult } from "./evidence.js";
 import { runMissionMatchJudge, type MissionMatchScenario } from "./mission-match-judge.js";
 import { MISSION_MATCH_FLOOR, NO_FABRICATION_FLOOR } from "./budget-thresholds.js";
@@ -47,6 +57,7 @@ export interface RunScenarioEvalOpts {
   max_turns?: number;
 }
 
+/** Used by the SDK runner path — sets up vi.mock(node:https) fixtures. */
 export function setupScenarioFixtures(scenario: ScenarioLike): void {
   beforeAll(() => {
     mockHttp(
@@ -60,6 +71,10 @@ export function setupScenarioFixtures(scenario: ScenarioLike): void {
   });
 }
 
+function useSDKRunner(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY;
+}
+
 export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> {
   const { scenario, invariants, max_turns = 20 } = opts;
 
@@ -68,18 +83,38 @@ export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> 
   const promptBody = block?.type === "text" && typeof block.text === "string" ? block.text : "";
   expect(promptBody.length, "prompt body should not be empty").toBeGreaterThan(50);
 
-  const leadbayClient = new LeadbayClient({
-    baseUrl: "https://api-us.example",
-    bearer: "test-token-not-real",
-  });
+  let sessionResult: Awaited<ReturnType<typeof runSession>>;
 
-  const sessionResult = await runSession({
-    prompt: { name: scenario.prompt, body: promptBody, args: scenario.args },
-    leadbayClient,
-    transcript_dir: TRANSCRIPT_DIR,
-    max_turns,
-    fixture_id: scenario.name,
-  });
+  if (useSDKRunner()) {
+    // SDK path: vi.mock(node:https) is already active via setupScenarioFixtures.
+    const leadbayClient = new LeadbayClient({
+      baseUrl: "https://api-us.example",
+      bearer: "test-token-not-real",
+    });
+    sessionResult = await runSession({
+      prompt: { name: scenario.prompt, body: promptBody, args: scenario.args },
+      leadbayClient,
+      transcript_dir: TRANSCRIPT_DIR,
+      max_turns,
+      fixture_id: scenario.name,
+    });
+  } else if (hasCLI()) {
+    // CLI path: spawns fixture-mcp-server as a real MCP server, drives the
+    // session via claude -p --input-format stream-json.
+    sessionResult = await runSessionCLI({
+      prompt: { name: scenario.prompt, body: promptBody, args: scenario.args },
+      backendFixtures: scenario.backendFixtures,
+      transcript_dir: TRANSCRIPT_DIR,
+      max_turns,
+      fixture_id: scenario.name,
+    });
+  } else {
+    throw new Error(
+      "No execution backend available. " +
+      "Set ANTHROPIC_API_KEY for CI, or run inside Claude Code (claude CLI in PATH) " +
+      "to use your subscription.",
+    );
+  }
 
   const inv = invariants(sessionResult.evidence);
   sessionResult.evidence.invariants = inv;
@@ -95,6 +130,7 @@ export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> 
     sessionResult.evidence.judge_scores = judgeOutcome.value.scores;
     sessionResult.evidence.judge_reasoning = judgeOutcome.value.reasoning;
     sessionResult.evidence.failure_modes_present = judgeOutcome.value.failure_modes_present;
+    sessionResult.evidence.per_criterion = judgeOutcome.value.per_criterion;
   }
 
   const breakdown: Record<string, number> = {};
@@ -127,7 +163,7 @@ export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> 
         : 0,
     first_response_ms: sessionResult.evidence.turns[0]?.latency_ms ?? 0,
     max_inter_turn_ms: Math.max(0, ...sessionResult.evidence.turns.map((t) => t.latency_ms)),
-    model: "claude-sonnet-4-6",
+    model: process.env.EVAL_MODEL ?? "claude-sonnet-4-6",
     evidence: sessionResult.evidence,
   });
   collector.finalize();
