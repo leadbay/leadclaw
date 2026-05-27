@@ -81,8 +81,15 @@ function hashForId(s: string): string {
 function writeEvalSettings(tmpDir: string): string {
   const settingsPath = join(tmpDir, "eval-settings.json");
   const settings = {
-    // Empty hooks object clears all user-global hooks for this session.
-    hooks: {},
+    // Explicitly empty every hook type to prevent superpowers/claude-hook.js
+    // from injecting PreToolUse skill-check directives into the eval session.
+    hooks: {
+      PreToolUse: [],
+      PostToolUse: [],
+      UserPromptSubmit: [],
+      SessionStart: [],
+      Stop: [],
+    },
     // Disable all plugins so superpowers/context7/etc. don't inject tools.
     enabledPlugins: {},
   };
@@ -409,8 +416,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
       "--settings", evalSettingsPath,
       // Only allow tools from our live MCP server.
       "--allowedTools", "mcp__leadbay-live__*",
-      // Explicitly block built-in Claude Code tools that leak through despite
-      // --allowedTools (ToolSearch, WebFetch, WebSearch, Bash, Skill, LSP etc.)
+      // Explicitly block built-in Claude Code tools that leak through.
       "--disallowedTools", "ToolSearch,WebFetch,WebSearch,Bash,Read,Edit,Write,Glob,Grep,LS,Skill,LSP,Agent",
     ];
     if (opts.systemPrompt) args.push("--system-prompt", opts.systemPrompt);
