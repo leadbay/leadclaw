@@ -67,7 +67,7 @@ export interface LiveSessionOpts {
 
 export interface LiveSessionResult {
   evidence: MCPEvidence;
-  cost: { tokens_in: number; tokens_out: number; cost_usd_session: number };
+  cost: { tokens_in: number; tokens_out: number; tokens_cache_read: number; cost_usd_session: number };
   durationMs: number;
 }
 
@@ -382,6 +382,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
   const tmpDir = mkdtempSync("/tmp/leadbay-live-eval-");
   let totalTokensIn = 0;
   let totalTokensOut = 0;
+  let totalTokensCacheRead = 0;
   let terminal_reason: TerminalReason = "agent_stopped";
 
   // File descriptors hoisted so finally can close them regardless of where an error occurs.
@@ -579,6 +580,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
               if (ev.usage) {
                 totalTokensIn = ev.usage.input_tokens;
                 totalTokensOut = ev.usage.output_tokens;
+                totalTokensCacheRead = (ev.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0;
               }
             }
             done = true;
@@ -639,7 +641,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
 
   return {
     evidence,
-    cost: { tokens_in: 0, tokens_out: 0, cost_usd_session: 0 },
+    cost: { tokens_in: totalTokensIn, tokens_out: totalTokensOut, tokens_cache_read: totalTokensCacheRead, cost_usd_session: 0 },
     durationMs: Date.now() - startedAt,
   };
 }

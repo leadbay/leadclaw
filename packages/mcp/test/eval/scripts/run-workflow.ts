@@ -126,6 +126,7 @@ interface WorkflowResult {
   durationMs: number;
   tokensIn: number;
   tokensOut: number;
+  tokensCacheRead: number;
   judgeTokensIn: number;
   judgeTokensOut: number;
   error?: string;
@@ -144,7 +145,7 @@ async function runOneWorkflow(
     scenarioPrompt = getWorkflowScenario(id).prompt;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { id, name: `Workflow #${id}`, passed: false, scores: null, durationMs: 0, tokensIn: 0, tokensOut: 0, judgeTokensIn: 0, judgeTokensOut: 0, error: msg };
+    return { id, name: `Workflow #${id}`, passed: false, scores: null, durationMs: 0, tokensIn: 0, tokensOut: 0, tokensCacheRead: 0, judgeTokensIn: 0, judgeTokensOut: 0, error: msg };
   }
 
   const workflowName = expected.workflow_name;
@@ -179,7 +180,7 @@ async function runOneWorkflow(
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { id, name: workflowName, passed: false, scores: null, durationMs: 0, tokensIn: 0, tokensOut: 0, judgeTokensIn: 0, judgeTokensOut: 0, error: `session failed: ${msg}` };
+    return { id, name: workflowName, passed: false, scores: null, durationMs: 0, tokensIn: 0, tokensOut: 0, tokensCacheRead: 0, judgeTokensIn: 0, judgeTokensOut: 0, error: `session failed: ${msg}` };
   }
 
   // Strip superpowers/Claude Code tool calls (ToolSearch, Skill, LSP, etc.)
@@ -274,6 +275,7 @@ async function runOneWorkflow(
     durationMs: sessionResult.durationMs,
     tokensIn: sessionResult.cost.tokens_in,
     tokensOut: sessionResult.cost.tokens_out,
+    tokensCacheRead: sessionResult.cost.tokens_cache_read,
     judgeTokensIn: judgeOutcome.ok ? judgeOutcome.tokens_in : 0,
     judgeTokensOut: judgeOutcome.ok ? judgeOutcome.tokens_out : 0,
   };
@@ -337,15 +339,12 @@ async function main(): Promise<void> {
   console.log("  Live Eval Summary");
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(
-    `  ${"#".padEnd(3)} ${"Workflow".padEnd(28)} ${"Result".padEnd(8)} ${"MM".padEnd(4)} ${"IA".padEnd(4)} ${"NF".padEnd(4)} ${"TSF".padEnd(4)} ${"Time".padEnd(8)} ${"Session tok".padEnd(16)} ${"Judge tok".padEnd(14)}`
+    `  ${"#".padEnd(3)} ${"Workflow".padEnd(28)} ${"Result".padEnd(8)} ${"MM".padEnd(4)} ${"IA".padEnd(4)} ${"NF".padEnd(4)} ${"TSF".padEnd(4)} ${"Time".padEnd(8)} ${"Session (in/cache/out)".padEnd(24)} ${"Judge (in/out)"}`
   );
-  console.log(
-    `  ${" ".repeat(3)} ${" ".repeat(28)} ${" ".repeat(8)} ${" ".repeat(4)} ${" ".repeat(4)} ${" ".repeat(4)} ${" ".repeat(4)} ${" ".repeat(8)} ${"in".padEnd(8)}${"out".padEnd(8)} ${"in".padEnd(7)}${"out"}`
-  );
-  console.log("  " + "─".repeat(95));
+  console.log("  " + "─".repeat(100));
 
   let anyFailed = false;
-  let totalSessionIn = 0, totalSessionOut = 0;
+  let totalSessionIn = 0, totalSessionOut = 0, totalCacheRead = 0;
   let totalJudgeIn = 0, totalJudgeOut = 0;
   for (const r of results) {
     const status = r.error ? "ERROR" : r.passed ? "PASS" : "FAIL";
@@ -357,10 +356,13 @@ async function main(): Promise<void> {
     const dur = `${(r.durationMs / 1000).toFixed(1)}s`;
     totalSessionIn += r.tokensIn;
     totalSessionOut += r.tokensOut;
+    totalCacheRead += r.tokensCacheRead;
     totalJudgeIn += r.judgeTokensIn;
     totalJudgeOut += r.judgeTokensOut;
+    const sessionTok = `${r.tokensIn}/${r.tokensCacheRead}/${r.tokensOut}`;
+    const judgeTok = `${r.judgeTokensIn}/${r.judgeTokensOut}`;
     console.log(
-      `  ${pad(String(r.id), 3)} ${pad(r.name, 28)} ${pad(status, 8)} ${pad(mm, 4)} ${pad(ia, 4)} ${pad(nf, 4)} ${pad(tsf, 4)} ${pad(dur, 8)} ${pad(String(r.tokensIn), 8)}${pad(String(r.tokensOut), 8)} ${pad(String(r.judgeTokensIn), 7)}${r.judgeTokensOut}`
+      `  ${pad(String(r.id), 3)} ${pad(r.name, 28)} ${pad(status, 8)} ${pad(mm, 4)} ${pad(ia, 4)} ${pad(nf, 4)} ${pad(tsf, 4)} ${pad(dur, 8)} ${pad(sessionTok, 24)} ${judgeTok}`
     );
     if (r.error) {
       console.log(`      ERROR: ${r.error}`);
@@ -372,9 +374,9 @@ async function main(): Promise<void> {
   const passed = results.filter((r) => r.passed).length;
   const total = results.length;
   console.log(`\n  ${passed}/${total} workflows passed.`);
-  console.log(`  Session tokens: ${totalSessionIn.toLocaleString()} in / ${totalSessionOut.toLocaleString()} out`);
+  console.log(`  Session tokens: ${totalSessionIn.toLocaleString()} in / ${totalCacheRead.toLocaleString()} cache / ${totalSessionOut.toLocaleString()} out`);
   console.log(`  Judge tokens:   ${totalJudgeIn.toLocaleString()} in / ${totalJudgeOut.toLocaleString()} out`);
-  console.log(`  Total tokens:   ${(totalSessionIn + totalJudgeIn).toLocaleString()} in / ${(totalSessionOut + totalJudgeOut).toLocaleString()} out\n`);
+  console.log(`  Total out:      ${(totalSessionOut + totalJudgeOut).toLocaleString()} tokens generated\n`);
 
   if (anyFailed) {
     process.exit(1);
