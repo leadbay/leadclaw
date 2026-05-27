@@ -251,6 +251,48 @@ prompt: "Set up a prospecting campaign for my team"
 2. **Adding a new ask.** Add a row in the most accurate table. If you can name a test that already exercises it, it's Supported. If the backend has the primitives but no MCP composite, it's Planned. If the backend is missing the primitives, it's Needs backend — link the product issue.
 3. **Promoting a row.** When a Planned row ships, move it to Supported and add the test pointer. When a Needs-backend row unblocks, decide whether it's planned or already-shippable.
 
+## Running evals
+
+Evals are driven by the `eval-skill` in [leadbay/skills](https://github.com/leadbay/skills/tree/main/eval-skill). Once installed, run from Claude Code:
+
+```
+/eval --workflow 1
+/eval --workflow 1,3,5
+/eval
+```
+
+The skill reads `yaml expected` + `yaml scenario` blocks from this file directly — no separate TypeScript files needed. Results are saved to `.context/evals/` and viewable via:
+
+```bash
+pnpm --filter @leadbay/mcp run eval:view
+```
+
+**Prerequisites:** `.env.eval` at repo root with `LEADBAY_TOKEN=u.xxx` and `LEADBAY_REGION=us`.
+
+## Adding a new eval
+
+Edit this file only. Add a row to the Supported table with two fenced blocks:
+
+````
+```yaml expected
+workflow_name: My new workflow
+prompt_name: leadbay_my_prompt   # or ~ if no dedicated prompt
+required_calls:
+  - leadbay_some_tool
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_some_tool with the correct parameters"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Do the thing"
+```
+````
+
+No TypeScript files to touch. The skill parses this file at runtime.
+
 ## How this stays normative
 
 `packages/mcp/test/audit/workflows.test.ts` parses this file and asserts:
