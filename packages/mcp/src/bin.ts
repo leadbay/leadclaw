@@ -742,7 +742,7 @@ interface DesktopMode {
 }
 
 interface DetectedClient {
-  id: "claude-code" | "claude-desktop" | "cursor";
+  id: "claude-code" | "claude-desktop" | "cursor" | "codex";
   label: string;
   // Where it'll be installed (path or "(claude CLI)" for shell-out targets).
   detail: string;
@@ -846,7 +846,53 @@ async function detectClients(): Promise<DetectedClient[]> {
     }
   }
 
+  // Codex: detect via `which codex` / `where codex`.
+  const codexBin = await new Promise<string | null>((resolve) => {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const child = require_("node:child_process").spawn(cmd, ["codex"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let buf = "";
+    child.stdout.on("data", (c: Buffer) => (buf += c.toString()));
+    child.on("close", (code: number) =>
+      resolve(code === 0 ? buf.split(/\r?\n/)[0] : null)
+    );
+  });
+  if (codexBin) {
+    const codexConfigPath =
+      process.platform === "win32"
+        ? `${process.env.USERPROFILE ?? home}\\.codex\\config.toml`
+        : `${home}/.codex/config.toml`;
+    out.push({ id: "codex", label: "Codex", detail: codexConfigPath });
+  }
+
   return out;
+}
+
+export function buildCodexConfigBlock(
+  token: string,
+  region: "us" | "fr",
+  includeWrite: boolean,
+  telemetryEnabled: boolean,
+  version: string
+): string {
+  const envVars = ["LEADBAY_TOKEN", "LEADBAY_REGION", "LEADBAY_TELEMETRY_ENABLED"];
+  if (!includeWrite) envVars.push("LEADBAY_MCP_WRITE");
+  const envVarsToml = envVars.map((v) => `"${v}"`).join(", ");
+  return (
+    `[mcp_servers.leadbay]\n` +
+    `command = "npx"\n` +
+    `args = ["-y", "@leadbay/mcp@${version}"]\n` +
+    `env_vars = [${envVarsToml}]\n`
+  );
+}
+
+export function buildShellExportBlock(token: string, region: "us" | "fr"): string {
+  return (
+    `\n# Added by leadbay-mcp install\n` +
+    `export LEADBAY_TOKEN="${token}"\n` +
+    `export LEADBAY_REGION="${region}"\n`
+  );
 }
 
 // CommonJS-style require shim — keeps `node:child_process` import path local
