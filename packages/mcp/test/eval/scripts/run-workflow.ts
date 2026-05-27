@@ -216,6 +216,12 @@ async function runOneWorkflow(
     return { id, name: workflowName, passed: false, scores: null, durationMs: 0, error: `session failed: ${msg}` };
   }
 
+  // Strip superpowers/Claude Code tool calls (ToolSearch, Skill, LSP, etc.)
+  // that leak through despite --allowedTools mcp__leadbay-live__*.
+  sessionResult.evidence.tool_calls = sessionResult.evidence.tool_calls.filter(
+    (c) => c.name.startsWith("leadbay_"),
+  );
+
   const inv = deriveInvariants(sessionResult.evidence, expected);
   sessionResult.evidence.invariants = inv;
 

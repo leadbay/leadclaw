@@ -2,7 +2,7 @@
  * live-mcp-server.ts — real @leadbay/mcp server with real Leadbay API.
  *
  * Spawned by live-session-runner.ts with LEADBAY_TOKEN + LEADBAY_REGION env vars.
- * Unlike fixture-mcp-server.ts, this makes real HTTP calls — no mocking.
+ * Makes real HTTP calls to the Leadbay API — no mocking.
  *
  * stdout/stdin carry the MCP stdio protocol — the claude CLI connects to
  * this process as an MCP server.

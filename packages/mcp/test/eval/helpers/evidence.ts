@@ -85,6 +85,7 @@ export interface MCPEvidence {
 
   // L2 — Witness. Required for pass.
   transcript_path: string;
+  full_log_path?: string;
   turns: TurnRecord[];
   prose_between_tool_calls: ProseBetweenToolCalls[];
 

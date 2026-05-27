@@ -10,15 +10,14 @@
  *             --verbose --mcp-config <tmp.json> --bare
  *   4. Write the initial user message to stdin as stream-json.
  *   5. Parse stdout events — collect tool_use calls, text blocks, results.
- *   6. Return the same MCPEvidence shape as cli-session-runner.ts.
+ *   6. Return MCPEvidence with full session data.
  *
- * Differences from cli-session-runner.ts:
- *   - No BackendFixture serialisation — real HTTP goes to api-us.leadbay.app.
- *   - MCP server name is "leadbay-live" → --allowedTools mcp__leadbay-live__*.
- *   - LEADBAY_TOKEN + LEADBAY_REGION env vars passed to the spawned server.
+ * Real HTTP goes to api-us.leadbay.app / api-fr.leadbay.app.
+ * MCP server name is "leadbay-live" → --allowedTools mcp__leadbay-live__*.
+ * LEADBAY_TOKEN + LEADBAY_REGION env vars passed to the spawned server.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync, rmSync, openSync, writeSync, closeSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
@@ -148,6 +147,158 @@ type StreamEvent =
   | StreamResultEvent
   | { type: string; [key: string]: unknown };
 
+// ---------------------------------------------------------------------------
+// Full human-readable log renderer
+// ---------------------------------------------------------------------------
+
+interface FullLogEvent {
+  event: "session_start" | "system_prompt" | "assistant_turn" | "tool_result" | "rate_limit" | "session_result";
+  turn?: number;
+  stop_reason?: string;
+  tokens?: { in: number; out: number; cache_hit?: number };
+  text?: string;
+  tool_calls?: Array<{ name: string; input: unknown }>;
+  tool_result?: { tool_use_id: string; name: string; content: unknown };
+  cost_usd?: number;
+  final_message?: string;
+  is_error?: boolean;
+  [key: string]: unknown;
+}
+
+function renderFullLog(rawJsonlPath: string, outPath: string, opts: {
+  promptName: string;
+  userMessage: string;
+  systemPrompt?: string | null;
+}): void {
+  // Let read errors propagate — caller wraps in try/catch and logs them.
+  const raw = readFileSync(rawJsonlPath, "utf8");
+
+  const lines = raw.split("\n").filter((l) => l.trim());
+
+  // Build a map of tool_use_id → tool name so results can be annotated.
+  const toolNames = new Map<string, string>();
+
+  const events: FullLogEvent[] = [];
+  let turnNum = 0;
+
+  // Header event
+  events.push({
+    event: "session_start",
+    prompt_name: opts.promptName,
+    user_message: opts.userMessage,
+    ...(opts.systemPrompt ? { system_prompt_preview: opts.systemPrompt.slice(0, 500) + (opts.systemPrompt.length > 500 ? "…" : "") } : {}),
+  });
+
+  for (const line of lines) {
+    let ev: Record<string, unknown>;
+    try { ev = JSON.parse(line) as Record<string, unknown>; } catch { continue; }
+
+    if (ev["kind"] === "session-init") continue;
+    const type = ev["type"] as string | undefined;
+
+    if (type === "system") {
+      const msg = ev["message"] as { content?: unknown } | undefined;
+      const content = msg?.content ?? "";
+      const text = typeof content === "string" ? content
+        : Array.isArray(content)
+          ? (content as Array<Record<string, unknown>>).filter((b) => b["type"] === "text").map((b) => b["text"] as string).join("\n")
+          : JSON.stringify(content);
+      events.push({ event: "system_prompt", text });
+      continue;
+    }
+
+    if (type === "assistant") {
+      turnNum++;
+      const msg = ev["message"] as { content: unknown[]; stop_reason?: string; usage?: { input_tokens: number; output_tokens: number } } | undefined;
+      if (!msg) continue;
+
+      const textBlocks: string[] = [];
+      const toolCalls: Array<{ name: string; input: unknown }> = [];
+
+      for (const block of (msg.content as Array<Record<string, unknown>>)) {
+        if (block["type"] === "text") {
+          const t = (block["text"] as string ?? "").trim();
+          if (t) textBlocks.push(t);
+        } else if (block["type"] === "tool_use") {
+          const rawName = block["name"] as string ?? "";
+          const name = rawName.replace(/^mcp__[^_]+__/, "");
+          const id = block["id"] as string ?? "";
+          if (id) toolNames.set(id, name);
+          toolCalls.push({ name, input: block["input"] });
+        }
+      }
+
+      const entry: FullLogEvent = {
+        event: "assistant_turn",
+        turn: turnNum,
+        stop_reason: msg.stop_reason ?? undefined,
+      };
+      if (msg.usage) entry.tokens = { in: msg.usage.input_tokens, out: msg.usage.output_tokens };
+      if (textBlocks.length) entry.text = textBlocks.join("\n");
+      if (toolCalls.length) entry.tool_calls = toolCalls;
+      events.push(entry);
+      continue;
+    }
+
+    if (type === "user") {
+      const msg = ev["message"] as { content: unknown[] } | undefined;
+      if (!msg) continue;
+      for (const block of (msg.content as Array<Record<string, unknown>>)) {
+        if (block["type"] === "tool_result") {
+          const id = block["tool_use_id"] as string ?? "?";
+          const name = toolNames.get(id) ?? "unknown";
+          const content = block["content"];
+          // Parse tool result content: may be string, [{type:"text",text:...}], or raw object
+          let parsed: unknown = content;
+          if (typeof content === "string") {
+            try { parsed = JSON.parse(content); } catch { parsed = content; }
+          } else if (Array.isArray(content)) {
+            const textParts = (content as Array<Record<string, unknown>>)
+              .filter((b) => b["type"] === "text")
+              .map((b) => b["text"] as string)
+              .join("\n");
+            try { parsed = JSON.parse(textParts); } catch { parsed = textParts; }
+          }
+          events.push({
+            event: "tool_result",
+            turn: turnNum,
+            tool_result: { tool_use_id: id, name, content: parsed },
+          });
+        }
+      }
+      continue;
+    }
+
+    if (type === "rate_limit_event") {
+      events.push({ event: "rate_limit", ...ev });
+      continue;
+    }
+
+    if (type === "result") {
+      const res = ev as { is_error?: boolean; result?: string; stop_reason?: string; total_cost_usd?: number; usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number } };
+      const entry: FullLogEvent = {
+        event: "session_result",
+        is_error: res.is_error ?? false,
+        stop_reason: res.stop_reason,
+      };
+      if (res.total_cost_usd !== undefined) entry.cost_usd = res.total_cost_usd;
+      if (res.usage) entry.tokens = { in: res.usage.input_tokens, out: res.usage.output_tokens, cache_hit: res.usage.cache_read_input_tokens };
+      if (res.result) entry.final_message = res.result;
+      events.push(entry);
+    }
+  }
+
+  const doc = {
+    generated_at: new Date().toISOString(),
+    prompt_name: opts.promptName,
+    user_message: opts.userMessage,
+    turns: turnNum,
+    events,
+  };
+
+  writeFileSync(outPath, JSON.stringify(doc, null, 2), "utf8");
+}
+
 function parseStreamLine(line: string): StreamEvent | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
@@ -172,9 +323,18 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
 
   mkdirSync(opts.transcript_dir, { recursive: true });
   const transcriptPath = join(opts.transcript_dir, `${session_id}.transcript.jsonl`);
+  const rawLogPath = join(opts.transcript_dir, `${session_id}.raw.jsonl`);
+  const fullLogPath = join(opts.transcript_dir, `${session_id}.full.json`);
+  const stderrLogPath = join(opts.transcript_dir, `${session_id}.stderr.txt`);
+
   const transcriptLines: string[] = [];
   const appendTranscript = (entry: Record<string, unknown>) => {
     transcriptLines.push(JSON.stringify({ ts: new Date().toISOString(), ...entry }));
+  };
+
+  // appendRaw writes to rawLogFd (opened below after fd variables are declared).
+  const appendRaw = (line: string) => {
+    if (rawLogFd >= 0) writeSync(rawLogFd, line + "\n");
   };
 
   const evidence: MCPEvidence = {
@@ -196,12 +356,41 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
 
   appendTranscript({ kind: "session-start", session_id, prompt_name: opts.prompt.name, args: opts.prompt.args });
 
+  // Real-time verbose output
+  const verbose = process.env.EVAL_VERBOSE !== "0";
+  const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
+  const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+  const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
+  const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
+  const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
+  const gray = (s: string) => `\x1b[90m${s}\x1b[0m`;
+
+  if (verbose) {
+    process.stderr.write(`\n${bold("▶ SESSION")} ${dim(session_id.slice(0, 8))}\n`);
+    process.stderr.write(`${bold("  prompt:")} ${opts.prompt.name}\n`);
+    process.stderr.write(`${bold("  user:")}   ${cyan(opts.prompt.body)}\n`);
+    if (opts.systemPrompt) {
+      const preview = opts.systemPrompt.slice(0, 120).replace(/\n/g, " ");
+      process.stderr.write(`${bold("  system:")} ${dim(preview + (opts.systemPrompt.length > 120 ? "…" : ""))}\n`);
+    }
+    process.stderr.write(`${bold("  full log:")} ${fullLogPath}\n`);
+    process.stderr.write(`${bold("  raw log:")} ${rawLogPath}\n`);
+    process.stderr.write(`${bold("  stderr:")}  ${stderrLogPath}\n`);
+    process.stderr.write("\n");
+  }
+
   const tmpDir = mkdtempSync("/tmp/leadbay-live-eval-");
   let totalTokensIn = 0;
   let totalTokensOut = 0;
   let terminal_reason: TerminalReason = "agent_stopped";
 
+  // File descriptors hoisted so finally can close them regardless of where an error occurs.
+  let rawLogFd = -1;
+  let stderrFd = -1;
+
   try {
+    rawLogFd = openSync(rawLogPath, "w");
+    stderrFd = openSync(stderrLogPath, "w");
     const mcpConfigPath = writeMcpConfig(tmpDir, token, region);
     const evalSettingsPath = writeEvalSettings(tmpDir);
 
@@ -235,14 +424,22 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
     });
     proc.stdin.write(userMsg + "\n");
 
+    // Also write the initial user message to the raw log for full context.
+    appendRaw(JSON.stringify({ ts: new Date().toISOString(), kind: "session-init", prompt_name: opts.prompt.name, user_message: opts.prompt.body, system_prompt: opts.systemPrompt ?? null }));
+
     let turn = 0;
     let lastFinishTs = startedAt;
     let finalText = "";
     let lastAssistantText = "";
     let done = false;
 
+    // Stream stderr directly to file so we capture MCP server startup logs,
+    // tool result payloads, and any claude internal debug output.
     const stderrChunks: Buffer[] = [];
-    proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      writeSync(stderrFd, chunk);
+    });
 
     await new Promise<void>((resolveP, rejectP) => {
       let lineBuffer = "";
@@ -253,6 +450,9 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
         lineBuffer = lines.pop() ?? "";
 
         for (const line of lines) {
+          // Write every raw line to the full log before any filtering.
+          if (line.trim()) appendRaw(line);
+
           const event = parseStreamLine(line);
           if (!event) continue;
 
@@ -271,6 +471,44 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
               (b): b is { type: "tool_use"; id: string; name: string; input: unknown } =>
                 b.type === "tool_use",
             );
+
+            if (verbose) {
+              process.stderr.write(`${gray(`─── turn ${turn} (${latency_ms}ms) ───────────────────────────────────────`)}\n`);
+
+              // Tool calls
+              for (const block of toolUseBlocks) {
+                const bareName = block.name.replace(/^mcp__[^_]+__/, "");
+                const isLeadbay = bareName.startsWith("leadbay_");
+                const label = isLeadbay ? yellow(`⚡ ${bareName}`) : gray(`  ${bareName} (filtered)`);
+                process.stderr.write(`${label}\n`);
+                if (isLeadbay && block.input && typeof block.input === "object") {
+                  const inputStr = JSON.stringify(block.input, null, 2)
+                    .split("\n")
+                    .map((l) => gray(`    ${l}`))
+                    .join("\n");
+                  process.stderr.write(inputStr + "\n");
+                }
+              }
+
+              // Agent prose
+              if (assistantText.trim()) {
+                const lines = assistantText.split("\n");
+                const preview = lines.slice(0, 8).join("\n");
+                const truncated = lines.length > 8;
+                process.stderr.write(cyan("  ┌ agent\n"));
+                for (const l of preview.split("\n")) {
+                  process.stderr.write(cyan(`  │ `) + l + "\n");
+                }
+                if (truncated) process.stderr.write(cyan(`  │ `) + dim(`… (${lines.length - 8} more lines)`) + "\n");
+                process.stderr.write(cyan("  └\n"));
+              }
+
+              const tokIn = ev.message.usage?.input_tokens ?? 0;
+              const tokOut = ev.message.usage?.output_tokens ?? 0;
+              if (tokIn || tokOut) {
+                process.stderr.write(gray(`    tokens: ${tokIn} in / ${tokOut} out\n`));
+              }
+            }
 
             const tRec: TurnRecord = {
               turn,
@@ -364,12 +602,36 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
       });
     });
 
+    if (verbose) {
+      const dur = ((Date.now() - startedAt) / 1000).toFixed(1);
+      process.stderr.write(`\n${green("✓ done")} — ${turn} turns, ${dur}s\n\n`);
+    }
+
     evidence.final_agent_message = finalText;
     evidence.session.terminal_reason = terminal_reason;
 
     appendTranscript({ kind: "session-end", terminal_reason, turns: turn, tokens_in: totalTokensIn, tokens_out: totalTokensOut });
     writeFileSync(transcriptPath, transcriptLines.join("\n") + "\n", "utf8");
+
+    // Close raw log fd before rendering so all bytes are flushed.
+    try { if (rawLogFd >= 0) { closeSync(rawLogFd); rawLogFd = -1; } } catch { /* ignore */ }
+    evidence.full_log_path = fullLogPath;
+    try {
+      renderFullLog(rawLogPath, fullLogPath, {
+        promptName: opts.prompt.name,
+        userMessage: opts.prompt.body,
+        systemPrompt: opts.systemPrompt,
+      });
+    } catch (err) {
+      process.stderr.write(`\n[live-session-runner] renderFullLog failed: ${err}\n`);
+    }
+
+    if (verbose) {
+      process.stderr.write(`${bold("  full log:")} ${fullLogPath}\n\n`);
+    }
   } finally {
+    try { if (rawLogFd >= 0) closeSync(rawLogFd); } catch { /* ignore */ }
+    try { if (stderrFd >= 0) closeSync(stderrFd); } catch { /* ignore */ }
     try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
   }
 

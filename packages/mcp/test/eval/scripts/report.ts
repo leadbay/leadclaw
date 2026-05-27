@@ -49,6 +49,8 @@ interface EvalEntry {
     per_criterion?: Array<{ criterion: string; pass: boolean; reasoning: string }>;
     failure_modes_present?: string[];
     tool_calls: Array<{ turn: number; name: string; input: unknown }>;
+    full_log_path?: string;
+    transcript_path?: string;
   };
 }
 
@@ -228,6 +230,19 @@ function slugify(s: string): string {
 // Entry card HTML
 // ---------------------------------------------------------------------------
 
+// Load full log JSON from disk at report-generation time (returns null if missing).
+function loadFullLog(fullLogPath: string | undefined): unknown | null {
+  if (!fullLogPath) return null;
+  try {
+    return JSON.parse(fs.readFileSync(fullLogPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+// Global registry: slot index → full log data, embedded as JSON in the HTML.
+const fullLogRegistry: unknown[] = [];
+
 function renderEntryCard(entry: EvalEntry): string {
   const { passed, name, duration_ms, turns_used, model, evidence, tool_call_count, tool_call_breakdown } = entry;
   const { invariants, judge_scores, judge_reasoning, per_criterion, failure_modes_present, tool_calls } = evidence;
@@ -287,6 +302,17 @@ function renderEntryCard(entry: EvalEntry): string {
       ${renderScoreBar("tool_selection_fit", judge_scores?.tool_selection_fit)}
     </div>`;
 
+  // Embed full log inline — load from disk now, store in registry, button opens modal.
+  const fullLogData = loadFullLog(evidence.full_log_path);
+  let fullLogBtn = "";
+  if (fullLogData !== null) {
+    const idx = fullLogRegistry.length;
+    fullLogRegistry.push(fullLogData);
+    const pathTitle = escHtml(evidence.full_log_path ?? "");
+    const rawPath = escHtml(evidence.full_log_path ?? "");
+    fullLogBtn = `<span class="meta-item"><button class="log-btn" onclick="openLog(${idx})">📄 full log</button> <button class="log-btn copy-btn" onclick="copyPath(this,'${rawPath}')" title="${pathTitle}">copy path</button></span>`;
+  }
+
   const meta = [
     `<span class="meta-item">⏱ ${fmtDuration(duration_ms)}</span>`,
     `<span class="meta-item">turns: ${turns_used}</span>`,
@@ -294,6 +320,7 @@ function renderEntryCard(entry: EvalEntry): string {
     `<span class="meta-item">model: ${escHtml(model)}</span>`,
     evidence.session.fixture_id ? `<span class="meta-item">fixture: ${escHtml(evidence.session.fixture_id)}</span>` : "",
     `<span class="meta-item">exit: ${escHtml(entry.exit_reason)}</span>`,
+    fullLogBtn,
   ]
     .filter(Boolean)
     .join("");
@@ -377,7 +404,10 @@ function buildHtml(runs: RunGroup[], showSummaryTable: boolean, title: string): 
   const rateNum = parseFloat(rate);
   const rateColor = rateNum >= 80 ? "#22c55e" : rateNum >= 50 ? "#eab308" : "#ef4444";
 
+  // Reset registry then let renderEntryCard populate it as a side effect.
+  fullLogRegistry.length = 0;
   const detailsHtml = runs.map((r) => renderRunSection(r, runs.length > 1)).join("\n");
+  const registryJson = JSON.stringify(fullLogRegistry);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -519,6 +549,66 @@ function buildHtml(runs: RunGroup[], showSummaryTable: boolean, title: string): 
     font-size: 11px;
   }
   .meta-item { white-space: nowrap; }
+  .log-btn {
+    background: none; border: 1px solid #30363d; border-radius: 3px;
+    color: #58a6ff; cursor: pointer; font: inherit; font-size: 11px;
+    padding: 1px 6px; transition: background 0.15s;
+  }
+  .log-btn:hover { background: #1c2128; }
+
+  /* Modal overlay */
+  #log-modal {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  #log-modal.open { display: flex; }
+  #log-modal-box {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    width: 90vw; max-width: 1100px; height: 85vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  #log-modal-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-bottom: 1px solid #21262d; flex-shrink: 0;
+  }
+  #log-modal-title { color: #f0f6fc; font-size: 13px; flex: 1; }
+  #log-modal-close {
+    background: none; border: none; color: #8b949e; cursor: pointer;
+    font-size: 18px; line-height: 1; padding: 0 4px;
+  }
+  #log-modal-close:hover { color: #f0f6fc; }
+  #log-modal-body {
+    flex: 1; overflow: auto; padding: 16px;
+    font-size: 12px; line-height: 1.6;
+  }
+
+  /* JSON tree renderer */
+  .jt { font-family: 'SF Mono','Fira Code','Cascadia Code',monospace; }
+  .jt-obj, .jt-arr { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 1px solid #21262d; }
+  .jt-row { display: flex; align-items: baseline; gap: 4px; min-height: 20px; }
+  .jt-toggle { cursor: pointer; color: #8b949e; font-size: 10px; user-select: none; flex-shrink: 0; width: 14px; }
+  .jt-toggle:hover { color: #f0f6fc; }
+  .jt-key { color: #79c0ff; flex-shrink: 0; }
+  .jt-str { color: #a5d6ff; white-space: pre-wrap; word-break: break-all; }
+  .jt-num { color: #f8c555; }
+  .jt-bool { color: #ff7b72; }
+  .jt-null { color: #8b949e; }
+  .jt-summary { color: #8b949e; font-size: 11px; cursor: pointer; }
+  .jt-summary:hover { color: #c9d1d9; }
+  .jt-collapsed > .jt-children { display: none; }
+
+  /* Event type badges in log viewer */
+  .ev-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: bold; letter-spacing: 0.04em; flex-shrink: 0;
+  }
+  .ev-session_start   { background: #1f6feb; color: #fff; }
+  .ev-system_prompt   { background: #6e40c9; color: #fff; }
+  .ev-assistant_turn  { background: #238636; color: #fff; }
+  .ev-tool_result     { background: #b08800; color: #000; }
+  .ev-session_result  { background: #21262d; color: #c9d1d9; }
+  .ev-rate_limit      { background: #b62324; color: #fff; }
 
   .scores-block { display: flex; flex-direction: column; gap: 4px; }
   .score-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
@@ -616,6 +706,247 @@ ${summaryTableHtml}
   ${detailsHtml}
 </section>
 
+<!-- Modal overlay -->
+<div id="log-modal">
+  <div id="log-modal-box">
+    <div id="log-modal-header">
+      <span id="log-modal-title">Full session log</span>
+      <button id="log-modal-close" onclick="closeLog()">✕</button>
+    </div>
+    <div id="log-modal-body"></div>
+  </div>
+</div>
+
+<script>
+const _logs = ${registryJson};
+
+function copyPath(btn, path) {
+  navigator.clipboard.writeText(path).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ copied';
+    btn.style.color = '#22c55e';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+  });
+}
+
+function openLog(idx) {
+  const data = _logs[idx];
+  if (!data) return;
+  const modal = document.getElementById('log-modal');
+  const body = document.getElementById('log-modal-body');
+  const title = document.getElementById('log-modal-title');
+  title.textContent = (data.prompt_name || '') + ' — ' + (data.user_message || '') + ' (' + (data.turns || 0) + ' turns)';
+  body.innerHTML = '';
+  if (Array.isArray(data.events)) {
+    data.events.forEach(ev => body.appendChild(renderEvent(ev)));
+  } else {
+    body.appendChild(renderJsonTree(data, null, true));
+  }
+  modal.classList.add('open');
+}
+
+function closeLog() {
+  document.getElementById('log-modal').classList.remove('open');
+}
+
+document.getElementById('log-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeLog();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeLog();
+});
+
+// ── Event renderer ──────────────────────────────────────────────────────────
+
+function renderEvent(ev) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-bottom:12px;padding:10px 12px;background:#0d1117;border-radius:6px;border:1px solid #21262d';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap';
+
+  const badge = document.createElement('span');
+  badge.className = 'ev-badge ev-' + (ev.event || 'unknown');
+  badge.textContent = (ev.event || '?').replace(/_/g, ' ');
+  header.appendChild(badge);
+
+  if (ev.turn !== undefined) {
+    const t = document.createElement('span');
+    t.style.cssText = 'color:#8b949e;font-size:11px';
+    t.textContent = 'turn ' + ev.turn;
+    header.appendChild(t);
+  }
+  if (ev.stop_reason) {
+    const s = document.createElement('span');
+    s.style.cssText = 'color:#8b949e;font-size:11px';
+    s.textContent = 'stop: ' + ev.stop_reason;
+    header.appendChild(s);
+  }
+  if (ev.tokens) {
+    const tk = document.createElement('span');
+    tk.style.cssText = 'color:#8b949e;font-size:11px;margin-left:auto';
+    tk.textContent = ev.tokens.in + ' in / ' + ev.tokens.out + ' out' + (ev.tokens.cache_hit ? ' / ' + ev.tokens.cache_hit + ' cache' : '');
+    header.appendChild(tk);
+  }
+  if (ev.cost_usd !== undefined) {
+    const c = document.createElement('span');
+    c.style.cssText = 'color:#8b949e;font-size:11px';
+    c.textContent = '$' + ev.cost_usd.toFixed(4);
+    header.appendChild(c);
+  }
+
+  wrap.appendChild(header);
+
+  // Render event-specific content
+  if (ev.event === 'system_prompt' && ev.text) {
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'color:#8b949e;font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;margin:0';
+    pre.textContent = ev.text;
+    wrap.appendChild(pre);
+
+  } else if (ev.event === 'assistant_turn') {
+    if (ev.text) {
+      const prose = document.createElement('div');
+      prose.style.cssText = 'color:#c9d1d9;margin-bottom:8px;white-space:pre-wrap;border-left:2px solid #238636;padding-left:10px';
+      prose.textContent = ev.text;
+      wrap.appendChild(prose);
+    }
+    if (ev.tool_calls && ev.tool_calls.length) {
+      ev.tool_calls.forEach(tc => {
+        const tcWrap = document.createElement('div');
+        tcWrap.style.cssText = 'margin-top:6px';
+        const label = document.createElement('div');
+        label.style.cssText = 'color:#f8c555;font-size:12px;margin-bottom:4px';
+        label.textContent = '⚡ ' + tc.name;
+        tcWrap.appendChild(label);
+        if (tc.input && Object.keys(tc.input).length) {
+          tcWrap.appendChild(renderJsonTree(tc.input, null, true));
+        }
+        wrap.appendChild(tcWrap);
+      });
+    }
+
+  } else if (ev.event === 'tool_result' && ev.tool_result) {
+    const label = document.createElement('div');
+    label.style.cssText = 'color:#e3b341;font-size:12px;margin-bottom:4px';
+    label.textContent = '↩ ' + ev.tool_result.name;
+    wrap.appendChild(label);
+    wrap.appendChild(renderJsonTree(ev.tool_result.content, null, false));
+
+  } else if (ev.event === 'session_result') {
+    if (ev.final_message) {
+      const msg = document.createElement('div');
+      msg.style.cssText = 'color:#c9d1d9;white-space:pre-wrap;border-left:2px solid #58a6ff;padding-left:10px';
+      msg.textContent = ev.final_message;
+      wrap.appendChild(msg);
+    }
+
+  } else if (ev.event === 'session_start') {
+    const info = document.createElement('div');
+    info.style.cssText = 'color:#8b949e;font-size:12px';
+    info.textContent = ev.user_message || '';
+    wrap.appendChild(info);
+    if (ev.system_prompt_preview) {
+      const sp = document.createElement('pre');
+      sp.style.cssText = 'color:#6e40c9;font-size:10px;white-space:pre-wrap;margin-top:6px;max-height:80px;overflow:auto';
+      sp.textContent = ev.system_prompt_preview;
+      wrap.appendChild(sp);
+    }
+  }
+
+  return wrap;
+}
+
+// ── JSON tree renderer ──────────────────────────────────────────────────────
+
+function renderJsonTree(val, key, expanded) {
+  const row = document.createElement('div');
+  row.className = 'jt-row';
+
+  const toggle = document.createElement('span');
+  toggle.className = 'jt-toggle';
+
+  const keySpan = document.createElement('span');
+  keySpan.className = 'jt-key';
+  if (key !== null) keySpan.textContent = JSON.stringify(key) + ': ';
+
+  if (val === null) {
+    row.appendChild(toggle);
+    row.appendChild(keySpan);
+    const v = document.createElement('span'); v.className = 'jt-null'; v.textContent = 'null';
+    row.appendChild(v);
+    return row;
+  }
+
+  if (typeof val !== 'object') {
+    row.appendChild(toggle);
+    row.appendChild(keySpan);
+    const v = document.createElement('span');
+    if (typeof val === 'string') { v.className = 'jt-str'; v.textContent = JSON.stringify(val); }
+    else if (typeof val === 'number') { v.className = 'jt-num'; v.textContent = String(val); }
+    else { v.className = 'jt-bool'; v.textContent = String(val); }
+    row.appendChild(v);
+    return row;
+  }
+
+  const isArr = Array.isArray(val);
+  const entries = isArr ? val.map((v, i) => [i, v]) : Object.entries(val);
+  const count = entries.length;
+
+  const wrap = document.createElement('div');
+  wrap.className = expanded ? 'jt' : 'jt jt-collapsed';
+
+  const summary = document.createElement('div');
+  summary.className = 'jt-row';
+
+  const tog = document.createElement('span');
+  tog.className = 'jt-toggle';
+  tog.textContent = expanded ? '▾' : '▸';
+  summary.appendChild(tog);
+
+  if (key !== null) {
+    const ks = document.createElement('span'); ks.className = 'jt-key';
+    ks.textContent = JSON.stringify(key) + ': ';
+    summary.appendChild(ks);
+  }
+
+  const sumText = document.createElement('span');
+  sumText.className = 'jt-summary';
+  sumText.textContent = (isArr ? '[' : '{') + (expanded ? '' : '…' + count + (isArr ? ']' : '}'));
+  summary.appendChild(sumText);
+
+  const children = document.createElement('ul');
+  children.className = isArr ? 'jt-arr' : 'jt-obj';
+
+  const close = document.createElement('div');
+  close.className = 'jt-row';
+  const closeSpan = document.createElement('span');
+  closeSpan.className = 'jt-summary';
+  closeSpan.textContent = isArr ? ']' : '}';
+  close.appendChild(closeSpan);
+
+  entries.forEach(([k, v]) => {
+    const li = document.createElement('li');
+    // Auto-expand small objects, collapse big ones
+    const childExpanded = typeof v !== 'object' || v === null || Object.keys(v || {}).length <= 5;
+    li.appendChild(renderJsonTree(v, isArr ? null : k, childExpanded));
+    children.appendChild(li);
+  });
+
+  tog.addEventListener('click', () => {
+    const collapsed = wrap.classList.toggle('jt-collapsed');
+    tog.textContent = collapsed ? '▸' : '▾';
+    sumText.textContent = (isArr ? '[' : '{') + (collapsed ? '…' + count + (isArr ? ']' : '}') : '');
+  });
+  sumText.addEventListener('click', () => tog.click());
+
+  wrap.appendChild(summary);
+  wrap.appendChild(children);
+  wrap.appendChild(close);
+  return wrap;
+}
+</script>
 </body>
 </html>`;
 }
