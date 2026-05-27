@@ -23,6 +23,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
+    "test:eval": "vitest run --config vitest.eval.config.ts",
     "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
