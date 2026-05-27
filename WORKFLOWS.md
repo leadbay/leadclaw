@@ -1,16 +1,32 @@
 # Leadbay MCP — Supported workflows
 
-This is the canonical map from user intent → eval contract. Each row is the human-readable summary; the `yaml expected` + `yaml scenario` blocks below each row are the machine-readable SSoT that `/eval` reads directly.
+This is the canonical map from user intent → eval contract.
 
-This file is normative: `packages/mcp/test/audit/workflows.test.ts` asserts every backtick'd `leadbay_*` identifier resolves to a registered tool/prompt. CI fails when the table drifts from reality.
+The table is the human-readable index. The `yaml expected` + `yaml scenario` blocks below each row are the machine-readable SSoT that `/eval` reads — required/forbidden calls and success criteria live there only.
+
+`packages/mcp/test/audit/workflows.test.ts` asserts every backtick'd `leadbay_*` identifier resolves to a registered tool or prompt. CI fails when the table drifts from reality.
 
 ---
 
 ## Supported today
 
-| # | User story | Prompt | Required calls | Forbidden calls | Scenario |
-|---|---|---|---|---|---|
-| 1 | **Daily lead discovery** — "show me today's leads / fresh prospects / what's in my inbox" | `leadbay_daily_check_in` | `leadbay_account_status` · `leadbay_pull_leads` · `leadbay_research_lead_by_id` | `leadbay_report_outreach` | "Show me today's leads" |
+| # | User story | Prompt | Scenario |
+|---|---|---|---|
+| 1 | **Daily lead discovery** — "show me today's leads / fresh prospects / what's in my inbox" | `leadbay_daily_check_in` | "Show me today's leads" |
+| 2 | **Follow-up check-in (incl. travel/geo)** — "leads I should follow up with", "before my trip to Berlin", "who should I re-engage" | `leadbay_followup_check_in` | "What leads should I follow up with?" |
+| 3 | **Single-domain deep research** — "tell me about acme.com" | `leadbay_research_a_domain` | "Tell me about jaxpartycompany.com" |
+| 4 | **CSV import + AI qualification** — "I have 400 attendees, rank the most promising" | `leadbay_import_file` | "I have some leads to import" |
+| 5 | **AI qualification on top-N** — "qualify the top 10 of this batch" | `leadbay_qualify_top_n` | "Qualify the top 10 leads in my batch" |
+| 6 | **Audience refinement** — "stop showing me X", "I prefer Y" | `leadbay_refine_audience` | "Stop showing me companies with more than 50 employees" |
+| 7 | **Account state / prospecting overview** — "where am I, what should I do next" | `leadbay_prospecting_overview` | "Give me an overview of my prospecting" |
+| 8 | **Outreach drafting** — "draft me an email to Acme" | *(no dedicated prompt)* | "Draft me an outreach email for JAX PARTY COMPANY LLC" |
+| 9 | **Outreach logging + verification** — "I emailed Acme, log it" | `leadbay_log_outreach` | "I just emailed JAX PARTY COMPANY LLC, log it" |
+| 10 | **Field sales tour planning** — "I'm visiting Limoges in 4 days — give me 3 customers + 3 qualified + 3 new on one map" | `leadbay_plan_tour_in_city` | "I'm visiting Jacksonville in 3 days — plan my visits" |
+| 11 | **Manager-led prospecting via lens-driven campaigns** — manager creates a lens, validates candidates, persists as named campaigns | `leadbay_setup_team_prospecting` | "Set up a prospecting campaign for my team" |
+
+---
+
+### Workflow contracts
 
 ```yaml expected
 workflow_name: Daily lead discovery
@@ -40,8 +56,6 @@ success_criteria:
 prompt: "Show me today's leads"
 ```
 
-| 2 | **Follow-up check-in (incl. travel/geo)** — "leads I should follow up with", "before my trip to Berlin", "who should I re-engage" | `leadbay_followup_check_in` | `leadbay_pull_followups` | `leadbay_pull_leads` · `leadbay_report_outreach` | "What leads should I follow up with?" |
-
 ```yaml expected
 workflow_name: Follow-up check-in
 prompt_name: leadbay_followup_check_in
@@ -60,8 +74,6 @@ success_criteria:
 prompt: "What leads should I follow up with?"
 ```
 
-| 3 | **Single-domain deep research** — "tell me about acme.com" | `leadbay_research_a_domain` | `leadbay_research_lead_by_name_fuzzy` | `leadbay_report_outreach` | "Tell me about jaxpartycompany.com" |
-
 ```yaml expected
 workflow_name: Single-domain research
 prompt_name: leadbay_research_a_domain
@@ -78,8 +90,6 @@ success_criteria:
 ```yaml scenario
 prompt: "Tell me about jaxpartycompany.com"
 ```
-
-| 4 | **CSV import + AI qualification** — "I have 400 attendees, rank the most promising" | `leadbay_import_file` | `leadbay_import_leads` · `leadbay_bulk_qualify_leads` | `leadbay_report_outreach` | "I have some leads to import" |
 
 ```yaml expected
 workflow_name: CSV import + qualify
@@ -99,8 +109,6 @@ success_criteria:
 prompt: "I have some leads to import"
 ```
 
-| 5 | **AI qualification on top-N** — "qualify the top 10 of this batch" | `leadbay_qualify_top_n` | `leadbay_bulk_qualify_leads` | `leadbay_report_outreach` | "Qualify the top 10 leads in my batch" |
-
 ```yaml expected
 workflow_name: AI qualify top-N
 prompt_name: leadbay_qualify_top_n
@@ -118,8 +126,6 @@ success_criteria:
 prompt: "Qualify the top 10 leads in my batch"
 ```
 
-| 6 | **Audience refinement** — "stop showing me X", "I prefer Y" | `leadbay_refine_audience` | `leadbay_refine_prompt` | `leadbay_report_outreach` | "Stop showing me companies with more than 50 employees" |
-
 ```yaml expected
 workflow_name: Audience refinement
 prompt_name: leadbay_refine_audience
@@ -136,8 +142,6 @@ success_criteria:
 ```yaml scenario
 prompt: "Stop showing me companies with more than 50 employees"
 ```
-
-| 7 | **Account state / prospecting overview** — "where am I, what should I do next" | `leadbay_prospecting_overview` | `leadbay_account_status` | `leadbay_report_outreach` | "Give me an overview of my prospecting" |
 
 ```yaml expected
 workflow_name: Prospecting overview
@@ -157,8 +161,6 @@ success_criteria:
 prompt: "Give me an overview of my prospecting"
 ```
 
-| 8 | **Outreach drafting** — "draft me an email to Acme" | *(no dedicated prompt)* | `leadbay_prepare_outreach` | `leadbay_report_outreach` | "Draft me an outreach email for JAX PARTY COMPANY LLC" |
-
 ```yaml expected
 workflow_name: Outreach drafting
 prompt_name: ~
@@ -176,8 +178,6 @@ success_criteria:
 prompt: "Draft me an outreach email for JAX PARTY COMPANY LLC"
 ```
 
-| 9 | **Outreach logging + verification** — "I emailed Acme, log it" | `leadbay_log_outreach` | `leadbay_report_outreach` | *(none)* | "I just emailed JAX PARTY COMPANY LLC, log it" |
-
 ```yaml expected
 workflow_name: Outreach logging
 prompt_name: leadbay_log_outreach
@@ -191,8 +191,6 @@ success_criteria:
 ```yaml scenario
 prompt: "I just emailed JAX PARTY COMPANY LLC, log it"
 ```
-
-| 10 | **Field sales tour planning** — "I'm visiting Limoges in 4 days — give me 3 customers + 3 qualified + 3 new on one map" | `leadbay_plan_tour_in_city` | `leadbay_tour_plan` | `leadbay_pull_leads` · `leadbay_report_outreach` | "I'm visiting Jacksonville in 3 days — plan my visits" |
 
 ```yaml expected
 workflow_name: Field sales tour
@@ -214,8 +212,6 @@ success_criteria:
 prompt: "I'm visiting Jacksonville in 3 days — plan my visits"
 ```
 
-| 11 | **Manager-led prospecting via lens-driven campaigns** — manager creates a lens, validates candidates, persists as named campaigns | `leadbay_setup_team_prospecting` | `leadbay_pull_leads` · `leadbay_create_campaign` | `leadbay_report_outreach` | "Set up a prospecting campaign for my team" |
-
 ```yaml expected
 workflow_name: Team prospecting
 prompt_name: leadbay_setup_team_prospecting
@@ -235,6 +231,8 @@ success_criteria:
 prompt: "Set up a prospecting campaign for my team"
 ```
 
+---
+
 ## Needs backend
 
 | # | User story | What blocks it | Upstream |
@@ -245,9 +243,9 @@ prompt: "Set up a prospecting campaign for my team"
 
 ## How to use this doc
 
-1. **Triaging an incoming ask.** Skim the User story column. If a row matches, the workflow is supported — look at Required/Forbidden calls for the contract.
-2. **Adding a new workflow.** Add a row to the Supported table with two fenced blocks (`yaml expected` + `yaml scenario`). No TypeScript files needed.
-3. **Promoting a row.** When a Needs-backend row unblocks, move it to Supported and fill in the contract blocks.
+1. **Triaging an incoming ask.** Skim the User story column. If a row matches, the workflow is supported — read the contract block below for required/forbidden calls.
+2. **Adding a new workflow.** Add a row to the table and a `yaml expected` + `yaml scenario` block pair in the contracts section. No TypeScript files needed.
+3. **Promoting a row.** When a Needs-backend row unblocks, move it to the table and add contract blocks.
 
 ## Running evals
 
@@ -257,7 +255,7 @@ prompt: "Set up a prospecting campaign for my team"
 /eval
 ```
 
-The `/eval` skill reads `yaml expected` + `yaml scenario` blocks from this file directly. Results are saved to `.context/evals/` and viewable via:
+The `/eval` skill reads the `yaml expected` + `yaml scenario` blocks from this file directly. Results are saved to `.context/evals/` and viewable via:
 
 ```bash
 pnpm --filter @leadbay/mcp run eval:view
@@ -267,7 +265,7 @@ pnpm --filter @leadbay/mcp run eval:view
 
 ## Adding a new eval
 
-Edit this file only. Add a row with two fenced blocks:
+Add a row to the table and append a contract pair to the contracts section:
 
 ````
 ```yaml expected
@@ -289,4 +287,4 @@ prompt: "Do the thing"
 
 ## How this stays normative
 
-`packages/mcp/test/audit/workflows.test.ts` parses this file and asserts every backtick-wrapped `leadbay_*` identifier resolves to a registered tool or prompt. Proposed names for not-yet-shipped tools go in italics, not backticks.
+`packages/mcp/test/audit/workflows.test.ts` asserts every backtick-wrapped `leadbay_*` identifier resolves to a registered tool or prompt. Proposed names for not-yet-shipped tools go in italics, not backticks.

@@ -1,11 +1,11 @@
 /**
- * workflows-parser: reads WORKFLOWS.md and extracts the ```yaml expected
- * blocks that live immediately after each Supported workflow row.
+ * workflows-parser: reads WORKFLOWS.md and extracts ```yaml expected
+ * and ```yaml scenario blocks from the contracts section.
  *
- * These blocks are the single source of truth for what each eval expects:
- * required_calls, forbidden_calls, required_order, required_byproducts,
- * and success_criteria. The eval runner derives all invariants and the
- * judge mission from here — no per-workflow TypeScript files needed.
+ * Blocks are matched by document order: the Nth `yaml expected` block
+ * corresponds to workflow #N, the Nth `yaml scenario` to workflow #N.
+ * Row numbers are no longer inferred from the table — the table is
+ * human-readable only; the contracts section is the machine SSoT.
  *
  * Uses a zero-dependency line-by-line parser (the YAML subset used in
  * these blocks is flat string arrays only — no nesting, no anchors).
@@ -49,7 +49,7 @@ export function getWorkflowExpected(workflow_id: number): WorkflowExpected {
   if (!entry) {
     throw new Error(
       `workflows-parser: no 'expected' block found for workflow #${workflow_id} in WORKFLOWS.md. ` +
-        "Add a ```yaml expected block immediately after the row.",
+        "Add a ```yaml expected block to the contracts section.",
     );
   }
   return entry;
@@ -66,7 +66,7 @@ export function getWorkflowScenario(workflow_id: number): WorkflowScenario {
   if (!entry) {
     throw new Error(
       `workflows-parser: no 'scenario' block found for workflow #${workflow_id} in WORKFLOWS.md. ` +
-        "Add a ```yaml scenario block immediately after the expected block.",
+        "Add a ```yaml scenario block to the contracts section.",
     );
   }
   return entry;
@@ -86,18 +86,11 @@ function parseWorkflowsFile(): Map<number, WorkflowExpected> {
   const map = new Map<number, WorkflowExpected>();
 
   const lines = source.split("\n");
-  let lastRowNum: number | null = null;
+  let workflowIndex = 0;
   let inExpectedBlock = false;
   let blockLines: string[] = [];
 
   for (const line of lines) {
-    // Detect a Supported table data row: starts with "| <digits> |"
-    const rowMatch = line.match(/^\|\s*(\d+)\s*\|/);
-    if (rowMatch && !inExpectedBlock) {
-      lastRowNum = parseInt(rowMatch[1], 10);
-      continue;
-    }
-
     // Detect opening fence: ```yaml expected
     if (!inExpectedBlock && /^```yaml\s+expected\s*$/.test(line.trim())) {
       inExpectedBlock = true;
@@ -108,9 +101,8 @@ function parseWorkflowsFile(): Map<number, WorkflowExpected> {
     // Detect closing fence
     if (inExpectedBlock && line.trim() === "```") {
       inExpectedBlock = false;
-      if (lastRowNum !== null) {
-        map.set(lastRowNum, parseYamlBlock(lastRowNum, blockLines));
-      }
+      workflowIndex++;
+      map.set(workflowIndex, parseYamlBlock(workflowIndex, blockLines));
       blockLines = [];
       continue;
     }
@@ -195,28 +187,20 @@ function parseScenarioBlocks(): Map<number, WorkflowScenario> {
   const map = new Map<number, WorkflowScenario>();
 
   const lines = source.split("\n");
-  let lastRowNum: number | null = null;
+  let workflowIndex = 0;
   let inExpectedBlock = false;
   let inScenarioBlock = false;
   let blockLines: string[] = [];
 
   for (const line of lines) {
-    // Detect a Supported table data row: starts with "| <digits> |"
-    const rowMatch = line.match(/^\|\s*(\d+)\s*\|/);
-    if (rowMatch && !inExpectedBlock && !inScenarioBlock) {
-      lastRowNum = parseInt(rowMatch[1], 10);
-      continue;
-    }
-
-    // Detect opening fence for expected block (skip it, but track lastRowNum)
+    // Track expected blocks to keep index in sync with parseWorkflowsFile
     if (!inExpectedBlock && !inScenarioBlock && /^```yaml\s+expected\s*$/.test(line.trim())) {
       inExpectedBlock = true;
       continue;
     }
-
-    // Close expected block
     if (inExpectedBlock && line.trim() === "```") {
       inExpectedBlock = false;
+      workflowIndex++;
       continue;
     }
 
@@ -230,10 +214,8 @@ function parseScenarioBlocks(): Map<number, WorkflowScenario> {
     // Close scenario block
     if (inScenarioBlock && line.trim() === "```") {
       inScenarioBlock = false;
-      if (lastRowNum !== null) {
-        const scenario = parseScenarioYaml(lastRowNum, blockLines);
-        if (scenario) map.set(lastRowNum, scenario);
-      }
+      const scenario = parseScenarioYaml(workflowIndex, blockLines);
+      if (scenario) map.set(workflowIndex, scenario);
       blockLines = [];
       continue;
     }
