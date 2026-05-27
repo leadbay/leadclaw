@@ -1,0 +1,53 @@
+---
+name: leadbay_remove_leads_from_campaign
+kind: tool-description
+short_description: |
+  Remove leads from an existing campaign. Backend success is 204 with no body;
+  the tool returns a synthetic `removed` count.
+routing:
+  triggers:
+    - "remove lead from campaign"
+    - "take this out of <campaign>"
+    - "remove these from Q2 Push"
+    - "delete lead from campaign"
+    - "clean up campaign"
+  anti_triggers:
+    - phrase: "add leads to campaign"
+      route_to: leadbay_add_leads_to_campaign
+    - phrase: "create a new campaign"
+      route_to: leadbay_create_campaign
+    - phrase: "list campaigns"
+      route_to: leadbay_list_campaigns
+  prefer_when: "user wants to detach one or more leads from an existing campaign"
+  examples:
+    positive:
+      - "Remove the Austin lead from my Q2 Push campaign."
+      - "Take these 3 unqualified leads out of the Limoges Tour."
+      - "Clean up campaign 1f12 — remove leads that bounced."
+    negative:
+      - "Add the top 5 to my Q2 Push."
+      - "Create a new campaign with these 9 leads."
+      - "What campaigns do I have?"
+rendering_hint: |
+  One-line confirmation: ✅ Removed N leads from <campaign-name>.
+  Offer NEXT STEPS chip for "View progression" (campaign_progression)
+  or "Add different leads" (add_leads_to_campaign).
+annotations:
+  readOnlyHint: false
+  destructiveHint: true
+  idempotentHint: true
+  openWorldHint: true
+---
+Detach a list of `lead_ids` from an existing campaign. Wraps `DELETE /campaigns/{id}/leads`. The backend returns 204 with no body when the mutation succeeds, so this tool returns a synthetic `{removed}` count equal to the number of submitted lead IDs.
+
+**Lead UUID source**: pass UUIDs returned from `leadbay_pull_leads`, `leadbay_campaign_call_sheet`, or `leadbay_campaign_progression`.
+
+**Why batch**: prefer one call with N leads over N calls with one lead each — the backend rebuilds campaign membership server-side on each call.
+
+---
+
+{{include:headers/tool-when-to-use}} the user wants to detach leads from an existing campaign — e.g. to clean out bounced contacts, remove disqualified leads, or correct an accidental add.
+
+{{include:headers/tool-when-not-to-use}} to add leads (use `leadbay_add_leads_to_campaign`); to create a new campaign (`leadbay_create_campaign`); to view campaign status (`leadbay_campaign_progression`).
+
+**Response**: `{removed: number}` — synthetic count equal to the number of `lead_ids` submitted (backend returns 204 with no body).
