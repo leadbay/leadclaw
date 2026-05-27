@@ -263,20 +263,5 @@ export const SCENARIO: ScenarioFixture<{ domain: string }> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_research_a_domain",
-    scenario_name: "rendering-card-contract",
-    user_intent:
-      "Research stripe.com end-to-end (import + qualify + deep dive). Render the deep-dive result as the canonical research-company-card layout — score-bar header, pill row of location/size/socials, emoji-headed signal sections, and a contacts table — NOT freeform narrative prose.",
-    success_criteria: [
-      "called leadbay_import_and_qualify with domains=[{domain:'stripe.com'}]",
-      "called leadbay_research_lead_by_id on the new leadId returned by import_and_qualify",
-      "rendered the deep-dive result as a card (score-bar glyphs ▰/❖/▱ in header, pill row with location/size/socials, emoji-headed signal sections, contacts table at bottom) — NOT freeform narrative",
-      "header includes 📞 / 🏢 / 📈 / 💡 emoji section markers from the canonical research-company-card snippet",
-      "did not fabricate qualification answers not present in the tool response",
-    ],
-    required_calls: ["leadbay_import_and_qualify", "leadbay_research_lead_by_id"],
-    required_byproducts: ["▰", "📈", "Stripe"],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 3,
 };

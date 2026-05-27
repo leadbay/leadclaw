@@ -123,20 +123,5 @@ export const SCENARIO: ScenarioFixture<{ audience: string; rep_split?: string }>
       body: { added: 1 },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_setup_team_prospecting",
-    scenario_name: "create-lens-and-campaign",
-    user_intent:
-      "Set up a prospecting lens for plumbing companies in Normandy with 10-50 employees, validate the leads, and create named campaigns split by city for the reps.",
-    success_criteria: [
-      "created or activated a lens targeting the plumbing audience in Normandy",
-      "called leadbay_pull_leads to validate the lens produces results",
-      "created at least one named campaign via leadbay_create_campaign",
-      "added leads to the campaign via leadbay_add_leads_to_campaign",
-      "did NOT call leadbay_report_outreach",
-    ],
-    required_calls: ["leadbay_pull_leads", "leadbay_create_campaign"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 11,
 };

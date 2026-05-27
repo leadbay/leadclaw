@@ -7,7 +7,6 @@
 import { describe, it } from "vitest";
 import { describeIfSelected, selectTouchedKeys } from "../helpers/touchfiles.js";
 import { runScenarioEval, setupScenarioFixtures } from "../helpers/run-eval.js";
-import { setupTeamProspectingInvariants } from "../invariants/setup-team-prospecting.js";
 import { SCENARIO } from "../scenarios/setup-team-prospecting/create-lens-and-campaign.scenario.js";
 
 const mode = describeIfSelected("leadbay_setup_team_prospecting", selectTouchedKeys());
@@ -17,7 +16,6 @@ describe.skipIf(mode === "skip")("eval: leadbay_setup_team_prospecting", () => {
   it(`${SCENARIO.name} passes pyramid + invariants + mission-match`, async () => {
     await runScenarioEval({
       scenario: SCENARIO,
-      invariants: setupTeamProspectingInvariants,
       max_turns: 15,
     });
   });

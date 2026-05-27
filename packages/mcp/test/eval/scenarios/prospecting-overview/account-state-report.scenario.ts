@@ -52,19 +52,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_prospecting_overview",
-    scenario_name: "account-state-report",
-    user_intent:
-      "Give me a prospecting overview: where am I, what quota do I have, and what should I do next.",
-    success_criteria: [
-      "called leadbay_account_status at least once",
-      "reported remaining quota figures (ai_rescore, web_fetch, monitored) without fabrication",
-      "proposed a concrete next step (e.g. run daily check-in, qualify batch, review follow-ups)",
-      "did NOT call leadbay_report_outreach or any mutating tool",
-    ],
-    required_calls: ["leadbay_account_status"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 7,
 };

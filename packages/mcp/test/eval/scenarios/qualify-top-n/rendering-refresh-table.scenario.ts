@@ -227,21 +227,5 @@ export const SCENARIO: ScenarioFixture<{ count: string }> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_qualify_top_n",
-    scenario_name: "rendering-refresh-table",
-    user_intent:
-      "Bulk-qualify the top 10 leads. Render the qualify-status as one inline sentence, then issue a pull_leads refresh with the same lensId and render the newly-qualified leads using the canonical pull-leads table (score-bar columns), with a 'Standouts from this batch' line ABOVE.",
-    success_criteria: [
-      "called leadbay_bulk_qualify_leads with count=10",
-      "rendered the qualify-status as a one-line status-inline sentence (e.g. starting with ✓ or ⏳), not as a multi-line card",
-      "issued a leadbay_pull_leads refresh after the qualifier returned",
-      "rendered the refreshed leads as a markdown TABLE with score-bar glyphs ▰/❖/▱ — NOT a numbered prose list",
-      "added a 'Standouts from this batch' commentary line ABOVE the table for the 3 highest-scoring rows (Apex, Bayside, Cedar)",
-      "did NOT call leadbay_research_lead_by_id — wait for user go",
-    ],
-    required_calls: ["leadbay_bulk_qualify_leads", "leadbay_pull_leads"],
-    required_byproducts: ["Standouts from this batch", "▰"],
-    forbidden_calls: ["leadbay_research_lead_by_id", "leadbay_report_outreach"],
-  },
+  workflow_id: 5,
 };

@@ -341,22 +341,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_daily_check_in",
-    scenario_name: "rendering-table-contract",
-    user_intent:
-      "Render today's top leads using the canonical pull_leads table (score-bar + linked company + why-it-fits + contact), preceded by a 'Today's nudges' paragraph for the top 3. Do NOT use a numbered prose list of motivational sentences.",
-    success_criteria: [
-      "called leadbay_account_status exactly once",
-      "called leadbay_pull_leads exactly once",
-      "rendered the leads as a markdown TABLE (pipes + score-bar glyphs ▰/❖/▱), not as a numbered list of prose entries",
-      "preceded the table with a 'Today's nudges' paragraph (2–4 sentences covering the 3 most-promising rows)",
-      "the 'why it fits' column carries one short sentence per row from short_description + tags + qualification_summary excerpt — NOT motivational coachspeak",
-      "did NOT call leadbay_report_outreach",
-      "emitted the STOP byproduct asking for next-action decision",
-    ],
-    required_calls: ["leadbay_account_status", "leadbay_pull_leads"],
-    required_byproducts: ["Today's nudges", "▰", "STOP — awaiting user decision"],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 1,
 };

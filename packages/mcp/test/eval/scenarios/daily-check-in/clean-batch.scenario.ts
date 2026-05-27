@@ -16,15 +16,13 @@
  *   - research_lead_by_id:   POST /interactions + GET /lenses/{lensId}/leads/{leadId} (required)
  *                            + sub-requests (all soft-fail)
  */
-import type { MissionMatchScenario } from "../../helpers/mission-match-judge.js";
-
 export interface ScenarioFixture<TArgs = Record<string, string | undefined>> {
   name: string;
   prompt: string;
   tier: "gate" | "periodic";
   args: TArgs;
   backendFixtures: BackendFixture[];
-  mission: MissionMatchScenario;
+  workflow_id: number;
 }
 
 export interface BackendFixture {
@@ -324,20 +322,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_daily_check_in",
-    scenario_name: "clean-batch",
-    user_intent:
-      "Show me my morning check-in: account state, fresh batch, the most-promising lead, then stop and wait.",
-    success_criteria: [
-      "called leadbay_account_status exactly once",
-      "called leadbay_pull_leads exactly once",
-      "called leadbay_research_lead_by_id exactly once on the top-scoring lead (lead_001 / Acme Health)",
-      "emitted the STOP byproduct asking for next-action decision",
-      "did NOT call leadbay_report_outreach",
-    ],
-    required_calls: ["leadbay_account_status", "leadbay_pull_leads", "leadbay_research_lead_by_id"],
-    required_byproducts: ["STOP — awaiting user decision"],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 1,
 };

@@ -123,19 +123,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_followup_check_in",
-    scenario_name: "cross-mode-pivot",
-    user_intent:
-      "Run the follow-up check-in, then when the user pivots to 'show me NEW leads instead', call leadbay_pull_leads (Discover) and render the discovery table. Both entry-point calls should appear in the session.",
-    success_criteria: [
-      "called leadbay_pull_followups during the initial follow-up phase",
-      "recognized the cross-mode pivot offer and pointed to the discovery path",
-      "rendered each call's response using its own canonical RENDERING block (followups-table for the Monitor view; pull-leads-table for the Discover refresh if pivoted to)",
-      "did not silently merge the two batches into one rendering",
-    ],
-    required_calls: ["leadbay_pull_followups"],
-    required_byproducts: ["Want to see NEW leads"],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 2,
 };

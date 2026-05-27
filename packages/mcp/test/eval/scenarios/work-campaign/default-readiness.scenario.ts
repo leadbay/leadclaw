@@ -102,24 +102,5 @@ export const SCENARIO: ScenarioFixture<{ campaign: string }> = {
       },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_work_campaign",
-    scenario_name: "default-readiness",
-    user_intent:
-      "Start working an existing campaign. The agent should resolve the campaign, fetch the call-sheet readiness, and propose a session mode without mutating outreach state.",
-    success_criteria: [
-      "called leadbay_list_campaigns to resolve the campaign name",
-      "called leadbay_campaign_call_sheet for the selected campaign",
-      "did NOT call leadbay_campaign_progression for the call-ready view",
-      "did NOT call leadbay_report_outreach before the user dictated an outcome",
-      "did NOT call leadbay_enrich_titles before the user selected enrich-first mode",
-    ],
-    required_calls: ["leadbay_list_campaigns", "leadbay_campaign_call_sheet"],
-    required_byproducts: [],
-    forbidden_calls: [
-      "leadbay_campaign_progression",
-      "leadbay_report_outreach",
-      "leadbay_enrich_titles",
-    ],
-  },
+  workflow_id: 11,
 };

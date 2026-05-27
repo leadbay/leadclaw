@@ -99,21 +99,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_followup_check_in",
-    scenario_name: "routing-regression",
-    user_intent:
-      "Surface KNOWN leads I should follow up with today via leadbay_pull_followups (NOT leadbay_pull_leads). Render the canonical pull_followups table with status badges, AI take, history & notes, contacts — preceded by a 'Where to start today' line.",
-    success_criteria: [
-      "called leadbay_pull_followups at least once",
-      "did NOT call leadbay_pull_leads — Discover is the wrong entry point for follow-up queries",
-      "did NOT iterate pages of pull_leads filtering by engagement counters",
-      "rendered the canonical pull_followups table (status emoji like 🎯/⚡/🟢/💤/✨/🔥/❄ + AI take + history & notes + contacts) — NOT freeform prose per row",
-      "preceded the table with a 'Where to start today' 1–3 sentence paragraph naming the single highest-urgency row",
-      "emitted the STOP byproduct asking for next-action decision",
-    ],
-    required_calls: ["leadbay_pull_followups"],
-    required_byproducts: ["Where to start today", "STOP — awaiting user decision"],
-    forbidden_calls: ["leadbay_pull_leads", "leadbay_report_outreach"],
-  },
+  workflow_id: 2,
 };

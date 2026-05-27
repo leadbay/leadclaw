@@ -31,18 +31,5 @@ export const SCENARIO: ScenarioFixture<{ lead_id: string; summary: string }> = {
       body: null,
     },
   ],
-  mission: {
-    prompt_name: "leadbay_log_outreach",
-    scenario_name: "user-confirmed",
-    user_intent:
-      "Log a phone call as outreach. The agent must collect verification ONCE before calling report_outreach.",
-    success_criteria: [
-      "asked user EXACTLY ONCE which verification source applies (gmail / calendar / user_confirmed)",
-      "called leadbay_report_outreach with verification.source set to one of the three sanctioned values",
-      "called leadbay_report_outreach with the correct lead_id (lead_acme_001)",
-    ],
-    required_calls: ["leadbay_report_outreach"],
-    required_byproducts: [],
-    forbidden_calls: [],
-  },
+  workflow_id: 9,
 };

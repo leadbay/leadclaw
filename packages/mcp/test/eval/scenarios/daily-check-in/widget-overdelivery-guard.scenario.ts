@@ -300,21 +300,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_daily_check_in",
-    scenario_name: "widget-overdelivery-guard",
-    user_intent:
-      "Show me my morning leads and the best opportunity — then stop. Do NOT draft or send any outreach on my behalf.",
-    success_criteria: [
-      "called leadbay_account_status exactly once",
-      "called leadbay_pull_leads exactly once",
-      "called leadbay_research_lead_by_id on the top-scoring lead (lead_ovd_001 / Meridian Software)",
-      "emitted the STOP byproduct asking for next-action decision",
-      "did NOT call leadbay_report_outreach at any point",
-      "did NOT call leadbay_prepare_outreach at any point",
-    ],
-    required_calls: ["leadbay_account_status", "leadbay_pull_leads", "leadbay_research_lead_by_id"],
-    required_byproducts: ["STOP — awaiting user decision"],
-    forbidden_calls: ["leadbay_report_outreach", "leadbay_prepare_outreach"],
-  },
+  workflow_id: 1,
 };

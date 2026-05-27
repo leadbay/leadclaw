@@ -1,12 +1,14 @@
 /**
  * Shared eval-suite runner. Each per-prompt eval.ts imports its scenario
- * and a per-prompt invariants module, then calls runScenarioEval().
+ * and calls runScenarioEval(). Invariants and mission contract are derived
+ * at runtime from the ```yaml expected blocks in WORKFLOWS.md — no per-
+ * workflow TypeScript invariants files needed.
  *
  * Sessions always run via the claude CLI — no ANTHROPIC_API_KEY needed.
  * Claude Code's auth (subscription or API key) is reused transparently.
  *
- * Shape: render prompt → runSessionCLI → invariants → pyramid → judge →
- *        EvalCollector entry → assertions.
+ * Shape: render prompt → runSessionCLI → deriveInvariants → pyramid →
+ *        judge → EvalCollector entry → assertions.
  */
 import { expect } from "vitest";
 import { resolve } from "node:path";
@@ -18,6 +20,7 @@ import { isPyramidComplete, type MCPEvidence, type InvariantResult } from "./evi
 import { runMissionMatchJudge, type MissionMatchScenario } from "./mission-match-judge.js";
 import { MISSION_MATCH_FLOOR, NO_FABRICATION_FLOOR } from "./budget-thresholds.js";
 import { EvalCollector } from "./eval-collector.js";
+import { getWorkflowExpected, type WorkflowExpected } from "./workflows-parser.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,13 +40,89 @@ export interface ScenarioLike {
   tier: "gate" | "periodic";
   args: Record<string, string | undefined>;
   backendFixtures: BackendFixture[];
-  mission: MissionMatchScenario;
+  workflow_id: number;
 }
 
 export interface RunScenarioEvalOpts {
   scenario: ScenarioLike;
-  invariants: (e: MCPEvidence) => InvariantResult[];
   max_turns?: number;
+}
+
+// ---------------------------------------------------------------------------
+// deriveInvariants — builds InvariantResult[] from a WorkflowExpected
+// ---------------------------------------------------------------------------
+
+function deriveInvariants(evidence: MCPEvidence, expected: WorkflowExpected): InvariantResult[] {
+  const results: InvariantResult[] = [];
+
+  for (const name of expected.required_calls) {
+    const count = evidence.tool_calls.filter((c) => c.name === name).length;
+    results.push({
+      name: `called_at_least_once.${name}`,
+      pass: count >= 1,
+      reason: count >= 1 ? undefined : `expected ≥1 call, observed ${count}`,
+    });
+  }
+
+  for (const name of expected.forbidden_calls) {
+    const count = evidence.tool_calls.filter((c) => c.name === name).length;
+    results.push({
+      name: `never_called.${name}`,
+      pass: count === 0,
+      reason: count === 0 ? undefined : `forbidden tool called ${count} times`,
+    });
+  }
+
+  if (expected.required_order.length >= 2) {
+    const sequence = expected.required_order;
+    const observed: string[] = [];
+    for (const c of evidence.tool_calls) {
+      if (sequence.includes(c.name)) observed.push(c.name);
+    }
+    let i = 0;
+    let orderOk = true;
+    for (const name of sequence) {
+      const idx = observed.indexOf(name, i);
+      if (idx === -1) { orderOk = false; break; }
+      i = idx + 1;
+    }
+    results.push({
+      name: "called_in_order",
+      pass: orderOk,
+      reason: orderOk
+        ? undefined
+        : `sequence ${sequence.join(" → ")} not observed (got: ${observed.join(", ")})`,
+    });
+  }
+
+  const haystack =
+    evidence.final_agent_message + "\n" +
+    evidence.prose_between_tool_calls.map((p) => p.text).join("\n");
+  for (const needle of expected.required_byproducts) {
+    results.push({
+      name: `byproduct_present.${needle.slice(0, 30)}`,
+      pass: haystack.includes(needle),
+      reason: haystack.includes(needle) ? undefined : `expected phrase not in agent prose: "${needle}"`,
+    });
+  }
+
+  return results;
+}
+
+// ---------------------------------------------------------------------------
+// buildMissionScenario — converts WorkflowExpected to MissionMatchScenario
+// ---------------------------------------------------------------------------
+
+function buildMissionScenario(scenario: ScenarioLike, expected: WorkflowExpected): MissionMatchScenario {
+  return {
+    prompt_name: scenario.prompt,
+    scenario_name: scenario.name,
+    user_intent: expected.success_criteria[0] ?? `workflow #${expected.workflow_id} contract`,
+    required_calls: expected.required_calls,
+    required_byproducts: expected.required_byproducts,
+    forbidden_calls: expected.forbidden_calls,
+    success_criteria: expected.success_criteria,
+  };
 }
 
 /**
@@ -53,7 +132,10 @@ export interface RunScenarioEvalOpts {
 export function setupScenarioFixtures(_scenario: ScenarioLike): void {}
 
 export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> {
-  const { scenario, invariants, max_turns = 20 } = opts;
+  const { scenario, max_turns = 20 } = opts;
+
+  const expected = getWorkflowExpected(scenario.workflow_id);
+  const missionScenario = buildMissionScenario(scenario, expected);
 
   const rendered = getPrompt(scenario.prompt, scenario.args);
   const block = rendered.messages[0]?.content as { type: string; text?: string };
@@ -68,14 +150,14 @@ export async function runScenarioEval(opts: RunScenarioEvalOpts): Promise<void> 
     fixture_id: scenario.name,
   });
 
-  const inv = invariants(sessionResult.evidence);
+  const inv = deriveInvariants(sessionResult.evidence, expected);
   sessionResult.evidence.invariants = inv;
 
-  const pyramid = isPyramidComplete(sessionResult.evidence, scenario.mission.required_calls);
+  const pyramid = isPyramidComplete(sessionResult.evidence, expected.required_calls);
 
   const judgeOutcome = await runMissionMatchJudge({
     promptforgeRoot: PROMPTFORGE_ROOT,
-    scenario: scenario.mission,
+    scenario: missionScenario,
     evidence: sessionResult.evidence,
   });
   if (judgeOutcome.ok) {

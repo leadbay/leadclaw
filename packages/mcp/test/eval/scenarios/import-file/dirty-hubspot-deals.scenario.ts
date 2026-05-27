@@ -175,25 +175,5 @@ export const SCENARIO: ScenarioFixture<{ file: string; instruction: string }> = 
       ],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_import_file",
-    scenario_name: "dirty-hubspot-deals",
-    user_intent:
-      "Import a HubSpot deals CSV with messy names, preserve the HubSpot record link, qualify the imports.",
-    success_criteria: [
-      "rendered the COLUMN PRESERVATION PLAN byproduct BEFORE any leadbay_* tool call",
-      "called leadbay_resolve_import_rows with cleaned LEAD_NAME (campaign suffixes BYOC, DD, Uber stripped)",
-      "called leadbay_list_mappable_fields or leadbay_create_custom_field for HubSpot URL preservation",
-      "rendered the DECISION LOG byproduct for ambiguous rows BEFORE writing LEADBAY_ID",
-      "called leadbay_import_and_qualify (not just leadbay_import_leads) because user asked to qualify",
-      "rendered the FINAL REPORT byproduct",
-    ],
-    required_calls: ["leadbay_resolve_import_rows", "leadbay_import_and_qualify"],
-    required_byproducts: [
-      "COLUMN PRESERVATION PLAN",
-      "DECISION LOG",
-      "FINAL REPORT",
-    ],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 4,
 };

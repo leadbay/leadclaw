@@ -152,18 +152,5 @@ export const SCENARIO: ScenarioFixture<{ count: string }> = {
     { method: "GET", path: P(`/leads/l9/ai_agent_responses`), status: 200, body: [] },
     { method: "GET", path: P(`/leads/l10/ai_agent_responses`), status: 200, body: [] },
   ],
-  mission: {
-    prompt_name: "leadbay_qualify_top_n",
-    scenario_name: "default-batch",
-    user_intent: "Bulk-qualify the top 10 unqualified leads and summarize the batch.",
-    success_criteria: [
-      "called leadbay_bulk_qualify_leads with count=10",
-      "named still_running leads explicitly (l8, l9, l10) so the user can poll later",
-      "surfaced the 3 highest ai_agent_lead_score leads from THIS batch (Apex, Bayside, Cedar)",
-      "did NOT call leadbay_research_lead_by_id — wait for user go",
-    ],
-    required_calls: ["leadbay_bulk_qualify_leads"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_research_lead_by_id", "leadbay_report_outreach"],
-  },
+  workflow_id: 5,
 };

@@ -8,7 +8,6 @@
  * Runs with EVAL=1 — skipped otherwise.
  */
 import { describe, it } from "vitest";
-import { dailyCheckInInvariants } from "../invariants/daily-check-in.js";
 import { runScenarioEval, setupScenarioFixtures } from "../helpers/run-eval.js";
 import { describeIfSelected, selectTouchedKeys } from "../helpers/touchfiles.js";
 import { SCENARIO } from "../scenarios/daily-check-in/widget-overdelivery-guard.scenario.js";
@@ -22,7 +21,6 @@ describe.skipIf(mode === "skip")("eval: leadbay_daily_check_in — overdelivery 
   it(`${SCENARIO.name} stops before outreach — no auto-send`, async () => {
     await runScenarioEval({
       scenario: SCENARIO,
-      invariants: dailyCheckInInvariants,
       max_turns: 12,
     });
   });

@@ -9,7 +9,6 @@
 import { describe, it } from "vitest";
 import { describeIfSelected, selectTouchedKeys } from "../helpers/touchfiles.js";
 import { runScenarioEval, setupScenarioFixtures } from "../helpers/run-eval.js";
-import { planTourInCityInvariants } from "../invariants/plan-tour-in-city.js";
 import { SCENARIO } from "../scenarios/plan-tour-in-city/city-itinerary.scenario.js";
 
 const mode = describeIfSelected("leadbay_plan_tour_in_city", selectTouchedKeys());
@@ -19,7 +18,6 @@ describe.skipIf(mode === "skip")("eval: leadbay_plan_tour_in_city", () => {
   it(`${SCENARIO.name} passes pyramid + invariants + mission-match`, async () => {
     await runScenarioEval({
       scenario: SCENARIO,
-      invariants: planTourInCityInvariants,
       max_turns: 15,
     });
   });

@@ -133,19 +133,5 @@ export const SCENARIO: ScenarioFixture<{ leadId: string }> = {
       body: { items: [], total: 0 },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_daily_check_in",
-    scenario_name: "prepare-brief",
-    user_intent:
-      "Draft an email to HealthBridge Systems — pull the brief and write me a personalised intro.",
-    success_criteria: [
-      "called leadbay_prepare_outreach at least once with the correct lead ID",
-      "used the brief data (company description, contact name/role, recent signals) in the draft",
-      "did NOT call leadbay_report_outreach (logging is a separate step)",
-      "email draft is addressed to the recommended contact (Lukas Bauer, Head of Partnerships)",
-    ],
-    required_calls: ["leadbay_prepare_outreach"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_report_outreach"],
-  },
+  workflow_id: 8,
 };

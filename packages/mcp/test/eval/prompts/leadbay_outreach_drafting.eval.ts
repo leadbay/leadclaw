@@ -10,7 +10,6 @@
 import { describe, it } from "vitest";
 import { describeIfSelected, selectTouchedKeys } from "../helpers/touchfiles.js";
 import { runScenarioEval, setupScenarioFixtures } from "../helpers/run-eval.js";
-import { outreachDraftingInvariants } from "../invariants/outreach-drafting.js";
 import { SCENARIO } from "../scenarios/outreach-drafting/prepare-brief.scenario.js";
 
 const mode = describeIfSelected("leadbay_outreach_drafting", selectTouchedKeys());
@@ -20,7 +19,6 @@ describe.skipIf(mode === "skip")("eval: outreach drafting (leadbay_prepare_outre
   it(`${SCENARIO.name} passes pyramid + invariants + mission-match`, async () => {
     await runScenarioEval({
       scenario: SCENARIO,
-      invariants: outreachDraftingInvariants,
       max_turns: 12,
     });
   });

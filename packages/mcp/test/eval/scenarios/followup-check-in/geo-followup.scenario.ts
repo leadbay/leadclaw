@@ -75,19 +75,5 @@ export const SCENARIO: ScenarioFixture<Record<string, never>> = {
       },
     },
   ],
-  mission: {
-    prompt_name: "leadbay_followup_check_in",
-    scenario_name: "geo-followup",
-    user_intent:
-      "Surface follow-up leads in Lyon for next week's trip. The agent should use the city shortcut on leadbay_pull_followups — either `city: \"Lyon\"` (composite resolves via /geo/search) or a pre-resolved `city_id`. Never fabricate an admin_area_id, and don't punt to 'set the filter in the app UI' (that workaround is obsolete).",
-    success_criteria: [
-      "called leadbay_pull_followups at least once",
-      "did NOT call leadbay_pull_leads",
-      "passed a `city` (free-text) or `city_id` (resolved numeric id) param to leadbay_pull_followups, OR built a set_filter.criteria with `location_ids` populated from a prior leadbay_list_locations call — never fabricated an admin_area_id",
-      "rendered the result using the canonical pull_followups table layout (status emoji + AI take + history + contacts)",
-    ],
-    required_calls: ["leadbay_pull_followups"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_pull_leads", "leadbay_report_outreach"],
-  },
+  workflow_id: 2,
 };

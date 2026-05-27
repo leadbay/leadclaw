@@ -174,20 +174,5 @@ export const SCENARIO: ScenarioFixture<{ city: string; date?: string }> = {
       body: [],
     },
   ],
-  mission: {
-    prompt_name: "leadbay_plan_tour_in_city",
-    scenario_name: "city-itinerary",
-    user_intent:
-      "I'm visiting Limoges on June 10 — build me a tour itinerary with existing Monitor contacts + fresh Discover leads on a map.",
-    success_criteria: [
-      "called leadbay_tour_plan with city Limoges (not raw pull_followups or pull_leads separately)",
-      "included Monitor follow-up leads (CHU Limoges, Clinique du Cheverny) in the itinerary",
-      "included geo-matched Discover leads (MedTech Limoges) and excluded non-matching ones (Pharma Paris)",
-      "presented the itinerary as a map or place-card list with addresses and contacts",
-      "did NOT call leadbay_report_outreach",
-    ],
-    required_calls: ["leadbay_tour_plan"],
-    required_byproducts: [],
-    forbidden_calls: ["leadbay_report_outreach", "leadbay_pull_leads"],
-  },
+  workflow_id: 10,
 };
