@@ -44,13 +44,13 @@ to suppress this ambient metadata.
 
 ## 1. Install
 
-For Linux, the recommended path is the native Electron installer via npx:
+For Linux, use the command-based installer; no desktop package is published:
 
 ```bash
 npx -y @leadbay/mcp@latest installer
 ```
 
-It downloads the npm package, opens the native Electron installer app, asks for email/region/password, detects installed MCP clients, then installs the selected ones.
+It downloads the npm package, opens the installer app, asks for email/region/password, detects installed MCP clients, then installs the selected ones. macOS and Windows releases also publish double-clickable desktop installers.
 
 From a repo checkout, run the same native installer with:
 

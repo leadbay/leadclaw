@@ -15,11 +15,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: linux
-            os: ubuntu-latest
-            script: installer:package:linux
           - name: macos
-            os: macos-13
+            os: macos-latest
             script: installer:package:mac
           - name: windows
             os: windows-latest
@@ -42,8 +39,6 @@ jobs:
           name: leadbay-mcp-installer-${{ matrix.name }}
           if-no-files-found: error
           path: |
-            packages/mcp/dist-native/*.AppImage
-            packages/mcp/dist-native/*.deb
             packages/mcp/dist-native/*.dmg
             packages/mcp/dist-native/*.exe
             packages/mcp/dist-native/*.blockmap

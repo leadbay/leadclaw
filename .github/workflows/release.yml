@@ -174,11 +174,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux
-            os: ubuntu-latest
-            script: installer:package:linux
           - name: macOS
-            os: macos-13
+            os: macos-latest
             script: installer:package:mac
           - name: Windows
             os: windows-latest
@@ -207,7 +204,7 @@ jobs:
             files+=("$file")
           done < <(
             find packages/mcp/dist-native -maxdepth 1 -type f \
-              \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.blockmap" -o -name "latest*.yml" \) \
+              \( -name "*.dmg" -o -name "*.exe" -o -name "*.blockmap" -o -name "latest*.yml" \) \
               -print0
           )
           if [ "${#files[@]}" -eq 0 ]; then
