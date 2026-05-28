@@ -17,16 +17,25 @@ The loop runs inside a single Claude Code session. `/relentless` is the outer co
 
 **Workflow 2b — routing violation: wrong entry point for follow-up queries**
 
-The agent is given a phrasing that sounds like it could go either way — discovery or follow-up — and should call `leadbay_pull_followups` but currently calls `leadbay_pull_leads` instead.
+The agent calls `leadbay_pull_leads` (discovery) when it should call `leadbay_pull_followups` (Monitor/re-engagement). This is a **confirmed routing gap** found by reading the actual tool description triggers.
 
-**Scenario prompt:** `"Show me my pipeline — who haven't I been in touch with lately?"`
+**Scenario prompt:** `"Show me leads I should reach out to today"`
 
-This phrasing is ambiguous enough to trip routing without an explicit "follow up" keyword. The contract forbids `leadbay_pull_leads` and requires `leadbay_pull_followups`. The agent's current behavior on this phrasing is the thing we're fixing.
+**Why this reliably fails today:**
+
+The `pull_leads` tool description has these routing triggers: "show me leads", "today's prospects", "best new leads". The phrase "show me leads" + "today" fires `pull_leads` immediately.
+
+The `pull_followups` tool description triggers are: "what should I follow up on", "leads I've already worked", "what's overdue", "leads in \<city\>". None match "reach out to today".
+
+The `pull_leads` anti-triggers only cover: "leads I should follow up with" and "I'm going to \<city\>". The phrase "reach out to" isn't covered.
+
+So the agent reads "show me leads ... today" → routes to `pull_leads`. The contract forbids `pull_leads` and requires `pull_followups`. **Guaranteed failure with current routing.**
 
 **Why this is a good target:**
-- The failure mode is already documented in the template's `failure_modes:` frontmatter (calling pull_leads instead of pull_followups was a real bug in 0.9.0)
-- The fix is localized: routing anti-triggers in `leadbay_followup_check_in.md.tmpl` and/or the `pull_leads` tool-description anti-triggers
-- The eval signal is binary and unambiguous — either pull_followups was called or it wasn't
+- The failure is structural (routing gap), not random — it reproduces every run
+- The fix is localized and specific: add "reach out to", "get back to", "contact today" as `pull_followups` triggers and/or `pull_leads` anti-triggers
+- The eval signal is binary: either `pull_followups` was called or it wasn't
+- The fix generalizes — "reach out" covers a whole class of re-engagement phrasings the current routing misses
 - No new tools or backend needed
 
 ---
@@ -72,8 +81,8 @@ This phrasing is ambiguous enough to trip routing without an explicit "follow up
 Add workflow 2b immediately after workflow 2's existing contract block:
 
 ```yaml
-# workflow 2b — deliberately harder routing scenario (used by relentless loop)
-workflow_name: Follow-up routing (ambiguous phrasing)
+# workflow 2b — routing stress-test: discovery-sounding phrasing that should route to follow-up
+workflow_name: Follow-up routing (reach-out phrasing)
 prompt_name: leadbay_followup_check_in
 required_calls:
   - leadbay_pull_followups
@@ -81,34 +90,38 @@ forbidden_calls:
   - leadbay_pull_leads
   - leadbay_report_outreach
 success_criteria:
-  - "called leadbay_pull_followups (NOT leadbay_pull_leads) for a pipeline/re-engagement query"
+  - "called leadbay_pull_followups (NOT leadbay_pull_leads) — re-engagement intent, not discovery"
   - "did NOT call leadbay_pull_leads"
-  - "rendered the follow-up table or place-card list"
+  - "rendered the follow-up table with status badges (not a score-bar discovery table)"
   - "did NOT call leadbay_report_outreach"
 ```
 
 ```yaml
-# scenario
-prompt: "Show me my pipeline — who haven't I been in touch with lately?"
+# scenario — triggers pull_leads routing today ("show me leads" + "today"), should route to pull_followups
+prompt: "Show me leads I should reach out to today"
 ```
 
 The table row in the Supported today section gets a corresponding entry:
 
 ```
-| 2b | **Follow-up routing (ambiguous)** — harder phrasing for routing stress-test | `leadbay_followup_check_in` | "Show me my pipeline — who haven't I been in touch with lately?" |
+| 2b | **Follow-up routing (reach-out)** — "reach out to today" currently misfires to pull_leads | `leadbay_followup_check_in` | "Show me leads I should reach out to today" |
 ```
 
 ---
 
 ## Edit surface and constraints
 
-**Primary edit target:** `packages/promptforge/prompts/leadbay_followup_check_in.md.tmpl`
-- Strengthen routing triggers that catch "pipeline", "haven't been in touch", "re-engagement" phrasings
-- Already has explicit `NOT leadbay_pull_leads` instruction — may need to move it earlier or make it more prominent
+**Primary edit target:** `packages/promptforge/tool-descriptions/composite/pull-leads.md.tmpl`
+- Add anti-triggers: `"reach out to"`, `"get back to"`, `"contact today"` → route_to: `leadbay_pull_followups`
+- Tool description routing fires BEFORE the prompt is read — this is the right chokepoint
 
-**Secondary edit target (if primary insufficient):** `packages/promptforge/tool-descriptions/composite/pull-leads.md.tmpl`
-- Add anti-trigger: `"who haven't I been in touch with"` → route_to: `leadbay_pull_followups`
-- This shapes the agent's routing BEFORE it even reads the prompt
+**Secondary edit target:** `packages/promptforge/tool-descriptions/composite/pull-followups.md.tmpl`
+- Add triggers: `"reach out to today"`, `"should I contact"`, `"get back to"`, `"re-engage"`
+- Symmetric fix — pull_followups should actively claim this phrasing class
+
+**Tertiary edit target (if tool descriptions insufficient):** `packages/promptforge/prompts/leadbay_followup_check_in.md.tmpl`
+- The prompt opening already lists trigger phrases — add "reach out to today", "leads to contact", "should get back to"
+- The `NOT leadbay_pull_leads` instruction is already there but fires after routing — moving it to the very first line may help
 
 **Build gate (non-negotiable):** `pnpm prompts:build` must exit 0 after every edit. The assembler validates frontmatter, expected_calls, argument declarations, and char budget. A broken build is a failed iteration — revert and try again.
 
@@ -162,7 +175,7 @@ If 2b already passes, tighten the scenario prompt until it reliably fails. The l
 ## Invocation
 
 ```
-/relentless --feature "Fix workflow 2b routing: agent calls leadbay_pull_leads instead of leadbay_pull_followups for pipeline/re-engagement queries. Edit packages/promptforge/prompts/leadbay_followup_check_in.md.tmpl (and pull-leads tool description anti-triggers if needed). Use /eval --workflow 2b as the test observable and /eval --workflow 1,3,5 as regression guard. Rebuild with pnpm prompts:build after every edit."
+/relentless --feature "Fix workflow 2b routing: the phrase 'Show me leads I should reach out to today' fires leadbay_pull_leads (discovery) instead of leadbay_pull_followups (Monitor re-engagement). Root cause: pull_leads has no anti-trigger for 'reach out to'; pull_followups has no trigger for this phrasing class. Fix by editing packages/promptforge/tool-descriptions/composite/pull-leads.md.tmpl (add anti-triggers) and pull-followups.md.tmpl (add triggers), rebuilding with pnpm prompts:build, then verifying with /eval --workflow 2b. Regression guard: /eval --workflow 1,3,5 must stay green. Do NOT narrow the fix to just this exact phrase — improve the whole 'reach out / contact / get back to' phrasing class."
 ```
 
 ---
