@@ -42,17 +42,87 @@ This single install registers the MCP server **and** drops six auto-discovered s
 
 [Register here](https://wow.leadbay.ai/?register=true) before installing.
 
+## Tools
+
+### Read-only (always on)
+
+| Tool | Description |
+|------|-------------|
+| `leadbay_pull_leads` | Pull today's fresh batch of scored leads |
+| `leadbay_pull_followups` | Pull leads that need follow-up action |
+| `leadbay_followups_map` | Geo-clustered follow-up map for travel planning |
+| `leadbay_tour_plan` | Build a visit plan for an upcoming trip |
+| `leadbay_research_lead_by_id` | Deep-dive research card for a single lead |
+| `leadbay_research_lead_by_name_fuzzy` | Look up a lead by company name |
+| `leadbay_prepare_outreach` | Build a personalized outreach brief for a lead |
+| `leadbay_account_status` | Check quota, credits, and account state |
+| `leadbay_list_campaigns` | List existing campaigns |
+| `leadbay_campaign_progression` | Campaign funnel metrics |
+| `leadbay_campaign_call_sheet` | Call sheet for a campaign |
+| `leadbay_bulk_enrich_status` | Status of a running enrichment job |
+| `leadbay_qualify_status` | Status of a running qualification job |
+| `leadbay_import_status` | Status of a running import job |
+| `leadbay_resolve_import_rows` | Resolve import rows to lead IDs |
+| `leadbay_list_mappable_fields` | List CRM fields available for mapping |
+| `leadbay_create_topup_link` | Generate a Stripe top-up link (quota recovery) |
+| `leadbay_open_billing_portal` | Open the billing portal |
+
+### Write actions (gated by `LEADBAY_MCP_WRITE=1`, default ON since 0.3.0)
+
+| Tool | Description |
+|------|-------------|
+| `leadbay_bulk_qualify_leads` | Trigger AI qualification on a batch of leads |
+| `leadbay_enrich_titles` | Enrich contact job titles |
+| `leadbay_adjust_audience` | Adjust the active lens audience |
+| `leadbay_refine_prompt` | Refine the qualification prompt |
+| `leadbay_answer_clarification` | Answer a clarification question from Leadbay |
+| `leadbay_report_outreach` | Log outreach activity (required after every contact) |
+| `leadbay_import_leads` | Import a list of company domains |
+| `leadbay_import_and_qualify` | Import + immediately qualify leads |
+| `leadbay_add_note` | Add a note to a lead |
+| `leadbay_like_lead` | Mark a lead as liked |
+| `leadbay_dislike_lead` | Mark a lead as disliked |
+| `leadbay_create_campaign` | Create a new campaign |
+| `leadbay_add_leads_to_campaign` | Add leads to a campaign |
+| `leadbay_remove_leads_from_campaign` | Remove leads from a campaign |
+| `leadbay_create_custom_field` | Create a custom CRM field |
+
+### Advanced granular tools (gated by `LEADBAY_MCP_ADVANCED=1`)
+
+Low-level single-API-call tools for power users and integrations. Enabled by setting `LEADBAY_MCP_ADVANCED=1` in the MCP server's env.
+
+## How it works
+
+The MCP server automatically uses your **active lens** (the last lens you used in Leadbay). Just call `leadbay_pull_leads` and it works — no lens configuration needed.
+
+`leadbay_research_lead_by_id` bundles multiple API calls (lead details + AI qualification + contacts) into a single response. If some data isn't available yet, it returns partial results instead of failing.
+
+## Configuration
+
+| Env var | Required | Description |
+|---------|----------|-------------|
+| `LEADBAY_TOKEN` | Yes | Bearer token (set by the installer) |
+| `LEADBAY_REGION` | Yes | `us` or `fr` |
+| `LEADBAY_MCP_WRITE` | No | Set to `0` to disable write tools (default: on) |
+| `LEADBAY_MCP_ADVANCED` | No | Set to `1` to expose granular tools (default: off) |
+| `LEADBAY_API_BASE_URL` | No | Override API URL (for staging/dev) |
+
 ## Workflows
 
 The canonical inventory of what the MCP supports — supported / partial / planned / blocked-on-backend — is **[WORKFLOWS.md](WORKFLOWS.md)**. Use it to triage incoming asks: find the row that matches, or add a new one. A small audit asserts every cited tool/prompt and test path is real, so the table can't silently drift.
 
-Quick taste of what's in there:
+Quick taste:
 
 ```
-leadbay_pull_leads → leadbay_research_lead_by_id             # discover & research
-leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach   # travel/geo follow-ups
-leadbay_import_leads → leadbay_bulk_qualify_leads            # import & qualify
+leadbay_pull_leads → leadbay_research_lead_by_id → leadbay_prepare_outreach   # discover & research
+leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach     # travel/geo follow-ups
+leadbay_import_leads → leadbay_bulk_qualify_leads                             # import & qualify
 ```
+
+## Requirements
+
+- Node.js 22+
+- A [Leadbay account](https://wow.leadbay.ai/?register=true)
 
 ## Development
 
@@ -64,9 +134,11 @@ pnpm -r test         # must be green
 pnpm -r typecheck    # must be green
 ```
 
+### Test tiers
+
+- **Unit tests** (`packages/core/test/unit/`) — error-code mapping, tool branches. Use `mockHttp` from `test/harness.ts` to stub `node:https`. No network required.
+- **Integration tests** (`packages/core/test/integration/`) — opt-in. Set `LEADBAY_TEST_TOKEN` and run `pnpm test:smoke`.
+- **Audit tests** (`packages/mcp/test/audit/`) — assert tool descriptions, routing blocks, and WORKFLOWS.md consistency at build time. Always run on CI.
+- **Eval tests** (`packages/mcp/test/eval/`) — LLM-graded scenarios. Gated by `EVAL=1`.
+
 See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide: tool structure, test conventions, build pipeline, and how to add a new tool.
-
-## Requirements
-
-- Node.js 22+
-- A [Leadbay account](https://wow.leadbay.ai/?register=true)
