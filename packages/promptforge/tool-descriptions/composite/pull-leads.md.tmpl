@@ -8,9 +8,12 @@ short_description: |
   why-fits ≤20 words; col 3 is linked contact + title.
 routing:
   triggers:
-    - "show me leads"
+    - "show me new leads"
+    - "show me today's leads"
     - "today's prospects"
     - "best new leads"
+    - "fresh leads"
+    - "what's new today"
   anti_triggers:
     - phrase: "leads I should follow up with"
       route_to: leadbay_pull_followups
