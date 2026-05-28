@@ -38,9 +38,9 @@ def avg_score(e):
 
 avg_mm = round(sum(e.get("evidence",{}).get("judge_scores",{}).get("mission_match",0) for e in entries) / total, 1) if total else 0
 
-# Unique workflow labels (everything before /workflow-N)
+# Unique workflow labels (everything before /workflow-N or /workflow-Nb)
 def workflow_label(name):
-    return re.sub(r'/workflow-\d+$', '', name) if name else name
+    return re.sub(r'/workflow-\d+[a-z]?$', '', name) if name else name
 
 workflow_counts = {}
 for e in entries:
@@ -48,6 +48,28 @@ for e in entries:
     workflow_counts[lbl] = workflow_counts.get(lbl, 0) + 1
 
 last_updated = datetime.now(timezone.utc).strftime("%-m/%-d/%Y, %-I:%M:%S %p")
+
+# ── Self-improving run grouping ───────────────────────────────────────────────
+# Group entries by run_file — each JSON file is one eval batch.
+# We identify "self-improving" runs as files that contain the same workflow (2b)
+# across multiple consecutive JSON files (relentless loop iterations).
+# We expose each unique _file as a "run" for filtering.
+run_files = []
+seen = set()
+for e in entries:
+    f = e.get("_file","")
+    if f and f not in seen:
+        seen.add(f)
+        run_files.append(f)
+
+# Find runs containing workflow-2b (self-improvement target)
+self_improve_files = set()
+for e in entries:
+    if "workflow-2b" in e.get("name","") or "workflow-2b" in e.get("evidence",{}).get("session",{}).get("fixture_id",""):
+        self_improve_files.add(e.get("_file",""))
+
+latest_count = sum(1 for e in entries if e.get("_file") == latest_file) if latest_file else 0
+self_improve_count = sum(1 for e in entries if e.get("_file","") in self_improve_files)
 
 # ── Score color ───────────────────────────────────────────────────────────────
 def score_color(v):
@@ -68,17 +90,17 @@ for e in entries:
     trend_bars += f'<div title="{name} avg={avg}" style="width:4px;height:{height}px;background:{color};flex-shrink:0;border-radius:1px 1px 0 0"></div>'
 
 # ── Workflow chip filters ─────────────────────────────────────────────────────
-latest_count = sum(1 for e in entries if e.get("_file") == latest_file) if latest_file else 0
 chip_html = '<button onclick="filterWorkflow(\'\')" id="chip-all" class="chip chip-active">All ({total})</button>'.replace("{total}", str(total))
 if latest_file:
     chip_html += f'<button onclick="filterLastRun()" id="chip-lastrun" class="chip">Last run ({latest_count})</button>'
+if self_improve_files:
+    chip_html += f'<button onclick="filterSelfImprove()" id="chip-selfimprove" class="chip">🔄 Self-improve ({self_improve_count})</button>'
 for lbl, cnt in sorted(workflow_counts.items()):
-    safe = lbl.replace("'", "\\'").replace('"', '&quot;')
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '-', lbl)
     chip_html += f'<button onclick="filterWorkflow(\'{safe}\')" id="chip-{safe}" class="chip">{lbl} ({cnt})</button>'
 
 # ── Entry rows (newest first for display) ────────────────────────────────────
 def fmt_ts(name):
-    # name starts with ISO timestamp like 2026-05-27T22-19-35...
     m = re.match(r'(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})', name)
     if m:
         try:
@@ -93,12 +115,12 @@ def score_pill(label, val):
     return f'<span style="color:{c};font-size:12px;font-weight:bold;margin-left:10px">{label}:{val}</span>'
 
 def render_row(e, idx):
-    passed = e.get("passed", False)
-    badge_bg = "#22c55e" if passed else "#ef4444"
-    badge_fg = "#000" if passed else "#fff"
-    badge_txt = "PASS" if passed else "FAIL"
+    is_passed = e.get("passed", False)
+    badge_bg = "#22c55e" if is_passed else "#ef4444"
+    badge_fg = "#000" if is_passed else "#fff"
+    badge_txt = "PASS" if is_passed else "FAIL"
     name = e.get("name","")
-    ts = fmt_ts(name)
+    ts = fmt_ts(os.path.basename(e.get("_file","")))
     dur = f'{e.get("duration_ms",0)/1000:.1f}s'
     turns = e.get("turns_used", 0)
     ev = e.get("evidence", {})
@@ -130,11 +152,12 @@ def render_row(e, idx):
     tout = e.get("tokens_session_out",0)
     scenario = ev.get("session",{}).get("prompt_name","")
 
-    wf_label = workflow_label(name)
+    wf_label = re.sub(r'[^a-zA-Z0-9_-]', '-', workflow_label(name))
     file_val = e.get("_file", "").replace('"', '&quot;')
+    is_self_improve = "1" if e.get("_file","") in self_improve_files else "0"
 
     return f"""
-<div class="entry-row" data-workflow="{wf_label}" data-name="{name}" data-passed="{'1' if passed else '0'}" data-file="{file_val}">
+<div class="entry-row" data-workflow="{wf_label}" data-name="{name}" data-passed="{'1' if is_passed else '0'}" data-file="{file_val}" data-selfimprove="{is_self_improve}">
   <div class="entry-header" onclick="toggleEntry({idx})" style="display:flex;align-items:center;padding:10px 14px;cursor:pointer;border-bottom:1px solid #21262d;gap:10px">
     <span style="background:{badge_bg};color:{badge_fg};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:bold;min-width:38px;text-align:center">{badge_txt}</span>
     <div style="flex:1;min-width:0">
@@ -225,9 +248,11 @@ body {{ background: #0d1117; color: #c9d1d9; font-family: monospace; font-size: 
 <script>
 const ENTRIES = {json.dumps(list(reversed(entries)))};
 const LATEST_FILE = {json.dumps(latest_file or "")};
+const SELF_IMPROVE_FILES = {json.dumps(list(self_improve_files))};
 let passFilter = 'all';
 let workflowFilter = '';
 let lastRunFilter = false;
+let selfImproveFilter = false;
 
 function toggleEntry(idx) {{
   const d = document.getElementById('detail-' + idx);
@@ -245,6 +270,7 @@ function setPassFilter(f) {{
 function filterWorkflow(w) {{
   workflowFilter = w;
   lastRunFilter = false;
+  selfImproveFilter = false;
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip-active'));
   const active = w ? document.getElementById('chip-' + w) : document.getElementById('chip-all');
   if (active) active.classList.add('chip-active');
@@ -253,9 +279,20 @@ function filterWorkflow(w) {{
 
 function filterLastRun() {{
   lastRunFilter = true;
+  selfImproveFilter = false;
   workflowFilter = '';
   document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip-active'));
   const btn = document.getElementById('chip-lastrun');
+  if (btn) btn.classList.add('chip-active');
+  applyFilters();
+}}
+
+function filterSelfImprove() {{
+  selfImproveFilter = true;
+  lastRunFilter = false;
+  workflowFilter = '';
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('chip-active'));
+  const btn = document.getElementById('chip-selfimprove');
   if (btn) btn.classList.add('chip-active');
   applyFilters();
 }}
@@ -267,11 +304,13 @@ function applyFilters() {{
     const name = row.dataset.name.toLowerCase();
     const p = row.dataset.passed === '1';
     const file = row.dataset.file || '';
+    const si = row.dataset.selfimprove === '1';
     let show = true;
     if (passFilter === 'pass' && !p) show = false;
     if (passFilter === 'fail' && p) show = false;
     if (lastRunFilter && file !== LATEST_FILE) show = false;
-    if (!lastRunFilter && workflowFilter && wf !== workflowFilter) show = false;
+    if (selfImproveFilter && !si) show = false;
+    if (!lastRunFilter && !selfImproveFilter && workflowFilter && wf !== workflowFilter) show = false;
     if (q && !name.includes(q)) show = false;
     row.style.display = show ? '' : 'none';
   }});
