@@ -21,26 +21,62 @@
 
 ## Install
 
-### Via MCP (Claude Desktop, Cursor, Cowork, any MCP client)
+> **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first — you'll need it in step 2.
+
+---
+
+### Option A — Claude Desktop (easiest, no terminal)
+
+**Step 1 — Download the extension**
+
+Grab the latest `.dxt` file from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest). Look for `leadbay-mcp-*.dxt`.
+
+**Step 2 — Install it**
+
+Open Claude Desktop → **Settings → Extensions** → drag-drop the `.dxt` file in (or click the `+` button and browse to it). Claude Desktop will show a "Leadbay MCP" entry.
+
+**Step 3 — Enter your credentials**
+
+Claude Desktop will prompt you for:
+- Your Leadbay **email**
+- Your Leadbay **password**
+- Your **region** (`us` or `fr` — check your Leadbay dashboard URL to know which)
+
+It mints a token and stores it for you. Your password is never saved.
+
+**Step 4 — Start a conversation**
+
+That's it. Open a new chat and try: *"Show me today's leads."*
+
+---
+
+### Option B — Claude Desktop / Cursor / Claude Code (one command)
+
+Requires [Node.js 22+](https://nodejs.org).
 
 ```bash
 npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
 ```
 
-The installer auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code), prompts you per-target, and writes the token into each client's config. Add `--no-write` to disable the composite write tools. Full per-client setup, env vars, troubleshooting, and a tour of the MCP primitives is in [`packages/mcp/README.md`](packages/mcp/README.md).
+The installer:
+1. Prompts for your password (hidden — not saved anywhere)
+2. Mints a bearer token
+3. Auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code) and registers the server in each, after asking you per-target
 
-### Via the Claude Code plugin marketplace
+Then restart your client and try: *"Show me today's leads."*
+
+Add `--no-write` to run in read-only mode. Add `--yes` for non-interactive/CI runs. See [`packages/mcp/README.md`](packages/mcp/README.md) for the full reference.
+
+---
+
+### Option C — Claude Code plugin marketplace
 
 ```text
 /plugin marketplace add leadbay/leadclaw
 /plugin install leadbay@leadbay-leadclaw
 ```
 
-This single install registers the MCP server **and** drops six auto-discovered skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks. Claude Code prompts for your Leadbay token + region through the plugin's `userConfig` — no separate `leadbay-mcp install` step needed.
-
-### Don't have a Leadbay account?
-
-[Register here](https://wow.leadbay.ai/?register=true) before installing.
+Claude Code will prompt for your token and region. This registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks — no slash commands needed.
 
 ## Tools
 
