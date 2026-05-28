@@ -1837,9 +1837,9 @@ Always offer at least one of: prep outreach, refilter, pushback. Pushback is the
 // region: leadbay_pull_leads
 export const leadbay_pull_leads: string = `## WHEN TO USE
 
-Trigger phrases: "show me new leads", "show me today's leads", "today's prospects", "best new leads", "fresh leads", "what's new today".
+Trigger phrases: "show me leads", "show me new leads", "show me today's leads", "today's prospects", "best new leads", "fresh leads", "what's new today".
 
-Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`; "reach out to" → \`leadbay_pull_followups\`; "get back to" → \`leadbay_pull_followups\`; "contact today" → \`leadbay_pull_followups\`; "should I contact" → \`leadbay_pull_followups\`; "reconnect with" → \`leadbay_pull_followups\`; "re-engage" → \`leadbay_pull_followups\`.
+Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`; "leads I should reach out to" → \`leadbay_pull_followups\`; "leads to get back to" → \`leadbay_pull_followups\`; "leads to contact today" → \`leadbay_pull_followups\`; "should I contact" → \`leadbay_pull_followups\`; "reconnect with" → \`leadbay_pull_followups\`; "re-engage" → \`leadbay_pull_followups\`.
 
 Prefer when: fresh Discover leads; if a lens is named, pass \`lensId\` and pin it
 

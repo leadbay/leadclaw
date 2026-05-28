@@ -14,7 +14,7 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 |---|---|---|---|
 | 1 | **Daily lead discovery** — "show me today's leads / fresh prospects / what's in my inbox" | `leadbay_daily_check_in` | "Show me today's leads" |
 | 2 | **Follow-up check-in (incl. travel/geo)** — "leads I should follow up with", "before my trip to Berlin", "who should I re-engage" | `leadbay_followup_check_in` | "What leads should I follow up with?" |
-| 2b | **Follow-up routing (reach-out phrasing)** — "reach out to today" currently misfires to `leadbay_pull_leads` | `leadbay_followup_check_in` | "Show me leads I should reach out to today" |
+| 2b | **Follow-up routing (ambiguous phrasing)** — "best leads for today" misfires to `leadbay_pull_leads` even with `leadbay_followup_check_in` active | `leadbay_followup_check_in` | "Show me my best leads for today" |
 | 3 | **Single-domain deep research** — "tell me about acme.com" | `leadbay_research_a_domain` | "Tell me about jaxpartycompany.com" |
 | 4 | **CSV import + AI qualification** — "I have 400 attendees, rank the most promising" | `leadbay_import_file` | "I have some leads to import" |
 | 5 | **AI qualification on top-N** — "qualify the top 10 of this batch" | `leadbay_qualify_top_n` | "Qualify the top 10 leads in my batch" |

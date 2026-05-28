@@ -2,12 +2,14 @@
 name: leadbay_pull_leads
 kind: tool-description
 short_description: |
-  Pull new leads — today's prospects, last-active lens. Render as a
-  3-col markdown table sorted by score desc; col 1 is the inline-code
-  10-segment `▰❖▱` bar + linked company + location + size; col 2 is
-  why-fits ≤20 words; col 3 is linked contact + title.
+  Pull NEW leads from the Discover wishlist — fresh prospects, not known
+  pipeline. For KNOWN leads to follow up with, use leadbay_pull_followups.
+  Render as a 3-col markdown table sorted by score desc; col 1 is the
+  inline-code 10-segment `▰❖▱` bar + linked company + location + size;
+  col 2 is why-fits ≤20 words; col 3 is linked contact + title.
 routing:
   triggers:
+    - "show me leads"
     - "show me new leads"
     - "show me today's leads"
     - "today's prospects"
@@ -19,11 +21,11 @@ routing:
       route_to: leadbay_pull_followups
     - phrase: "I'm going to <city>"
       route_to: leadbay_followups_map
-    - phrase: "reach out to"
+    - phrase: "leads I should reach out to"
       route_to: leadbay_pull_followups
-    - phrase: "get back to"
+    - phrase: "leads to get back to"
       route_to: leadbay_pull_followups
-    - phrase: "contact today"
+    - phrase: "leads to contact today"
       route_to: leadbay_pull_followups
     - phrase: "should I contact"
       route_to: leadbay_pull_followups
