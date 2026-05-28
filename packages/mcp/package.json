@@ -21,7 +21,7 @@
     "access": "public"
   },
   "scripts": {
-    "prebuild": "pnpm --filter @leadbay/promptforge build",
+    "prebuild": "pnpm --filter @leadbay/core build",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
