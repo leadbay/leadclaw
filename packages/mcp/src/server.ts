@@ -434,7 +434,6 @@ export function buildServer(
   }
 
   // UC-3: leadbay_login is NEVER registered on MCP (prompt-injection vector).
-  // It remains available only in the OpenClaw adapter.
 
   // Dedup by name (some tools may be referenced in multiple catalogues).
   // Every registered tool gets `_triggered_by` injected into its input schema
