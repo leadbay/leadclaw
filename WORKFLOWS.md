@@ -76,21 +76,21 @@ prompt: "What leads should I follow up with?"
 ```
 
 ```yaml expected
-workflow_name: Follow-up routing (reach-out phrasing)
-prompt_name: ~
+workflow_name: Follow-up routing (ambiguous discovery phrasing)
+prompt_name: leadbay_followup_check_in
 required_calls:
   - leadbay_pull_followups
 forbidden_calls:
   - leadbay_pull_leads
   - leadbay_report_outreach
 success_criteria:
-  - "called leadbay_pull_followups (NOT leadbay_pull_leads) — re-engagement intent, not discovery"
+  - "called leadbay_pull_followups (NOT leadbay_pull_leads) — user is in follow-up context, not discovery"
   - "did NOT call leadbay_pull_leads"
   - "did NOT call leadbay_report_outreach"
 ```
 
 ```yaml scenario
-prompt: "Show me leads I should reach out to today"
+prompt: "Show me my best leads for today"
 ```
 
 ```yaml expected
