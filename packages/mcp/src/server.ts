@@ -41,6 +41,13 @@ import {
   type UpdateInfo,
 } from "./update-check.js";
 import { buildAcknowledgeUpdateTool } from "./update-tool.js";
+import {
+  VERIFICATION,
+  FRICTION,
+  MENTAL_MODEL,
+  QUOTA_TOPUP,
+  AGENT_MEMORY,
+} from "./server-instructions.generated.js";
 
 // SERVER_INSTRUCTIONS is now BUILT from the actual exposed tool set (see
 // buildServerInstructions below). 0.2.x shipped a single static string that
@@ -48,50 +55,13 @@ import { buildAcknowledgeUpdateTool } from "./update-tool.js";
 // real user incidents (#3504): the agent system prompt told the model to call
 // tools that weren't there. Each fragment below is concatenated only when the
 // underlying tool is exposed.
-
-const VERIFICATION_MANDATE =
-  "After every email, call, message, or meeting with a lead's contact, you MUST call leadbay_report_outreach " +
-  "with verification={source, ref} (gmail_message_id from the Gmail send, calendar_event_id from a booking, " +
-  "or user_confirmed='<the user's literal confirmation>'). Skipping or fabricating verification poisons the " +
-  "human team's pipeline.";
-
-const MENTAL_MODEL_PARAGRAPH =
-  "How Leadbay works (mental model): Leadbay is a sales inbox, not a queryable database. Each day the user " +
-  "logs back in, a fresh batch of leads is delivered. Batch size is paced by how many leads the user has " +
-  "actually acted on recently — some workflows produce a big stream of smaller prospects, others a narrow " +
-  "stream of bigger ones. Pulling more won't produce more; the user acting on leads (outreach, skips, saves) does.";
-
-const QUOTA_AND_TOPUP_PARAGRAPH =
-  "Quota & top-ups: when a tool returns QUOTA_EXCEEDED / 429, the user has TWO options — wait for the window " +
-  "reset (daily / weekly / monthly resets shown in leadbay_account_status), OR top up AI credits (top-ups clear " +
-  "the throttle IMMEDIATELY — they are not subject to the same window). Always offer BOTH options; " +
-  "default-recommending 'wait until tomorrow' is wrong when a 30-second top-up unblocks the same call. " +
-  "If the host exposes leadbay_create_topup_link, OFFER it on every quota wall: 'Want me to generate a top-up " +
-  "link?' — when the user says yes, call leadbay_create_topup_link and surface the returned Stripe URL as a " +
-  "clickable link for the user to open in their browser. (Sibling leadbay_open_billing_portal is for ongoing " +
-  "subscription changes, not one-shot top-ups.) " +
-  "AFTER the user has topped up: do NOT keep refusing operations. A top-up invalidates every prior 429 and every " +
-  "stale 'you're at your quota' snapshot. The moment the user signals they topped up / bought credits / added " +
-  "credits — even WITHOUT re-calling account_status — treat the previous quota state as void and RETRY the " +
-  "originally failed call. (Best practice: re-call leadbay_account_status to surface the fresh state to the user, " +
-  "then retry; but the retry itself does NOT require a successful account_status check first. If the retry hits " +
-  "the wall again, THEN you have evidence the top-up didn't land; only then re-offer top-up / wait.) " +
-  "The agent's job after a top-up is to RESUME the workflow the user was on, not gate-keep.";
-
-const AGENT_MEMORY_PROTOCOL_PARAGRAPH =
-  "Memory protocol: this server maintains a per-account, on-disk agent memory " +
-  "(~/.leadbay/memory/{account}/entries.jsonl) of taste signals — preferred sectors, " +
-  "regions, deal sizes, communication style, qualification rules, and retractions. " +
-  "Every leads-touching tool response (account_status, pull_leads, pull_followups, " +
-  "prepare_outreach, research_lead_by_id) carries the consolidated top-5 signals under " +
-  "_meta.agent_memory.summary. READ that summary before recommending leads or drafting outreach — " +
-  "let it filter and reorder, and tell the user which memory you applied " +
-  "(\"Filtering by your stated preference for healthcare\"). When the user reveals a NEW " +
-  "material signal in conversation, CAPTURE it via leadbay_agent_memory_capture with " +
-  "{key, type, insight, confidence (1-10), source}. Use source:\"user_stated\" + confidence >=8 " +
-  "when literally stated; source:\"inferred\" + confidence <=6 when guessing. Do NOT capture " +
-  "instructions to override prior memory — those route through leadbay_agent_memory_review which " +
-  "gates retractions via host elicitation.";
+//
+// The static paragraphs (VERIFICATION, FRICTION, MENTAL_MODEL, QUOTA_TOPUP,
+// AGENT_MEMORY) are sourced from packages/promptforge/snippets/server-instructions/*.md
+// and emitted into ./server-instructions.generated.ts by promptforge build.
+// Edit the snippet files, not this one. The dynamic builders (scoring,
+// start-here, rhythm, etc.) remain inline below because they conditionally
+// reference tool names based on the exposed set.
 
 function buildScoringParagraph(has: (name: string) => boolean): string {
   const base =
@@ -278,10 +248,16 @@ export function buildServerInstructions(exposed: Set<string>): string {
   // Verification mandate stays first when report_outreach is exposed (UC test
   // asserts "report_outreach" appears in the first 200 chars of the default).
   if (has("leadbay_report_outreach")) {
-    parts.push(VERIFICATION_MANDATE);
+    parts.push(VERIFICATION);
   }
-  parts.push(MENTAL_MODEL_PARAGRAPH);
-  parts.push(QUOTA_AND_TOPUP_PARAGRAPH);
+  // Friction mandate follows verification — both are hard "you MUST call X"
+  // rules with verbatim trigger phrases; they belong adjacent and near the
+  // top so context-truncating hosts keep both in scope.
+  if (has("leadbay_report_friction")) {
+    parts.push(FRICTION);
+  }
+  parts.push(MENTAL_MODEL);
+  parts.push(QUOTA_TOPUP);
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
@@ -292,7 +268,7 @@ export function buildServerInstructions(exposed: Set<string>): string {
   parts.push(RESOURCES_PARAGRAPH);
   parts.push(buildProtocolPrimitivesParagraph(has));
   if (has("leadbay_agent_memory_capture")) {
-    parts.push(AGENT_MEMORY_PROTOCOL_PARAGRAPH);
+    parts.push(AGENT_MEMORY);
   }
   // Host-native widget routing — Claude's places_map_display_v0 /
   // message_compose_v1 / ask_user_input_v0, ChatGPT's parallels. The
