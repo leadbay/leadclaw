@@ -270,7 +270,7 @@ account credentials are expendable — never rotate them defensively.
 
 ## Architecture
 
-The repo is a pnpm monorepo. `core` is the shared library; `mcp` and `leadclaw` (OpenClaw) are wrappers that expose it to different clients.
+The repo is a pnpm monorepo. `core` is the shared library; `mcp` is the MCP stdio server that exposes it.
 
 ```mermaid
 graph TD
@@ -283,10 +283,6 @@ graph TD
         MCP_S["server.ts\nJSON-RPC entrypoint"]
         MCP_P["prompts.generated.ts\n(from promptforge)"]
         MCP_T["tests/\n  audit/ · eval/ · smoke/ · unit/"]
-    end
-
-    subgraph openclaw["packages/leadclaw  (OpenClaw plugin)"]
-        OC["openclaw.plugin.json\n+ contract.test.ts"]
     end
 
     subgraph core["packages/core  (shared library)"]
@@ -308,11 +304,8 @@ graph TD
     end
 
     U -->|"stdio JSON-RPC"| MCP_S
-    U -->|"OpenClaw plugin"| OC
     MCP_S --> COMP
     MCP_S --> GRAN
-    OC --> COMP
-    OC --> GRAN
     COMP --> CLIENT
     GRAN --> CLIENT
     CLIENT -->|"HTTPS"| LB_API
