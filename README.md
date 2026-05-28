@@ -21,62 +21,52 @@
 
 ## Install
 
-> **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first — you'll need it in step 2.
+> **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first.
+
+All install paths require a **Leadbay token**. Mint one first, then wire it into your client.
 
 ---
 
-### Option A — Claude Desktop (easiest, no terminal)
-
-**Step 1 — Download the extension**
-
-Grab the latest `.dxt` file from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest). Look for `leadbay-mcp-*.dxt`.
-
-**Step 2 — Install it**
-
-Open Claude Desktop → **Settings → Extensions** → drag-drop the `.dxt` file in (or click the `+` button and browse to it). Claude Desktop will show a "Leadbay MCP" entry.
-
-**Step 3 — Enter your credentials**
-
-Claude Desktop will prompt you for:
-- Your Leadbay **email**
-- Your Leadbay **password**
-- Your **region** (`us` or `fr` — check your Leadbay dashboard URL to know which)
-
-It mints a token and stores it for you. Your password is never saved.
-
-**Step 4 — Start a conversation**
-
-That's it. Open a new chat and try: *"Show me today's leads."*
-
----
-
-### Option B — Claude Desktop / Cursor / Claude Code (one command)
+### Step 1 — Mint a token
 
 Requires [Node.js 22+](https://nodejs.org).
+
+```bash
+npx -y @leadbay/mcp@latest login --email you@yourcompany.com --region us
+```
+
+You'll be prompted for your password (hidden, never saved). The token is written to `~/.config/leadbay/credentials.json` (Linux), `~/Library/Application Support/leadbay/credentials.json` (macOS), or `%APPDATA%\leadbay\credentials.json` (Windows).
+
+> `--region` is required. Check your Leadbay dashboard URL: `app-us.leadbay.app` → `us`, `app-fr.leadbay.app` → `fr`.
+
+---
+
+### Step 2 — Wire into your client
+
+#### Claude Desktop
+
+Download the `.dxt` bundle from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest) (`leadbay-mcp-*.dxt`).
+
+Open Claude Desktop → **Settings → Extensions** → drag-drop the `.dxt` file in. When prompted, paste your token and confirm your region.
+
+Restart Claude Desktop, open a new chat, and try: *"Show me today's leads."*
+
+#### Cursor / Claude Code / any other MCP client
 
 ```bash
 npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
 ```
 
-The installer:
-1. Prompts for your password (hidden — not saved anywhere)
-2. Mints a bearer token
-3. Auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code) and registers the server in each, after asking you per-target
+This combines login + client registration in one shot. Auto-detects which clients you have installed (Claude Desktop, Cursor, Claude Code) and writes the token into each, after asking you per-target.
 
-Then restart your client and try: *"Show me today's leads."*
-
-Add `--no-write` to run in read-only mode. Add `--yes` for non-interactive/CI runs. See [`packages/mcp/README.md`](packages/mcp/README.md) for the full reference.
-
----
-
-### Option C — Claude Code plugin marketplace
+#### Claude Code plugin marketplace
 
 ```text
 /plugin marketplace add leadbay/leadclaw
 /plugin install leadbay@leadbay-leadclaw
 ```
 
-Claude Code will prompt for your token and region. This registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks — no slash commands needed.
+Claude Code will prompt for your token and region. This registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks.
 
 ## Tools
 
