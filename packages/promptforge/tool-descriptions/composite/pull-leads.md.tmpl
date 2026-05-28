@@ -16,6 +16,9 @@ routing:
     - "best new leads"
     - "fresh leads"
     - "what's new today"
+  # Anti-triggers use specific phrases (not single words like "reach out") to avoid
+  # intercepting legitimate discovery intent. E.g. "reach out to new leads" should
+  # still fire pull_leads; only "leads I should reach out to" (existing pipeline) → pull_followups.
   anti_triggers:
     - phrase: "leads I should follow up with"
       route_to: leadbay_pull_followups
