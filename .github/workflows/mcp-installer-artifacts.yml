@@ -35,7 +35,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Build installer
-        run: pnpm --filter @leadbay/mcp ${{ matrix.script }}
+        run: pnpm --filter @leadbay/mcp run ${{ matrix.script }}
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
