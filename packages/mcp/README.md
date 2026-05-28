@@ -118,7 +118,59 @@ npx -y @leadbay/mcp@0.13 login \
 
 Default writes a `0600`-mode JSON file at the platform-correct credentials path (`$XDG_CONFIG_HOME/leadbay/credentials.json` on Linux, `~/Library/Application Support/leadbay/credentials.json` on macOS, `%APPDATA%\leadbay\credentials.json` on Windows). Pass `--write-config /some/path.json` to override the path. Pass `--unsafe-print-token` for legacy CI flows that scrape stdout (the token will end up in scrollback / logs — only use this if you have to). Pass `--force` to overwrite an existing file from a different account.
 
-## 2. Quickstart
+## 2. Updating the hosted MCP
+
+The hosted MCP at `https://leadbay-mcp-prod.fly.dev/mcp` can be updated in two ways.
+
+### Deploy from this repo
+
+Use this when you want Fly to run the exact code in the current checkout or after merging to `main`:
+
+```bash
+fly deploy --app leadbay-mcp-prod
+curl https://leadbay-mcp-prod.fly.dev/healthz
+```
+
+This is the current production path. Fly builds the repo `Dockerfile`, bundles `packages/mcp`, and starts `node dist/http-server.js`.
+
+### Deploy from a published npm package
+
+Use this when you want the remote MCP to run a package that has already been published to npm. Prefer pinning an exact version so production deploys are reproducible:
+
+```dockerfile
+FROM node:22-slim
+
+WORKDIR /app
+RUN npm install -g @leadbay/mcp@0.15.0
+
+ENV NODE_ENV=production
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["leadbay-mcp-http"]
+```
+
+Then point Fly at that Dockerfile and deploy:
+
+```toml
+[build]
+  dockerfile = 'Dockerfile.npm'
+```
+
+```bash
+fly deploy --app leadbay-mcp-prod
+curl https://leadbay-mcp-prod.fly.dev/healthz
+```
+
+Avoid `@latest` for production unless you intentionally want Fly deploys to pick up whatever version npm currently marks as latest:
+
+```dockerfile
+RUN npm install -g @leadbay/mcp@latest
+```
+
+That is convenient for quick tests, but less safe for production because the deployed version is no longer visible from a repo diff.
+
+## 3. Quickstart
 
 ### Claude Desktop
 
@@ -187,7 +239,7 @@ Leadbay connection OK.
   AI credits:    420 / 1000
 ```
 
-## 3. Example prompts that work
+## 4. Example prompts that work
 
 > *Find me 20 SaaS companies in Berlin that match my Ideal Buyer Profile.*
 
@@ -393,7 +445,7 @@ Client returns:
 
 The user's literal text replaces `verification.ref` in the outreach record, and the response carries `confirmed_via: "elicit"` for the SDR audit trail.
 
-## 4. Troubleshooting
+## 5. Troubleshooting
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
@@ -406,13 +458,13 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 | Claude Code can't find Leadbay in a new conversation | MCP server installed at project scope (default before 0.3.0) | Re-run with `--scope user`: `claude mcp remove leadbay && claude mcp add leadbay --scope user --env LEADBAY_TOKEN=… --env LEADBAY_REGION=us -- npx -y @leadbay/mcp@0.13` |
 | Agent reports "tool not found" for `refine_prompt` / `adjust_audience` etc. | Pre-0.3.0 install with `LEADBAY_MCP_WRITE` unset (writes were off) | Either re-run `npx @leadbay/mcp install` or remove `LEADBAY_MCP_WRITE=0` from your client config (writes are on by default in 0.3.0+) |
 
-## 5. Upgrade & rotation
+## 6. Upgrade & rotation
 
 **Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.13"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
 
 **Rotate token**: re-run `npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
 
-## 6. Advanced
+## 7. Advanced
 
 ### Exposing the granular tools and disabling write tools
 
@@ -540,7 +592,7 @@ Accepted values: `"true"|"1"|"yes"|"on"` enable; `"false"|"0"|"no"|"off"` disabl
 
 Contact data fetched through this server stays local to your MCP client session — telemetry never carries it. Requests to Leadbay are subject to the [Leadbay privacy policy](https://leadbay.ai/privacy).
 
-## 7. For maintainers — publishing
+## 8. For maintainers — publishing
 
 Releases are tag-driven via `.github/workflows/release.yml`. Bump `packages/mcp/package.json#version`, update `packages/mcp/CHANGELOG.md`, land on `main`, then:
 
