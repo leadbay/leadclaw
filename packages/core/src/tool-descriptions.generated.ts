@@ -1643,7 +1643,7 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // region: leadbay_pull_followups
 export const leadbay_pull_followups: string = `## WHEN TO USE
 
-Trigger phrases: "what should I follow up on", "leads I've already worked", "what's overdue", "leads in <city / state / country>".
+Trigger phrases: "what should I follow up on", "leads I've already worked", "what's overdue", "leads in <city / state / country>", "reach out to today", "should reach out to", "get back to", "contact today", "reconnect with", "re-engage", "leads to contact", "who should I ping".
 
 Do NOT use for: "new leads / today's prospects" → \`leadbay_pull_leads\`; "map / trip / in person" → \`leadbay_followups_map\`.
 
@@ -1836,7 +1836,7 @@ export const leadbay_pull_leads: string = `## WHEN TO USE
 
 Trigger phrases: "show me leads", "today's prospects", "best new leads".
 
-Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`.
+Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`; "reach out to" → \`leadbay_pull_followups\`; "get back to" → \`leadbay_pull_followups\`; "contact today" → \`leadbay_pull_followups\`; "should I contact" → \`leadbay_pull_followups\`; "reconnect with" → \`leadbay_pull_followups\`; "re-engage" → \`leadbay_pull_followups\`.
 
 Prefer when: fresh Discover leads; if a lens is named, pass \`lensId\` and pin it
 

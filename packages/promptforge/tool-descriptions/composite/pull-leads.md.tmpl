@@ -16,6 +16,18 @@ routing:
       route_to: leadbay_pull_followups
     - phrase: "I'm going to <city>"
       route_to: leadbay_followups_map
+    - phrase: "reach out to"
+      route_to: leadbay_pull_followups
+    - phrase: "get back to"
+      route_to: leadbay_pull_followups
+    - phrase: "contact today"
+      route_to: leadbay_pull_followups
+    - phrase: "should I contact"
+      route_to: leadbay_pull_followups
+    - phrase: "reconnect with"
+      route_to: leadbay_pull_followups
+    - phrase: "re-engage"
+      route_to: leadbay_pull_followups
   prefer_when: "fresh Discover leads; if a lens is named, pass `lensId` and pin it"
   examples:
     positive:
