@@ -142,3 +142,19 @@ pnpm -r typecheck    # must be green
 - **Eval tests** (`packages/mcp/test/eval/`) — LLM-graded scenarios. Gated by `EVAL=1`.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide: tool structure, test conventions, build pipeline, and how to add a new tool.
+
+## Publishing
+
+All releases are tag-driven — **never run `npm publish` locally.** GitHub Actions owns publishing.
+
+```bash
+# 1. Bump packages/mcp/package.json#version + add CHANGELOG entry, land PR
+git checkout main && git pull
+git tag mcp-v0.x.0
+git push origin mcp-v0.x.0
+# 2. Watch the release workflow: preflight-npm → publish-mcp
+```
+
+For dry runs: Actions → `release` → "Run workflow" → `package: mcp`, `dry_run: true`.
+
+Full runbook (token setup, failure modes, manual re-runs): [`RELEASE.md`](RELEASE.md).
