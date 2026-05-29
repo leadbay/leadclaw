@@ -45,6 +45,8 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_research_lead_by_id",
   "leadbay_research_lead_by_name_fuzzy",
   "leadbay_tour_plan",
+  "leadbay_seed_candidates",
+  "leadbay_extend_lens",
 ]);
 
 const ALL_TOOLS: Tool[] = [

@@ -1,0 +1,70 @@
+---
+name: leadbay_extend_lens
+kind: tool-description
+short_description: |
+  Queue an additive extra-refill on a lens (more leads, same criteria),
+  optionally biased by agent-picked seeds. Subject to the per-org daily
+  `LENS_EXTRA_REFILL` quota. On 429 the response is a translated envelope
+  the agent surfaces to the user with three options (smaller / wait /
+  upgrade) — it is not an error to retry blindly.
+routing:
+  triggers:
+    - "do the extend"
+    - "extend the lens now"
+    - "go ahead with these seeds"
+    - "fill more leads"
+  anti_triggers:
+    - phrase: "show me candidates"
+      route_to: leadbay_seed_candidates
+    - phrase: "show me today's leads"
+      route_to: leadbay_pull_leads
+    - phrase: "change criteria"
+      route_to: leadbay_adjust_audience
+  prefer_when: "user has approved seed selection (or wants a default-strategy fill) and wants to fire the additive refill"
+  examples:
+    positive:
+      - "Go ahead with those 4 seeds and add 20 more leads."
+      - "Extend the lens — no seeds, just fill it."
+      - "Fire the extend with the picked candidates."
+    negative:
+      - "Show me candidate seeds first."
+      - "Pull today's leads."
+      - "Narrow the audience to fintech only."
+rendering_hint: |
+  On `status: queued` → ✅ confirmation: "Queued <N> extra leads (seeds: X
+  accepted). Pull leads in ~30s to see them." Echo the lens id.
+  On `status: quota_exceeded` → surface `message` + render three options
+  via `ask_user_input_v0` (smaller count / wait until reset / upgrade).
+  On `status: refresh_in_progress` → tell user "lens is already filling, try
+  again in a minute".
+  On `status: no_valid_seeds` → tell user seeds were stale; re-call
+  `leadbay_seed_candidates` and retry.
+next_steps: extend-lens
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: false
+  openWorldHint: true
+---
+Queue an additive extra-refill on a lens — more leads on the same criteria, without changing the audience. Wraps `POST /lenses/{lensId}/extra_refill`. The fill happens asynchronously; new leads stream in over ~30s, observable through the standard `leadbay_pull_leads` flow.
+
+**Seeds are optional.** Submit `seed_lead_ids` from `leadbay_seed_candidates` to bias the recommender toward leads similar to specific known-good prospects. Omit (or empty array) → backend falls back to default centroid strategies (same behaviour as a normal lens fill). The response's `accepted_seeds` echoes the subset that passed validation.
+
+**Quota gate.** Each call is charged against the per-org daily `LENS_EXTRA_REFILL` quota at pre-flight time (FREEMIUM=0 / TIER1=150 / TIER2=1000). The **full requested batch** must fit — there is no partial fulfillment. **Pre-check via `leadbay_account_status`**: look at `quota.org.resources[]` for the `LENS_EXTRA_REFILL` entry to see how much was used today and when it resets.
+
+**Status envelope (translated from raw API errors so the agent routes on `status`).**
+
+- `status: "queued"` — fill is queued. `accepted_seeds` lists the seed IDs that passed validation. NEXT STEP: call `leadbay_pull_leads` in ~30s.
+- `status: "quota_exceeded"` — daily LENS_EXTRA_REFILL hit. Response carries `quota: {used_today, resets_at}` and a `message` to surface to the user. **Render three options via `ask_user_input_v0`**: (1) try smaller `extra_count`, (2) wait until `resets_at`, (3) upgrade plan for higher daily limit (TIER1=150, TIER2=1000). Do NOT silently retry.
+- `status: "refresh_in_progress"` — a refresh or extra-refill is already running on this lens. Tell the user to wait and call `leadbay_pull_leads` in ~30s.
+- `status: "no_valid_seeds"` — every submitted seed failed validation (the lens shape may have changed since `seed_candidates` was last called). Re-call `leadbay_seed_candidates` to get fresh IDs, then retry.
+
+{{include:headers/tool-when-to-use}} after the user has reviewed seed candidates (via `leadbay_seed_candidates`) and approved the picks, OR when the user explicitly says "just fill more leads on this lens" without naming seeds (default-strategies fill).
+
+{{include:headers/tool-when-not-to-use}} as a discovery / preview step — that's `leadbay_seed_candidates`. Not for daily inbox pulls (`leadbay_pull_leads`). Not for criteria changes (`leadbay_adjust_audience` / `leadbay_refine_prompt`).
+
+{{include:headers/verification-required-if-write}}
+
+---
+
+{{include:next-steps/extend-lens}}
