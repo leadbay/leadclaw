@@ -133,6 +133,10 @@ function sanitizeOutput(raw: string): string {
   return raw.replace(/LEADBAY_TOKEN=("[^"]+"|'[^']+'|[^\s]+)/g, "LEADBAY_TOKEN=<redacted>");
 }
 
+function isManualSetupClient(client: DetectedClient): boolean {
+  return client.id === "chatgpt-desktop" || (client.id === "claude-desktop" && client.mode?.dxt === true);
+}
+
 async function installInto(client: DetectedClient, session: LoginSession, includeWrite: boolean, telemetryEnabled: boolean): Promise<InstallResult> {
   let res: { ok: boolean; message: string };
   if (client.id === "claude-code") {
@@ -149,6 +153,8 @@ async function installInto(client: DetectedClient, session: LoginSession, includ
     }
   } else if (client.id === "chatgpt-desktop") {
     res = { ok: true, message: "manual setup required; add this MCP URL in ChatGPT Settings > Apps: " + HOSTED_MCP_URL };
+  } else if (client.id === "claude-desktop" && client.mode?.dxt === true) {
+    res = { ok: true, message: "manual setup required; install the Leadbay .dxt bundle from GitHub Releases. Claude Desktop DXT ignores legacy config writes." };
   } else {
     res = await installInJsonConfig(client.detail.split(" ")[0], session.token, session.region, includeWrite, telemetryEnabled);
   }
@@ -216,7 +222,7 @@ async function streamInstall(url: URL, res: ServerResponse): Promise<void> {
 
   const detected = await detectClients();
   const selected = detected.filter((client) => clientIds.includes(client.id));
-  const selectedHasOnlyManualSetup = selected.length > 0 && selected.every((client) => client.id === "chatgpt-desktop");
+  const selectedHasOnlyManualSetup = selected.length > 0 && selected.every(isManualSetupClient);
   if (!selected.length) {
     emit("error", "No selected agents were detected on this machine.");
     emit("done", "Install stopped.");
@@ -226,7 +232,7 @@ async function streamInstall(url: URL, res: ServerResponse): Promise<void> {
 
   let okCount = 0;
   for (const client of selected) {
-    emit("active", client.id === "chatgpt-desktop" ? `Preparing ${client.label} manual setup...` : `Installing ${client.label}...`);
+    emit("active", isManualSetupClient(client) ? `Preparing ${client.label} manual setup...` : `Installing ${client.label}...`);
     const result = await installInto(client, session, includeWrite, telemetryEnabled);
     if (result.ok) {
       okCount += 1;
@@ -237,7 +243,7 @@ async function streamInstall(url: URL, res: ServerResponse): Promise<void> {
   }
 
   emit(okCount > 0 ? "success" : "error", selectedHasOnlyManualSetup ? "Manual ChatGPT setup instructions ready." : `${okCount}/${selected.length} agent(s) installed, updated, or prepared.`);
-  emit("done", selectedHasOnlyManualSetup ? "Open ChatGPT Settings > Apps and add the MCP URL shown above." : "Restart your MCP client(s) to pick up the new server.");
+  emit("done", selectedHasOnlyManualSetup ? "Follow the manual setup instructions shown above." : "Restart your MCP client(s) to pick up the new server.");
   res.end();
 }
 
@@ -437,8 +443,8 @@ function pageHtml(): string {
     <div class="steps"><div class="step-pill active" id="pill-1">1. Sign in</div><div class="step-pill" id="pill-2">2. Agents</div><div class="step-pill" id="pill-3">3. Install</div></div>
 
     <section id="step-1"><strong>Connect your Leadbay account</strong><div class="hint">This opens Leadbay in your browser. After approval, come back here to choose where to install the MCP.</div></section>
-    <section id="step-2" class="hidden"><strong>Detected agents</strong><div class="hint">Local agents are installed automatically. ChatGPT Desktop requires manual setup with this MCP URL: ${HOSTED_MCP_URL}</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
-    <section id="step-3" class="hidden"><strong>Installing</strong><div class="hint">Keep this window open until the final message appears. ChatGPT Desktop setup is manual in ChatGPT Settings > Apps.</div></section>
+    <section id="step-2" class="hidden"><strong>Detected agents</strong><div class="hint">Local agents are installed automatically when supported. ChatGPT Desktop and Claude Desktop DXT use manual setup instructions.</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
+    <section id="step-3" class="hidden"><strong>Installing</strong><div class="hint">Keep this window open until the final message appears. Manual setup targets will show instructions instead of writing local config.</div></section>
 
     <div class="actions"><button id="back" disabled>Back</button><div class="right-actions"><button id="refresh" class="hidden">Refresh</button><button class="primary" id="next">Sign in with Leadbay</button></div></div>
     <div id="log" class="log-panel"><div class="log-row log-info">Ready.</div></div>
@@ -453,7 +459,7 @@ function pageHtml(): string {
     function line(text, error = false) { clearLog(); appendLog(error ? "error" : "info", text); }
     function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
     function setStep(next) { step = next; [1,2,3].forEach((n) => { $("step-" + n).classList.toggle("hidden", n !== step); $("pill-" + n).classList.toggle("active", n === step); }); $("back").disabled = step === 1 || step === 3; $("refresh").classList.toggle("hidden", step !== 2); $("next").classList.toggle("hidden", step === 3); $("next").textContent = step === 2 ? "Continue" : "Sign in with Leadbay"; }
-    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const badgeText = client.id === "chatgpt-desktop" ? "manual setup" : client.configured ? "update" : "install"; const badgeClass = client.id === "chatgpt-desktop" ? "badge-update" : client.configured ? "badge-update" : "badge-install"; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' <span class="' + badgeClass + '">' + badgeText + '</span></strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
+    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const manual = client.id === "chatgpt-desktop" || (client.id === "claude-desktop" && client.mode && client.mode.dxt); const detail = client.id === "claude-desktop" && client.mode && client.mode.dxt ? "Install the Leadbay .dxt bundle from GitHub Releases" : client.detail; const badgeText = manual ? "manual setup" : client.configured ? "update" : "install"; const badgeClass = manual ? "badge-update" : client.configured ? "badge-update" : "badge-install"; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' <span class="' + badgeClass + '">' + badgeText + '</span></strong><span class="detail">' + esc(detail) + '</span></span></label>'; }).join(""); }
     async function refresh() { line("Detecting agents..."); const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); line(clients.length ? "Agents detected." : "No supported agents detected."); }
     async function doLogin() { $("next").disabled = true; line("Opening Leadbay sign-in in your browser..."); try { const res = await fetch("/api/oauth-login", { method:"POST" }); const data = await res.json(); if (!data.ok) return line(data.error || "OAuth login failed.", true); sessionId = data.sessionId; line("Signed in. Detecting installed agents..."); setStep(2); await refresh(); } finally { $("next").disabled = false; } }
     async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); setStep(3); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }

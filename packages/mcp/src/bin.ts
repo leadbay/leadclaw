@@ -1737,7 +1737,12 @@ export async function runInstall(args: string[]): Promise<number> {
     } else if (c.id === "chatgpt-desktop") {
       res = {
         ok: true,
-        message: "remote MCP URL: " + HOSTED_MCP_URL + "; add it in ChatGPT Settings > Connectors",
+        message: "manual setup required; add this MCP URL in ChatGPT Settings > Apps: " + HOSTED_MCP_URL,
+      };
+    } else if (c.id === "claude-desktop" && c.mode?.dxt === true) {
+      res = {
+        ok: true,
+        message: "manual setup required; install the Leadbay .dxt bundle from GitHub Releases. Claude Desktop DXT ignores legacy config writes.",
       };
     } else {
       // claude-desktop and cursor both use the same JSON shape.
