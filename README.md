@@ -32,13 +32,32 @@ openclaw config set plugins.entries.leadclaw.region "us"   # or "fr"
 
 Start a conversation — the agent will ask for your Leadbay email and password when needed. The plugin logs you in and discards your credentials (only the session token is kept in memory).
 
-### Via MCP (Claude Desktop, Cursor, Cowork, any MCP client)
+### Via MCP (Claude Desktop, Claude Code, Cursor, Codex, ChatGPT Desktop)
+
+For macOS and Windows, download the latest installer from [GitHub Releases](https://github.com/leadbay/leadclaw/releases/latest):
+
+- macOS: download the `.dmg`
+- Windows: download the `.exe`
+
+For Linux, use the command-based installer; no Linux desktop package is published:
 
 ```bash
-npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@latest installer
 ```
 
-The installer auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code), prompts you per-target, and writes the token into each client's config. Add `--no-write` to disable the composite write tools. Full per-client setup, env vars, troubleshooting, and a tour of the MCP primitives is in [`packages/mcp/README.md`](packages/mcp/README.md).
+The installer asks for your Leadbay email/region/password, detects installed clients, and only offers real targets it can configure. It installs local MCP config for Claude Desktop, Claude Code, Cursor, and Codex. For ChatGPT Desktop, it shows the hosted MCP URL instead:
+
+```text
+https://leadbay-mcp-prod.fly.dev/mcp
+```
+
+For terminal-only installs or automation, use:
+
+```bash
+npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
+```
+
+Add `--no-write` to disable composite write tools. Full per-client setup, env vars, troubleshooting, and a tour of the MCP primitives is in [`packages/mcp/README.md`](packages/mcp/README.md).
 
 ### Via the Claude Code plugin marketplace
 
