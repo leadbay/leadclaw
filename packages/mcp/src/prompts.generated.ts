@@ -760,7 +760,11 @@ After the status line, propose the obvious refresh / progress-check / recovery a
 
 When \`bulk_qualify_leads\` returns, surface results in two parts.
 
-**Status line first** — one sentence in this exact format: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)". If all leads qualified, omit the "still processing" clause. If all leads are still processing, say "0 leads qualified · N still processing". Name the still-processing leads by lead_id so the user can poll later.
+**Status line first** — one sentence in this exact format: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)". Variants:
+- If bulk_qualify returns \`exhausted=true\` or \`total_unqualified_found=0\` (all leads were already qualified): "✓ All N leads already qualified · 0 still processing"
+- If all newly qualified (none still pending): "✓ N leads qualified"
+- If some still pending: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)"
+- If all still processing: "✓ 0 leads qualified · N still processing (lead IDs: X, Y, Z)"
 
 **Then a refreshed table** — re-pull the newly-qualified leads via \`leadbay_pull_leads\` with the same \`lensId\` and render them using the canonical pull_leads layout:
 
