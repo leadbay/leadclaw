@@ -2,7 +2,7 @@
   "name": "leadclaw-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Leadbay packages monorepo — @leadbay/core shared tools, @leadbay/leadclaw OpenClaw adapter, @leadbay/mcp MCP server",
+  "description": "Leadbay packages monorepo — @leadbay/core shared tools, @leadbay/mcp MCP server",
   "type": "module",
   "scripts": {
     "prompts:build": "pnpm --filter @leadbay/promptforge build",

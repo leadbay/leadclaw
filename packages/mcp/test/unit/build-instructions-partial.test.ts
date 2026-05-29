@@ -91,4 +91,21 @@ describe("buildServerInstructions — partial composite-write exposures", () => 
     expect(out).toMatch(/propose outreach to the user/);
     expect(out).not.toMatch(/leadbay_report_outreach/);
   });
+
+  it("report_friction absent → friction mandate paragraph is dropped", () => {
+    // Friction tool stripped from the exposed set. Mirrors the
+    // verification-mandate gate: a host that doesn't expose the tool
+    // must not see an ambient instruction naming a tool it can't call.
+    const exposed = new Set(READS);
+    const out = buildServerInstructions(exposed);
+    expect(out).not.toMatch(/leadbay_report_friction/);
+    expect(out).not.toMatch(/Silent friction capture/);
+  });
+
+  it("report_friction exposed → friction mandate paragraph fires", () => {
+    const exposed = new Set([...READS, "leadbay_report_friction"]);
+    const out = buildServerInstructions(exposed);
+    expect(out).toMatch(/Silent friction capture/);
+    expect(out).toMatch(/MUST call leadbay_report_friction/);
+  });
 });

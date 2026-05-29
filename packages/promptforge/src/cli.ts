@@ -3,7 +3,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { assemble, type AssembleResult } from "./assembler.js";
-import { emit, diff, writeIfDifferent } from "./emit.js";
+import { emit, emitServerInstructions, diff, writeIfDifferent } from "./emit.js";
 import { buildSkillFiles, type SkillFile } from "./skills.js";
 import { discoverRegisteredTools } from "./registry.js";
 
@@ -16,6 +16,18 @@ const REPO_ROOT = resolve(PKG_ROOT, "..", "..");
 const CORE_SRC = join(REPO_ROOT, "packages", "core", "src");
 const PROMPTS_OUT = join(REPO_ROOT, "packages", "mcp", "src", "prompts.generated.ts");
 const TOOL_DESC_OUT = join(REPO_ROOT, "packages", "core", "src", "tool-descriptions.generated.ts");
+const SERVER_INSTRUCTIONS_OUT = join(
+  REPO_ROOT,
+  "packages",
+  "mcp",
+  "src",
+  "server-instructions.generated.ts",
+);
+const SERVER_INSTRUCTIONS_SNIPPETS = join(
+  PKG_ROOT,
+  "snippets",
+  "server-instructions",
+);
 const SKILLS_OUT_DIR = join(
   REPO_ROOT,
   ".claude-plugin",
@@ -52,10 +64,13 @@ function runAssemble(): AssembleAndEmitOutput {
 
 function cmdBuild(): void {
   const { promptsModule, toolDescriptionsModule, skillFiles } = runAssemble();
+  const serverInstructionsModule = emitServerInstructions(SERVER_INSTRUCTIONS_SNIPPETS);
   const r1 = writeIfDifferent(PROMPTS_OUT, promptsModule);
   const r2 = writeIfDifferent(TOOL_DESC_OUT, toolDescriptionsModule);
+  const r3 = writeIfDifferent(SERVER_INSTRUCTIONS_OUT, serverInstructionsModule);
   console.log(`[forge] ${PROMPTS_OUT.replace(REPO_ROOT + "/", "")}: ${r1.changed ? "wrote" : "unchanged"}`);
   console.log(`[forge] ${TOOL_DESC_OUT.replace(REPO_ROOT + "/", "")}: ${r2.changed ? "wrote" : "unchanged"}`);
+  console.log(`[forge] ${SERVER_INSTRUCTIONS_OUT.replace(REPO_ROOT + "/", "")}: ${r3.changed ? "wrote" : "unchanged"}`);
   for (const skill of skillFiles) {
     const fullPath = join(SKILLS_OUT_DIR, skill.relativePath);
     const r = writeIfDifferent(fullPath, skill.content);
@@ -67,16 +82,19 @@ function cmdBuild(): void {
 
 function cmdCheck(): void {
   const { promptsModule, toolDescriptionsModule, skillFiles } = runAssemble();
+  const serverInstructionsModule = emitServerInstructions(SERVER_INSTRUCTIONS_SNIPPETS);
   const d1 = diff(PROMPTS_OUT, promptsModule);
   const d2 = diff(TOOL_DESC_OUT, toolDescriptionsModule);
+  const d3 = diff(SERVER_INSTRUCTIONS_OUT, serverInstructionsModule);
   const staleSkills: string[] = [];
   for (const skill of skillFiles) {
     const fullPath = join(SKILLS_OUT_DIR, skill.relativePath);
     if (!diff(fullPath, skill.content).matches) staleSkills.push(fullPath);
   }
-  if (!d1.matches || !d2.matches || staleSkills.length > 0) {
+  if (!d1.matches || !d2.matches || !d3.matches || staleSkills.length > 0) {
     if (!d1.matches) console.error(`[forge] ${PROMPTS_OUT} is stale. Run pnpm prompts:build.`);
     if (!d2.matches) console.error(`[forge] ${TOOL_DESC_OUT} is stale. Run pnpm prompts:build.`);
+    if (!d3.matches) console.error(`[forge] ${SERVER_INSTRUCTIONS_OUT} is stale. Run pnpm prompts:build.`);
     for (const path of staleSkills) {
       console.error(`[forge] ${path} is stale. Run pnpm prompts:build.`);
     }
