@@ -23,7 +23,7 @@
 
 > **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first.
 
-### Step 1 — Connect Leadbay
+### Step 1 — Connect Leadbay with the universal installer
 
 Requires [Node.js 22+](https://nodejs.org).
 
@@ -32,6 +32,18 @@ npx -y -p @leadbay/mcp@latest installer
 ```
 
 Click **Sign in with Leadbay**. The installer opens OAuth in your browser, then comes back to the app so you can choose which local agents to configure.
+
+The installer works on macOS, Windows, and Linux. It only shows supported clients that are actually installed on the machine:
+
+| Client | Installer behavior |
+|--------|--------------------|
+| Claude Code | Registers/removes `leadbay` with `claude mcp add/remove --scope user` |
+| Claude Desktop | Writes/removes only the `mcpServers.leadbay` entry in `claude_desktop_config.json` |
+| Cursor | Writes/removes only the `mcpServers.leadbay` entry in Cursor's MCP config |
+| Codex | Writes/removes only the `[mcp_servers.leadbay]` block in `~/.codex/config.toml` and the Leadbay-managed shell export block |
+| ChatGPT Desktop | Uses the hosted MCP URL, no local config write |
+
+Uninstall is scoped to Leadbay. It does not rewrite unrelated client settings or remove other MCP servers.
 
 ---
 
