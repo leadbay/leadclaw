@@ -1353,6 +1353,7 @@ export async function installInCodexConfig(
     } else {
       mkdirSync(dirname(configPath), { recursive: true });
     }
+    const hadLeadbayConfig = /(^|\r?\n)\[mcp_servers\.leadbay\]\r?\n/.test(existing);
 
     const next = mergeCodexConfig(
       existing,
@@ -1368,7 +1369,7 @@ export async function installInCodexConfig(
       }
     } catch { /* best-effort */ }
 
-    return { ok: true, message: "registered" };
+    return { ok: true, message: hadLeadbayConfig ? "updated" : "registered" };
   } catch (err: any) {
     return { ok: false, message: err?.message ?? String(err) };
   }
