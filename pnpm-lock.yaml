@@ -39,12 +39,6 @@ importers:
         specifier: ^0.25.0
         version: 0.25.12
 
-  packages/leadclaw:
-    devDependencies:
-      '@leadbay/core':
-        specifier: workspace:*
-        version: link:../core
-
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':

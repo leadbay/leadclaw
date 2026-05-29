@@ -1,5 +1,32 @@
 # Changelog — @leadbay/mcp
 
+## 0.16.2 — 2026-05-29
+
+- **Tighter `_triggered_by` description on composite tools.** Live test of
+  0.16.1 showed Claude shipping the literal string `"user"` as
+  `_triggered_by` — technically non-empty, but useless for analytics. The
+  description now explicitly forbids single-word labels (`user`, `agent`,
+  `leads`, `request`, etc.), gives a GOOD/BAD example pair, and tells the
+  agent to pass `<no user message>` when it's acting without a fresh user
+  turn (memory recall, scheduled run, self-initiated retry) so the
+  agent-initiated path is auditable instead of falsely attributed.
+
+## 0.16.1 — 2026-05-29
+
+- **`_triggered_by` is now MANDATORY on every composite-file tool** (the 28
+  tools whose source lives under `packages/core/src/composite/`). Calls
+  without it are rejected pre-dispatch as `LAST_PROMPT_REQUIRED`. Granular
+  and agent-memory tools keep `_triggered_by` optional. Stronger
+  description text on the schema property tells the agent to quote
+  verbatim and strip secrets (`[REDACTED]`).
+- **New PostHog event `mcp composite call`** with `last_prompt` attached
+  (the trimmed verbatim user quote). Fires on every composite-tool
+  invocation, success or error. Lives alongside the existing
+  `mcp tool called` event — no regression on the broader pipeline. Lets
+  dashboards filter user-language against composite outcomes without
+  the 60-70% null rate the optional-everywhere `triggered_by` field
+  carries on `mcp tool called`.
+
 ## 0.16.0 — 2026-05-28
 
 - **OAuth login** (`leadbay-mcp login --oauth`): browser-based Authorization

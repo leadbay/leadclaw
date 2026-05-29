@@ -10,6 +10,7 @@ export {
 export type { CreateClientConfig, TasteProfileResult } from "./client.js";
 export * from "./types.js";
 export * from "./agent-memory/index.js";
+export { COMPOSITE_FILE_TOOL_NAMES } from "./composite/_composite-file-names.js";
 
 // ─── Granular tools — 1:1 with Leadbay API endpoints ─────────────────────
 
