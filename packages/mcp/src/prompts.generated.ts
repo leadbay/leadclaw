@@ -761,7 +761,7 @@ After the status line, propose the obvious refresh / progress-check / recovery a
 When \`bulk_qualify_leads\` returns, surface results in two parts.
 
 **Status line first** — one sentence in this exact format: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)". Variants:
-- If bulk_qualify returns \`exhausted=true\` or \`total_unqualified_found=0\` (all leads were already qualified): "✓ All N leads already qualified · 0 still processing"
+- If bulk_qualify returns \`exhausted=true\` or \`total_unqualified_found=0\` (all leads were already qualified): "✓ All N/N leads already qualified · 0 still processing" — use the actual count (e.g. "All 10/10 leads already qualified")
 - If all newly qualified (none still pending): "✓ N leads qualified"
 - If some still pending: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)"
 - If all still processing: "✓ 0 leads qualified · N still processing (lead IDs: X, Y, Z)"
