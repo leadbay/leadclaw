@@ -916,7 +916,7 @@ describe("structuredContent conformance — every outputSchema declarer (iter17)
       const { mcpClient } = await connect();
       const result = await mcpClient.callTool({
         name: c.toolName,
-        arguments: c.arguments,
+        arguments: { ...c.arguments, _triggered_by: "test trigger" },
       });
       expect(
         (result as any).isError,
