@@ -61,6 +61,12 @@ The installer opens Leadbay OAuth in your browser, detects installed clients, an
 > node packages/mcp/dist/installer-electron.js --uninstall  # uninstall
 > ```
 > Use `installer-electron.js` — not `installer-gui.js`. The `gui` file is the raw HTTP server; `installer-electron.js` is the Electron entry point that wraps it in a window.
+>
+> Or use the local script:
+> ```bash
+> pnpm --filter @leadbay/mcp installer
+> pnpm --filter @leadbay/mcp installer -- --uninstall
+> ```
 
 #### ChatGPT Desktop
 

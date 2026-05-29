@@ -58,7 +58,8 @@ It downloads the npm package, opens the installer app, signs in with Leadbay OAu
 From a repo checkout, run the same native installer with:
 
 ```bash
-pnpm --filter @leadbay/mcp installer:gui
+pnpm --filter @leadbay/mcp installer
+pnpm --filter @leadbay/mcp installer -- --uninstall
 ```
 
 For terminal-only installs (works on macOS, Windows, and Linux):

@@ -27,7 +27,8 @@
     "test": "vitest run",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test",
-    "installer:gui": "pnpm run build && electron --no-sandbox installer/electron-main.cjs",
+    "installer": "pnpm run build && electron --no-sandbox installer/electron-main.cjs",
+    "installer:gui": "pnpm run installer",
     "installer:gui:web": "pnpm run build && node dist/installer-gui.js"
   },
   "dependencies": {
