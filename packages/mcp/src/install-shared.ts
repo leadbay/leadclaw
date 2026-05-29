@@ -68,6 +68,23 @@ async function findOnPath(bin: string): Promise<string | null> {
   });
 }
 
+async function windowsStoreAppInstalled(packageName: string, appName: string): Promise<boolean> {
+  if (process.platform !== "win32") return false;
+  return await new Promise<boolean>((resolve) => {
+    const script = [
+      `$pkg = Get-AppxPackage -Name '${packageName}' -ErrorAction SilentlyContinue`,
+      `$app = Get-StartApps | Where-Object { $_.AppID -like '${packageName}_*!${appName}' } | Select-Object -First 1`,
+      "if ($pkg -or $app) { exit 0 } else { exit 1 }",
+    ].join("; ");
+    const child = spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.on("close", (code: number | null) => resolve(code === 0));
+    child.on("error", () => resolve(false));
+  });
+}
+
 async function isClaudeDesktopInstalled(home: string): Promise<boolean> {
   if (process.platform === "darwin") {
     return existsSync("/Applications/Claude.app") || existsSync(home + "/Applications/Claude.app");
@@ -103,7 +120,7 @@ async function isChatGptDesktopInstalled(home: string): Promise<boolean> {
     const local = process.env.LOCALAPPDATA ?? home + "/AppData/Local";
     const programFiles = process.env.ProgramFiles;
     const programFilesX86 = process.env["ProgramFiles(x86)"];
-    return [
+    const exeInstalled = [
       local + "/Programs/ChatGPT/ChatGPT.exe",
       local + "/ChatGPT/ChatGPT.exe",
       programFiles ? programFiles + "/OpenAI/ChatGPT/ChatGPT.exe" : null,
@@ -111,6 +128,7 @@ async function isChatGptDesktopInstalled(home: string): Promise<boolean> {
       programFilesX86 ? programFilesX86 + "/OpenAI/ChatGPT/ChatGPT.exe" : null,
       programFilesX86 ? programFilesX86 + "/ChatGPT/ChatGPT.exe" : null,
     ].some((candidate) => candidate !== null && existsSync(candidate));
+    return exeInstalled || await windowsStoreAppInstalled("OpenAI.ChatGPT-Desktop", "ChatGPT");
   }
   return false;
 }
