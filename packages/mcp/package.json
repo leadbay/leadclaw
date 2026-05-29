@@ -28,10 +28,6 @@
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test",
     "installer:gui": "pnpm run build && electron --no-sandbox installer/electron-main.cjs",
-    "installer:package": "pnpm run build && electron-builder --config installer/electron-builder.cjs",
-    "installer:package:linux": "pnpm run build && electron-builder --config installer/electron-builder.cjs --linux AppImage deb --publish never",
-    "installer:package:mac": "pnpm run build && electron-builder --config installer/electron-builder.cjs --mac dmg --publish never",
-    "installer:package:win": "pnpm run build && electron-builder --config installer/electron-builder.cjs --win nsis --publish never",
     "installer:gui:web": "pnpm run build && node dist/installer-gui.js"
   },
   "dependencies": {
@@ -43,8 +39,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
-    "@leadbay/core": "workspace:*",
-    "electron-builder": "^26.8.1"
+    "@leadbay/core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

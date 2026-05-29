@@ -46,30 +46,23 @@ You'll be prompted for your password (hidden, never saved). This writes a token 
 3. Paste your token and confirm your region when prompted
 4. Restart Claude Desktop, open a new chat, and try: *"Show me today's leads."*
 
-#### macOS / Windows installer
+#### Guided installer app
 
-For the guided installer app, download the latest desktop installer from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest):
-
-- macOS: download the `.dmg`
-- Windows: download the `.exe`
-
-The installer detects installed clients and only offers real targets it can configure. It writes local MCP config for Claude Desktop, Claude Code, Cursor, and Codex.
-
-#### Linux installer
-
-Linux uses the command-based installer; no Linux desktop package is published:
+On macOS, Windows, and Linux, launch the guided Electron installer from the npm package:
 
 ```bash
-npx -y @leadbay/mcp@latest installer           # install wizard
+npx -y @leadbay/mcp@latest installer              # install wizard
 npx -y @leadbay/mcp@latest installer --uninstall  # uninstall wizard
 ```
+
+The installer detects installed clients and only offers real targets it can configure. It writes local MCP config for Claude Desktop, Claude Code, Cursor, and Codex.
 
 > **Testing from a local build** (before publishing to npm), run from the repo root after `pnpm -r build`:
 > ```bash
 > node packages/mcp/dist/installer-electron.js              # install
 > node packages/mcp/dist/installer-electron.js --uninstall  # uninstall
 > ```
-> Use `installer-electron.js` — not `installer-gui.js`. The `gui` file is the raw HTTP server and only opens a browser tab; `installer-electron.js` is the Electron entry point that wraps it in a window.
+> Use `installer-electron.js` — not `installer-gui.js`. The `gui` file is the raw HTTP server; `installer-electron.js` is the Electron entry point that wraps it in a window.
 
 #### ChatGPT Desktop
 
@@ -92,15 +85,11 @@ Works on macOS, Windows, and Linux. Mints a token and registers the server into 
 #### Uninstall
 
 ```bash
-# macOS / Windows / Linux — GUI wizard (Linux only for now)
 npx -y @leadbay/mcp@latest installer --uninstall
 ```
 
-Opens the uninstall wizard in your browser. Only shows clients that already have Leadbay MCP configured — select the ones to clean up and click "Remove selected". De-registers Claude Code, strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`.
+Opens the uninstall wizard. Only shows clients that already have Leadbay MCP configured — select the ones to clean up and click "Remove selected". De-registers Claude Code, strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`.
 
-> On macOS / Windows, use the desktop installer app or remove entries manually until the GUI uninstaller is ported.
-
-This mints a token **and** registers the server into every MCP client it detects, asking you per-target. You can skip Step 1 if you use this path.
 
 #### Claude Code plugin marketplace
 

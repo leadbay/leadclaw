@@ -1526,14 +1526,6 @@ export async function uninstallShellExports(): Promise<{ ok: boolean; message: s
 }
 
 export async function runUninstall(_args: string[]): Promise<number> {
-  if (process.platform !== "linux") {
-    process.stderr.write(
-      "leadbay-mcp uninstall: only supported on Linux for now.\n" +
-        "  On macOS / Windows, use the desktop installer or remove entries manually.\n"
-    );
-    return 2;
-  }
-  // Delegate to the browser-based GUI wizard (same path as `installer`).
   return runInstallerGuiCommand(["--uninstall"]);
 }
 

@@ -47,13 +47,13 @@ to suppress this ambient metadata.
 
 ## 1. Install
 
-For Linux, use the command-based installer; no desktop package is published:
+On macOS, Windows, and Linux, launch the guided Electron installer from the npm package:
 
 ```bash
 npx -y @leadbay/mcp@latest installer
 ```
 
-It downloads the npm package, opens the installer app, asks for email/region/password, detects installed MCP clients, then installs the selected ones. macOS and Windows releases also publish double-clickable desktop installers.
+It downloads the npm package, opens the installer app, asks for email/region/password, detects installed MCP clients, then installs the selected ones. No separate `.dmg`, `.exe`, `.deb`, or AppImage is published for now.
 
 From a repo checkout, run the same native installer with:
 
@@ -68,13 +68,13 @@ npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
 # (you'll be prompted for your password — it's not echoed)
 ```
 
-To uninstall (GUI wizard, Linux only for now):
+To uninstall with the same guided app:
 
 ```bash
 npx -y @leadbay/mcp@latest installer --uninstall
 ```
 
-Only shows clients that already have Leadbay MCP configured. On macOS / Windows, use the desktop installer app or remove entries manually until the GUI uninstaller is ported.
+Only shows clients that already have Leadbay MCP configured.
 
 These commands:
 
