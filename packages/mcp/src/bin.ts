@@ -37,7 +37,10 @@ leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
 
 USAGE
   leadbay-mcp            Run the MCP stdio server (for Claude Desktop, Cursor, etc.)
-  leadbay-mcp installer   Open the browser-based installer wizard.
+  leadbay-mcp installer           Open the browser-based installer wizard.
+  leadbay-mcp installer --uninstall  Open the browser-based uninstaller wizard (Linux only).
+                                  Detects which clients have Leadbay configured and removes
+                                  the entry from each one you select.
   leadbay-mcp install    One-shot setup: mint a token AND register the MCP server with
                          your installed MCP clients (Claude Code / Claude Desktop /
                          Cursor / Codex). Auto-detects which clients are installed; you confirm
@@ -1149,6 +1152,117 @@ export async function appendShellExports(
   }
 }
 
+// ─── uninstall helpers ────────────────────────────────────────────────────────
+
+// Remove the managed shell export block written by `install`. Returns the
+// stripped content and whether anything was actually changed.
+export function stripShellExportBlock(existing: string): { content: string; changed: boolean } {
+  const managedBlock = /(^|\n)# Added by leadbay-mcp install\nexport LEADBAY_TOKEN=.*\nexport LEADBAY_REGION=.*\nexport LEADBAY_TELEMETRY_ENABLED=.*\n(?:export LEADBAY_MCP_WRITE=.*\n)?/g;
+  const stripped = existing.replace(managedBlock, (match, prefix: string) => prefix || "");
+  if (stripped === existing) return { content: existing, changed: false };
+  return { content: stripped.trimEnd() + (stripped.trimEnd() ? "\n" : ""), changed: true };
+}
+
+// Remove the [mcp_servers.leadbay] block from a Codex TOML file.
+export function stripCodexBlock(existing: string): { content: string; changed: boolean } {
+  const stripped = existing.replace(
+    /(^|\r?\n)\[mcp_servers\.leadbay\]\r?\n[\s\S]*?(?=\r?\n\[|$)/g,
+    (match, prefix: string) => (prefix && match.startsWith(prefix) ? prefix : "")
+  );
+  if (stripped === existing) return { content: existing, changed: false };
+  const trimmed = stripped.trimEnd();
+  return { content: trimmed ? trimmed + "\n" : "", changed: true };
+}
+
+// Remove leadbay from a JSON MCP config (Claude Desktop / Cursor shape).
+export function stripJsonMcpEntry(existing: string): { content: string; changed: boolean } {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(existing);
+  } catch {
+    return { content: existing, changed: false };
+  }
+  if (!parsed?.mcpServers?.leadbay) return { content: existing, changed: false };
+  delete parsed.mcpServers.leadbay;
+  return { content: JSON.stringify(parsed, null, 2) + "\n", changed: true };
+}
+
+export async function uninstallFromClaudeCode(): Promise<{ ok: boolean; message: string }> {
+  const result = await runClaudeMcp(buildClaudeCodeRemoveArgs());
+  if (result.spawnError) return { ok: false, message: `failed to spawn claude: ${result.spawnError}` };
+  if (result.code === 0) return { ok: true, message: "removed" };
+  const stderr = result.stderr.trim();
+  if (/not found|does not exist|no server/i.test(stderr)) return { ok: true, message: "already absent" };
+  return { ok: false, message: `claude mcp remove exited ${result.code}: ${stderr.slice(0, 200)}` };
+}
+
+export async function uninstallFromJsonConfig(configPath: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
+    if (!existsSync(configPath)) return { ok: true, message: "config not found — nothing to do" };
+    const existing = readFileSync(configPath, "utf8");
+    const { content, changed } = stripJsonMcpEntry(existing);
+    if (!changed) return { ok: true, message: "leadbay entry not present" };
+    writeFileSync(configPath, content, "utf8");
+    return { ok: true, message: "removed" };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? String(err) };
+  }
+}
+
+export async function uninstallFromCodexConfig(configPath: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
+    if (!existsSync(configPath)) return { ok: true, message: "config not found — nothing to do" };
+    const existing = readFileSync(configPath, "utf8");
+    const { content, changed } = stripCodexBlock(existing);
+    if (!changed) return { ok: true, message: "leadbay block not present" };
+    writeFileSync(configPath, content, "utf8");
+    return { ok: true, message: "removed from TOML" };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? String(err) };
+  }
+}
+
+export async function uninstallShellExports(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
+    const os = await import("node:os");
+    const home = os.homedir();
+    const candidates = [`${home}/.zshrc`, `${home}/.bashrc`, `${home}/.profile`].filter((p) =>
+      existsSync(p)
+    );
+    const updated: string[] = [];
+    for (const p of candidates) {
+      const existing = readFileSync(p, "utf8");
+      const { content, changed } = stripShellExportBlock(existing);
+      if (!changed) continue;
+      writeFileSync(p, content, "utf8");
+      updated.push(p);
+    }
+    return {
+      ok: true,
+      message: updated.length
+        ? `removed from ${updated.join(", ")}; restart terminal or source the file`
+        : "managed export block not found in shell files",
+    };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? String(err) };
+  }
+}
+
+export async function runUninstall(_args: string[]): Promise<number> {
+  if (process.platform !== "linux") {
+    process.stderr.write(
+      "leadbay-mcp uninstall: only supported on Linux for now.\n" +
+        "  On macOS / Windows, use the desktop installer or remove entries manually.\n"
+    );
+    return 2;
+  }
+  // Delegate to the browser-based GUI wizard (same path as `installer`).
+  return runInstallerGuiCommand(["--uninstall"]);
+}
+
 async function runInstallerGuiCommand(args: string[]): Promise<number> {
   const { spawn } = await import("node:child_process");
   const guiPath = fileURLToPath(new URL("./installer-electron.js", import.meta.url));
@@ -1507,6 +1621,9 @@ async function main(): Promise<void> {
   }
   if (arg === "install") {
     process.exit(await runInstall(process.argv.slice(3)));
+  }
+  if (arg === "uninstall") {
+    process.exit(await runUninstall(process.argv.slice(3)));
   }
   if (arg === "login") {
     process.exit(await runLogin(process.argv.slice(3)));

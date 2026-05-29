@@ -9,7 +9,12 @@ import {
   installInCodexConfig,
   installInJsonConfig,
   loginAt,
+  uninstallFromClaudeCode,
+  uninstallFromCodexConfig,
+  uninstallFromJsonConfig,
+  uninstallShellExports,
 } from "./bin.js";
+import { existsSync, readFileSync } from "node:fs";
 import {
   detectClients,
   formatInstallOsLabel,
@@ -30,6 +35,32 @@ const PORT = Number(process.env.LEADBAY_INSTALLER_PORT ?? 0);
 const sessions = new Map<string, LoginSession>();
 
 export type InstallerGuiOptions = { openBrowser?: boolean; port?: number };
+
+// Returns true when the client already has a leadbay MCP entry configured.
+function isLeadbayConfigured(client: DetectedClient): boolean {
+  if (client.id === "claude-code") {
+    // Claude Code stores MCP servers in its own config; no easy file path to
+    // check without spawning `claude mcp list`. Check the JSON configs for
+    // claude-desktop / cursor instead; for claude-code we fall back to false
+    // (the install step will detect "already exists" and update anyway).
+    return false;
+  }
+  if (client.id === "codex") {
+    const configPath = client.detail;
+    if (!existsSync(configPath)) return false;
+    try {
+      return readFileSync(configPath, "utf8").includes("[mcp_servers.leadbay]");
+    } catch { return false; }
+  }
+  if (client.id === "chatgpt-desktop") return false;
+  // claude-desktop and cursor: JSON config
+  const configPath = client.detail.split(" ")[0];
+  if (!existsSync(configPath)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, "utf8"));
+    return Boolean(parsed?.mcpServers?.leadbay);
+  } catch { return false; }
+}
 export type InstallerGuiHandle = { url: string; close: () => Promise<void> };
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -197,6 +228,136 @@ async function streamInstall(url: URL, res: ServerResponse): Promise<void> {
   res.end();
 }
 
+async function streamUninstall(url: URL, res: ServerResponse): Promise<void> {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+  });
+
+  const clientIds = (url.searchParams.get("clients") ?? "").split(",").filter(Boolean);
+  const emit = (level: LogLevel, message: string) => sendSse(res, { level, message });
+
+  if (!clientIds.length) {
+    emit("error", "Select at least one agent.");
+    emit("done", "Uninstall stopped.");
+    res.end();
+    return;
+  }
+
+  const detected = await detectClients();
+  const selected = detected.filter((c) => clientIds.includes(c.id));
+  if (!selected.length) {
+    emit("error", "No selected agents were detected on this machine.");
+    emit("done", "Uninstall stopped.");
+    res.end();
+    return;
+  }
+
+  let okCount = 0;
+  for (const client of selected) {
+    emit("active", `Removing from ${client.label}...`);
+    let res2: { ok: boolean; message: string };
+    if (client.id === "claude-code") {
+      res2 = await uninstallFromClaudeCode();
+    } else if (client.id === "codex") {
+      const tomlRes = await uninstallFromCodexConfig(client.detail);
+      const shellRes = await uninstallShellExports();
+      res2 = tomlRes.ok && shellRes.ok
+        ? { ok: true, message: `${tomlRes.message}; ${shellRes.message}` }
+        : { ok: false, message: `toml: ${tomlRes.message}; shell: ${shellRes.message}` };
+    } else {
+      res2 = await uninstallFromJsonConfig(client.detail.split(" ")[0]);
+    }
+    if (res2.ok) {
+      okCount += 1;
+      emit("success", `${client.label}: ${res2.message}`);
+    } else {
+      emit("error", `${client.label}: ${res2.message}`);
+    }
+  }
+
+  emit(okCount > 0 ? "success" : "error", `${okCount}/${selected.length} agent(s) removed.`);
+  emit("done", "Restart your MCP client(s) to complete the removal.");
+  res.end();
+}
+
+function pageUninstallHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leadbay MCP uninstaller</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f6f7f4; --panel:#fff; --text:#1d241f; --muted:#65706a; --line:#dbe2dc; --accent:#008f7a; --accent2:#06705f; --danger:#b42318; --shadow:0 18px 45px rgba(32,45,38,.12); }
+    @media (prefers-color-scheme: dark) { :root { --bg:#121612; --panel:#1b211c; --text:#eef4ed; --muted:#a4afa7; --line:#303930; --shadow:0 18px 45px rgba(0,0,0,.28); } }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.45 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; display:grid; place-items:center; padding:28px; }
+    main { width:min(880px,100%); background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); overflow:hidden; }
+    header { padding:22px 24px 16px; border-bottom:1px solid var(--line); display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+    h1 { font-size:22px; line-height:1.15; margin:0 0 6px; letter-spacing:0; }
+    .meta { color:var(--muted); }
+    .badge { border:1px solid var(--line); border-radius:999px; padding:5px 10px; color:var(--muted); white-space:nowrap; }
+    .steps { display:grid; grid-template-columns:repeat(2,1fr); border-bottom:1px solid var(--line); }
+    .step-pill { padding:12px 24px; border-right:1px solid var(--line); color:var(--muted); font-weight:700; }
+    .step-pill:last-child { border-right:0; }
+    .step-pill.active { color:var(--text); background:color-mix(in srgb,var(--danger),transparent 88%); }
+    section { padding:22px 24px; }
+    .hidden { display:none; }
+    .hint,.detail { color:var(--muted); }
+    .agents { display:grid; gap:8px; margin-top:12px; }
+    .agent { display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:center; padding:12px; border:1px solid var(--line); border-radius:6px; }
+    .agent strong { display:block; }
+    .agent input { width:18px; min-height:18px; }
+    .actions { display:flex; justify-content:space-between; gap:10px; border-top:1px solid var(--line); padding:16px 24px 20px; }
+    .right-actions { display:flex; gap:10px; }
+    button { min-height:40px; border-radius:6px; border:1px solid var(--line); background:transparent; color:var(--text); padding:8px 14px; font:inherit; font-weight:700; cursor:pointer; }
+    button.danger { background:var(--danger); border-color:var(--danger); color:#fff; }
+    button:disabled { opacity:.6; cursor:wait; }
+    .log-panel { margin:0; background:color-mix(in srgb,var(--panel),#000 7%); border-top:1px solid var(--line); padding:16px 24px; min-height:76px; max-height:280px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; }
+    .log-row { display:flex; gap:10px; align-items:flex-start; padding:3px 0; white-space:pre-wrap; word-break:break-word; }
+    .log-row::before { width:56px; flex:0 0 56px; font-weight:800; text-transform:uppercase; font-size:11px; letter-spacing:.02em; }
+    .log-info { color:var(--muted); } .log-info::before { content:"info"; }
+    .log-active { color:#c99700; } .log-active::before { content:"run"; }
+    .log-success { color:#19a974; } .log-success::before { content:"ok"; }
+    .log-error { color:var(--danger); } .log-error::before { content:"error"; }
+    .badge-configured { font-size:10px; font-weight:800; padding:2px 6px; border-radius:999px; vertical-align:middle; background:color-mix(in srgb,var(--danger),transparent 80%); color:var(--danger); }
+    .badge-absent { font-size:10px; font-weight:800; padding:2px 6px; border-radius:999px; vertical-align:middle; background:color-mix(in srgb,var(--muted),transparent 80%); color:var(--muted); }
+    @media (max-width:680px) { body{padding:12px;place-items:start center;} header{display:block;} .badge{display:inline-block;margin-top:12px;} .steps{grid-template-columns:1fr;} .step-pill{border-right:0;border-bottom:1px solid var(--line);} .actions{display:grid;} .right-actions{display:grid;} }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div><h1>Leadbay MCP uninstaller</h1><div class="meta" id="meta">${formatInstallOsLabel()}</div></div><div class="badge">v${VERSION}</div></header>
+    <div class="steps"><div class="step-pill active" id="pill-1">1. Select agents</div><div class="step-pill" id="pill-2">2. Remove</div></div>
+
+    <section id="step-1"><strong>Detected agents</strong><div class="hint">Select which agents to remove Leadbay MCP from.</div><div class="agents" id="agents"></div></section>
+    <section id="step-2" class="hidden"><strong>Removing</strong><div class="hint">Keep this window open until the final message appears.</div></section>
+
+    <div class="actions"><button id="back" disabled>Back</button><div class="right-actions"><button id="refresh">Refresh</button><button class="danger" id="next">Remove selected</button></div></div>
+    <div id="log" class="log-panel"><div class="log-row log-info">Ready.</div></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let step = 1;
+    let clients = [];
+    function clearLog() { $("log").innerHTML = ""; }
+    function appendLog(level, text) { const row = document.createElement("div"); row.className = "log-row log-" + level; row.textContent = text; $("log").appendChild(row); $("log").scrollTop = $("log").scrollHeight; }
+    function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+    function setStep(n) { step = n; [1,2].forEach((i) => { $("step-" + i).classList.toggle("hidden", i !== step); $("pill-" + i).classList.toggle("active", i === step); }); $("back").disabled = step === 1 || step === 2; $("next").classList.toggle("hidden", step === 2); $("refresh").classList.toggle("hidden", step === 2); }
+    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No Leadbay MCP installation detected on this machine.</div>'; return; } root.innerHTML = clients.map((c) => '<label class="agent"><input type="checkbox" data-client="' + esc(c.id) + '" checked /><span><strong>' + esc(c.label) + '</strong><span class="detail">' + esc(c.detail) + '</span></span></label>').join(""); }
+    async function refresh() { clearLog(); appendLog("info", "Detecting agents..."); const res = await fetch("/api/status"); const data = await res.json(); clients = (data.clients || []).filter((c) => c.configured); renderAgents(); appendLog("info", clients.length ? "Agents detected." : "No Leadbay MCP installation detected on this machine."); }
+    async function doUninstall() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) { clearLog(); appendLog("error", "Select at least one agent."); return; } setStep(2); clearLog(); appendLog("info", "Starting removal..."); const params = new URLSearchParams({ clients: selected.join(",") }); const events = new EventSource("/api/uninstall-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Uninstall stream disconnected."); events.close(); }; }
+    $("back").addEventListener("click", () => setStep(1));
+    $("refresh").addEventListener("click", refresh);
+    $("next").addEventListener("click", doUninstall);
+    refresh();
+  </script>
+</body>
+</html>`;
+}
+
 function pageHtml(): string {
   return `<!doctype html>
 <html lang="en">
@@ -250,6 +411,10 @@ function pageHtml(): string {
     .log-error { color:var(--danger); }
     .log-error::before { content:"error"; }
     .error { color:var(--danger); }
+    .badge-install,.badge-update { font-size:10px; font-weight:800; padding:2px 6px; border-radius:999px; vertical-align:middle; }
+    .badge-install { background:color-mix(in srgb,var(--accent),transparent 80%); color:var(--accent2); }
+    .badge-update { background:color-mix(in srgb,#c99700,transparent 80%); color:#a07800; }
+    @media (prefers-color-scheme: dark) { .badge-update { color:#f0c040; } .badge-install { color:#00c9a0; } }
     @media (max-width:680px) { body{padding:12px;place-items:start center;} header{display:block;} .badge{display:inline-block;margin-top:12px;} .grid,.steps{grid-template-columns:1fr;} .step-pill{border-right:0;border-bottom:1px solid var(--line);} .actions{display:grid;} .right-actions{display:grid;} }
   </style>
 </head>
@@ -276,7 +441,7 @@ function pageHtml(): string {
     function line(text, error = false) { clearLog(); appendLog(error ? "error" : "info", text); }
     function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
     function setStep(next) { step = next; [1,2,3,4].forEach((n) => { $("step-" + n).classList.toggle("hidden", n !== step); $("pill-" + n).classList.toggle("active", n === step); }); $("back").disabled = step === 1 || step === 4; $("refresh").classList.toggle("hidden", step !== 3); $("next").classList.toggle("hidden", step === 4); $("next").textContent = step === 3 ? "Install selected" : step === 2 ? "Sign in" : "Next"; }
-    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + '</strong><span class="detail">' + esc(client.detail) + '</span></span></label>').join(""); }
+    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const badge = client.configured ? '<span class="badge-update">update</span>' : '<span class="badge-install">install</span>'; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' ' + badge + '</strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
     async function refresh() { line("Detecting agents..."); const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); line(clients.length ? "Agents detected." : "No supported agents detected."); }
     async function doLogin() { const body = { email: $("email").value.trim(), password: $("password").value, region: $("region").value }; if (!body.email || !body.password) return line("Email and password are required.", true); $("next").disabled = true; line("Signing in..."); try { const res = await fetch("/api/login", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }); const data = await res.json(); if (!data.ok) return line(data.error || "Login failed.", true); sessionId = data.sessionId; line("Signed in. Detecting installed agents..."); setStep(3); await refresh(); } finally { $("next").disabled = false; } }
     async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); setStep(4); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }
@@ -306,7 +471,12 @@ export async function startInstallerGui(options: InstallerGuiOptions = {}): Prom
         return;
       }
       if (req.method === "GET" && req.url === "/api/status") {
-        sendJson(res, 200, { os: formatInstallOsLabel(), hostedMcpUrl: HOSTED_MCP_URL, clients: await detectClients() });
+        const clients = await detectClients();
+        sendJson(res, 200, {
+          os: formatInstallOsLabel(),
+          hostedMcpUrl: HOSTED_MCP_URL,
+          clients: clients.map((c) => ({ ...c, configured: isLeadbayConfigured(c) })),
+        });
         return;
       }
       if (req.method === "POST" && req.url === "/api/login") {
@@ -341,8 +511,54 @@ export async function startInstallerGui(options: InstallerGuiOptions = {}): Prom
   });
 }
 
+export async function startUninstallerGui(options: InstallerGuiOptions = {}): Promise<InstallerGuiHandle> {
+  const server = createServer(async (req, res) => {
+    try {
+      if (req.method === "GET" && req.url === "/") {
+        const raw = pageUninstallHtml();
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(raw) });
+        res.end(raw);
+        return;
+      }
+      if (req.method === "GET" && req.url === "/api/status") {
+        const clients = await detectClients();
+        sendJson(res, 200, {
+          os: formatInstallOsLabel(),
+          clients: clients.map((c) => ({ ...c, configured: isLeadbayConfigured(c) })),
+        });
+        return;
+      }
+      if (req.method === "GET" && req.url?.startsWith("/api/uninstall-stream")) {
+        await streamUninstall(new URL(req.url, "http://127.0.0.1"), res);
+        return;
+      }
+      sendJson(res, 404, { ok: false, error: "not found" });
+    } catch (err: any) {
+      sendJson(res, 500, { ok: false, error: err?.message ?? String(err) });
+    }
+  });
+
+  return await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(options.port ?? PORT, "127.0.0.1", async () => {
+      server.off("error", reject);
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : options.port ?? PORT;
+      const url = `http://127.0.0.1:${port}/`;
+      process.stderr.write(`Leadbay MCP uninstaller GUI: ${url}\n`);
+      if (options.openBrowser !== false) await openBrowser(url).catch(() => undefined);
+      resolve({ url, close: () => new Promise((closeResolve, closeReject) => server.close((err) => (err ? closeReject(err) : closeResolve()))) });
+    });
+  });
+}
+
 async function main(): Promise<void> {
-  await startInstallerGui({ openBrowser: !process.argv.includes("--no-open") });
+  const uninstall = process.argv.includes("--uninstall");
+  if (uninstall) {
+    await startUninstallerGui({ openBrowser: !process.argv.includes("--no-open") });
+  } else {
+    await startInstallerGui({ openBrowser: !process.argv.includes("--no-open") });
+  }
 }
 
 const isEntrypoint = (() => {

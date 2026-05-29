@@ -79,6 +79,14 @@ Use the token from Step 1 in the connector auth flow.
 npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
 ```
 
+#### Uninstall (Linux)
+
+```bash
+npx -y @leadbay/mcp@latest installer --uninstall
+```
+
+Opens the same GUI wizard as the installer, but in uninstall mode. Only shows clients that already have Leadbay MCP configured. Select the ones to clean up and click "Remove selected" — it de-registers Claude Code, strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`.
+
 This mints a token **and** registers the server into every MCP client it detects, asking you per-target. You can skip Step 1 if you use this path.
 
 #### Claude Code plugin marketplace
@@ -112,6 +120,7 @@ Claude Code prompts for your token and region. Registers the MCP server **and** 
 | `leadbay_import_status` | Status of a running import job |
 | `leadbay_resolve_import_rows` | Resolve import rows to lead IDs |
 | `leadbay_list_mappable_fields` | List CRM fields available for mapping |
+| `leadbay_recall_ordered_titles` | List job titles previously enriched by the org (use before `leadbay_enrich_titles`) |
 | `leadbay_create_topup_link` | Generate a Stripe top-up link (quota recovery) |
 | `leadbay_open_billing_portal` | Open the billing portal |
 
@@ -153,7 +162,7 @@ The MCP server automatically uses your **active lens** (the last lens you used i
 | `LEADBAY_REGION` | Yes | `us` or `fr` |
 | `LEADBAY_MCP_WRITE` | No | Set to `0` to disable write tools (default: on) |
 | `LEADBAY_MCP_ADVANCED` | No | Set to `1` to expose granular tools (default: off) |
-| `LEADBAY_API_BASE_URL` | No | Override API URL (for staging/dev) |
+| `LEADBAY_BASE_URL` | No | Override API URL (for staging/dev) |
 
 ## Workflows
 

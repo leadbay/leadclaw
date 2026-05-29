@@ -11,14 +11,17 @@ if (process.platform === "linux" && process.env.LEADBAY_INSTALLER_ELECTRON_SANDB
 
 async function createWindow() {
   const mod = await import(pathToFileURL(path.join(__dirname, "../dist/installer-gui.js")).href);
-  handle = await mod.startInstallerGui({ openBrowser: false });
+  const isUninstall = process.argv.includes("--uninstall");
+  handle = isUninstall
+    ? await mod.startUninstallerGui({ openBrowser: false })
+    : await mod.startInstallerGui({ openBrowser: false });
 
   win = new BrowserWindow({
     width: 920,
     height: 760,
     minWidth: 720,
     minHeight: 620,
-    title: "Leadbay MCP Installer",
+    title: isUninstall ? "Leadbay MCP Uninstaller" : "Leadbay MCP Installer",
     backgroundColor: "#f6f7f4",
     autoHideMenuBar: true,
     webPreferences: {
