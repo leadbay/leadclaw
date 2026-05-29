@@ -53,7 +53,9 @@ USAGE
   leadbay-mcp            Run the MCP stdio server (for Claude Desktop, Cursor, etc.)
   leadbay-mcp installer              Open the guided Electron installer wizard.
   leadbay-mcp installer --uninstall  Open the guided Electron uninstaller wizard.
-  leadbay-mcp-installer              Same installer wizard via the dedicated npm bin.
+  installer                          Same installer wizard via the short npm bin
+                                     (npx -y -p @leadbay/mcp@latest installer).
+  leadbay-mcp-installer              Same installer wizard via the explicit npm bin.
   leadbay-mcp install --oauth
                          One-shot setup: browser OAuth AND register the MCP server with
                          your installed MCP clients (Claude Code / Claude Desktop /

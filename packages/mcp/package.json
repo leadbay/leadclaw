@@ -7,6 +7,7 @@
   "bin": {
     "leadbay-mcp": "dist/bin.js",
     "leadbay-mcp-http": "dist/http-server.js",
+    "installer": "dist/installer-electron.js",
     "leadbay-mcp-installer": "dist/installer-electron.js"
   },
   "files": [

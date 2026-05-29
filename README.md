@@ -28,7 +28,7 @@
 Requires [Node.js 22+](https://nodejs.org).
 
 ```bash
-npx -y -p @leadbay/mcp@latest leadbay-mcp-installer
+npx -y -p @leadbay/mcp@latest installer
 ```
 
 Click **Sign in with Leadbay**. The installer opens OAuth in your browser, then comes back to the app so you can choose which local agents to configure.
@@ -49,8 +49,8 @@ Click **Sign in with Leadbay**. The installer opens OAuth in your browser, then 
 On macOS, Windows, and Linux, launch the guided Electron installer from the npm package:
 
 ```bash
-npx -y -p @leadbay/mcp@latest leadbay-mcp-installer              # install wizard
-npx -y -p @leadbay/mcp@latest leadbay-mcp-installer --uninstall  # uninstall wizard
+npx -y -p @leadbay/mcp@latest installer              # install wizard
+npx -y -p @leadbay/mcp@latest installer --uninstall  # uninstall wizard
 ```
 
 The installer opens Leadbay OAuth in your browser, detects installed clients, and only offers real targets it can configure. It writes local MCP config for Claude Desktop, Claude Code, Cursor, and Codex.
@@ -89,7 +89,7 @@ Works on macOS, Windows, and Linux. Opens OAuth in your browser and registers th
 #### Uninstall
 
 ```bash
-npx -y -p @leadbay/mcp@latest leadbay-mcp-installer --uninstall
+npx -y -p @leadbay/mcp@latest installer --uninstall
 ```
 
 Opens the uninstall wizard. Only shows clients that already have Leadbay MCP configured — select the ones to clean up and click "Remove selected". De-registers Claude Code, strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`.
