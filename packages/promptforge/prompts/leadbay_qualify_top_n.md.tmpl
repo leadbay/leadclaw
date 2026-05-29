@@ -39,7 +39,7 @@ While it polls, expect notifications / progress events showing per-lead transiti
 
 When `bulk_qualify_leads` returns, surface results in two parts.
 
-**Status line first** — one sentence using the status-inline shape above: how many qualified, how many are still running (name them by lead_id + lead name if available so the user can poll later).
+**Status line first** — one sentence in this exact format: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)". If all leads qualified, omit the "still processing" clause. If all leads are still processing, say "0 leads qualified · N still processing". Name the still-processing leads by lead_id so the user can poll later.
 
 **Then a refreshed table** — re-pull the newly-qualified leads via `leadbay_pull_leads` with the same `lensId` and render them using the canonical pull_leads layout:
 

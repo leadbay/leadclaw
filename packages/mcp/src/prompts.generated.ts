@@ -735,7 +735,9 @@ If the prompt's body and the tool's RENDERING appear to conflict, the tool's REN
 
 
 # PHASE 1 — LAUNCH
-Call \`leadbay_bulk_qualify_leads\` with \`count={{arg:count_or_default}}\`.
+Call \`leadbay_bulk_qualify_leads\` with \`count={{arg:count_or_default}}\` and \`wait_for_completion=true\` (synchronous mode — waits for results before returning).
+
+**Resilience rule:** If \`leadbay_bulk_qualify_leads\` returns a BulkTracker-not-configured error or similar infrastructure error, do NOT retry with \`wait_for_completion=false\`. Instead, proceed directly to Phase 3 and call \`leadbay_pull_leads\` to surface the already-qualified leads in the current batch.
 
 # PHASE 2 — POLL
 While it polls, expect notifications / progress events showing per-lead transitions. Surface meaningful ones (e.g. "lead X just finished") to me as they arrive — one inline status sentence per check, never expanded into a card:
@@ -758,7 +760,7 @@ After the status line, propose the obvious refresh / progress-check / recovery a
 
 When \`bulk_qualify_leads\` returns, surface results in two parts.
 
-**Status line first** — one sentence using the status-inline shape above: how many qualified, how many are still running (name them by lead_id + lead name if available so the user can poll later).
+**Status line first** — one sentence in this exact format: "✓ N leads qualified · M still processing (lead IDs: X, Y, Z)". If all leads qualified, omit the "still processing" clause. If all leads are still processing, say "0 leads qualified · N still processing". Name the still-processing leads by lead_id so the user can poll later.
 
 **Then a refreshed table** — re-pull the newly-qualified leads via \`leadbay_pull_leads\` with the same \`lensId\` and render them using the canonical pull_leads layout:
 
