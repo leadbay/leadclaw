@@ -107,11 +107,11 @@ The plugin install gives you **two surfaces in one shot**:
 
 You can verify the skills installed by running `/skill list` after install. To uninstall everything, `/plugin uninstall leadbay@leadbay-leadclaw` removes the MCP server registration **and** the skills together.
 
-### Claude Desktop 2026 (DXT)
+### Claude Desktop
 
-Claude Desktop 2026 ships the DXT (Desktop Extension) system — the legacy `claude_desktop_config.json` is UI-prefs-only there and gets overwritten by the app. If you're on 2026, **install the `.dxt` / `.mcpb` bundle** from [Releases](https://github.com/leadbay/leadclaw/releases/latest) (drag-drop into Settings → Extensions). On first launch, the extension opens Leadbay in your browser for OAuth consent, auto-detects your region through stargate, then persists the resulting token locally. The extension settings only ask whether write tools should be enabled.
+The guided installer writes the local `mcpServers.leadbay` entry in `claude_desktop_config.json` with `npx -y @leadbay/mcp@0.16`, like the Linux flow. Restart Claude Desktop after install.
 
-`leadbay-mcp install` detects Claude Desktop 2026 and skips the legacy config write automatically.
+The `.dxt` / `.mcpb` bundle from [Releases](https://github.com/leadbay/leadclaw/releases/latest) remains available as an alternative install path.
 
 ### `npm install -g` says "EACCES" / "permission denied"
 

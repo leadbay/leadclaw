@@ -51,10 +51,9 @@ Uninstall is scoped to Leadbay. It does not rewrite unrelated client settings or
 
 #### Claude Desktop
 
-1. Download `leadbay-mcp-*.dxt` from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest)
-2. Double-click it — Claude Desktop opens and asks you to confirm the install
-3. Approve the Leadbay OAuth browser flow on first launch
-4. Restart Claude Desktop, open a new chat, and try: *"Show me today's leads."*
+Use the guided installer above. It writes the local `mcpServers.leadbay` entry in `claude_desktop_config.json` with `npx -y @leadbay/mcp@0.16`, then Claude Desktop runs the published MCP package.
+
+The `.dxt` / `.mcpb` bundle from [Releases](https://github.com/leadbay/leadclaw/releases/latest) remains available as an alternative, but the universal installer path is the recommended path in this PR.
 
 #### Guided installer app
 
