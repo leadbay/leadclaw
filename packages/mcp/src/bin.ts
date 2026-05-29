@@ -51,10 +51,9 @@ leadbay-mcp ${VERSION} — Leadbay Model Context Protocol server
 
 USAGE
   leadbay-mcp            Run the MCP stdio server (for Claude Desktop, Cursor, etc.)
-  leadbay-mcp installer           Open the browser-based installer wizard.
-  leadbay-mcp installer --uninstall  Open the browser-based uninstaller wizard (Linux only).
-                                  Detects which clients have Leadbay configured and removes
-                                  the entry from each one you select.
+  leadbay-mcp installer              Open the guided Electron installer wizard.
+  leadbay-mcp installer --uninstall  Open the guided Electron uninstaller wizard.
+  leadbay-mcp-installer              Same installer wizard via the dedicated npm bin.
   leadbay-mcp install    One-shot setup: mint a token AND register the MCP server with
                          your installed MCP clients (Claude Code / Claude Desktop /
                          Cursor / Codex). Auto-detects which clients are installed; you confirm
