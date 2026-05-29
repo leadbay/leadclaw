@@ -23,17 +23,15 @@
 
 > **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first.
 
-### Step 1 — Mint a token (required for everyone)
+### Step 1 — Connect Leadbay
 
 Requires [Node.js 22+](https://nodejs.org).
 
 ```bash
-npx -y @leadbay/mcp@latest login --email you@yourcompany.com --region us
+npx -y -p @leadbay/mcp@latest leadbay-mcp-installer
 ```
 
-You'll be prompted for your password (hidden, never saved). This writes a token to your machine — you'll paste it in the next step.
-
-> Not sure of your region? Check your Leadbay dashboard URL: `app-us.leadbay.app` → `us`, `app-fr.leadbay.app` → `fr`.
+Click **Sign in with Leadbay**. The installer opens OAuth in your browser, then comes back to the app so you can choose which local agents to configure.
 
 ---
 
@@ -43,7 +41,7 @@ You'll be prompted for your password (hidden, never saved). This writes a token 
 
 1. Download `leadbay-mcp-*.dxt` from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest)
 2. Double-click it — Claude Desktop opens and asks you to confirm the install
-3. Paste your token and confirm your region when prompted
+3. Approve the Leadbay OAuth browser flow on first launch
 4. Restart Claude Desktop, open a new chat, and try: *"Show me today's leads."*
 
 #### Guided installer app
@@ -55,7 +53,7 @@ npx -y -p @leadbay/mcp@latest leadbay-mcp-installer              # install wizar
 npx -y -p @leadbay/mcp@latest leadbay-mcp-installer --uninstall  # uninstall wizard
 ```
 
-The installer detects installed clients and only offers real targets it can configure. It writes local MCP config for Claude Desktop, Claude Code, Cursor, and Codex.
+The installer opens Leadbay OAuth in your browser, detects installed clients, and only offers real targets it can configure. It writes local MCP config for Claude Desktop, Claude Code, Cursor, and Codex.
 
 > **Testing from a local build** (before publishing to npm), run from the repo root after `pnpm -r build`:
 > ```bash
@@ -72,15 +70,15 @@ ChatGPT Desktop connects to the hosted MCP URL instead of a local config file:
 https://leadbay-mcp-prod.fly.dev/mcp
 ```
 
-Use the token from Step 1 in the connector auth flow.
+Use the connector auth flow to approve Leadbay.
 
 #### Terminal-only install / automation (all platforms)
 
 ```bash
-npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@latest install --oauth
 ```
 
-Works on macOS, Windows, and Linux. Mints a token and registers the server into every detected MCP client, asking per-target. Pass `--yes` to skip prompts (CI/scripts). Pass `--target claude-code,cursor` to scope to specific clients.
+Works on macOS, Windows, and Linux. Opens OAuth in your browser and registers the server into every detected MCP client, asking per-target. Pass `--yes` to skip prompts after auth. Pass `--target claude-code,cursor` to scope to specific clients.
 
 #### Uninstall
 
@@ -98,7 +96,7 @@ Opens the uninstall wizard. Only shows clients that already have Leadbay MCP con
 /plugin install leadbay@leadbay-leadclaw
 ```
 
-Claude Code prompts for your token and region. Registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks.
+Claude Code prompts for Leadbay auth/config. Registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks.
 
 ## Tools
 
@@ -160,7 +158,7 @@ The MCP server automatically uses your **active lens** (the last lens you used i
 
 | Env var | Required | Description |
 |---------|----------|-------------|
-| `LEADBAY_TOKEN` | Yes | Bearer token (set by the installer) |
+| `LEADBAY_TOKEN` | Yes | Local OAuth bearer credential (set by the installer) |
 | `LEADBAY_REGION` | Yes | `us` or `fr` |
 | `LEADBAY_MCP_WRITE` | No | Set to `0` to disable write tools (default: on) |
 | `LEADBAY_MCP_ADVANCED` | No | Set to `1` to expose granular tools (default: off) |
@@ -216,4 +214,4 @@ git push origin mcp-v0.x.0
 
 For dry runs: Actions → `release` → "Run workflow" → `package: mcp`, `dry_run: true`.
 
-Full runbook (token setup, failure modes, manual re-runs): [`RELEASE.md`](RELEASE.md).
+Full runbook (auth setup, failure modes, manual re-runs): [`RELEASE.md`](RELEASE.md).

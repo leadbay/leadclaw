@@ -37,7 +37,7 @@ export async function resolveClientFromToken(
           error: true,
           code: "AUTH_MISSING",
           message: "Missing bearer token on hosted MCP request.",
-          hint: "Pass your Leadbay token in the Authorization header: `Authorization: Bearer <token>`. Mint a token with `npx -y @leadbay/mcp login --email <you> --region <us|fr>`.",
+          hint: "Pass a Leadbay OAuth bearer token in the Authorization header: `Authorization: Bearer <token>`. Authenticate locally with `npx -y @leadbay/mcp login --oauth`.",
         },
         fallbackRegion
       ),
@@ -79,7 +79,7 @@ export async function resolveClientFromToken(
             error: true,
             code: firstAuth.code,
             message: firstAuth.message,
-            hint: "Verify the bearer token is valid. Pin the region with an `X-Leadbay-Region: us|fr` header to skip auto-probing. Mint a fresh token with `npx -y @leadbay/mcp login --email <you> --region <us|fr>`.",
+            hint: "Verify the bearer token is valid. Pin the region with an `X-Leadbay-Region: us|fr` header to skip auto-probing. Authenticate again with `npx -y @leadbay/mcp login --oauth`.",
           } satisfies LeadbayError,
           "us"
         ),

@@ -54,13 +54,15 @@ USAGE
   leadbay-mcp installer              Open the guided Electron installer wizard.
   leadbay-mcp installer --uninstall  Open the guided Electron uninstaller wizard.
   leadbay-mcp-installer              Same installer wizard via the dedicated npm bin.
-  leadbay-mcp install    One-shot setup: mint a token AND register the MCP server with
+  leadbay-mcp install --oauth
+                         One-shot setup: browser OAuth AND register the MCP server with
                          your installed MCP clients (Claude Code / Claude Desktop /
                          Cursor / Codex). Auto-detects which clients are installed; you confirm
-                         before each write. Token never lands in terminal scrollback.
+                         before each write. Credentials never land in terminal scrollback.
                          Run this first if you're getting started.
-  leadbay-mcp login      Lower-level: just mint a bearer token (no auto-install).
-                         Use when you want to copy the token into a config file
+  leadbay-mcp login --oauth
+                         Lower-level: authenticate only (no auto-install).
+                         Use when you want to copy the credential into a config file
                          yourself.
   leadbay-mcp doctor     Validate your token, probe your region, print account + quota.
   leadbay-mcp --version  Print version
@@ -143,7 +145,7 @@ function parseLogLevel(raw: string | undefined): LogLevel {
 function exitWithTokenError(): never {
   process.stderr.write(
     "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
-      "  1. Run: npx -y @leadbay/mcp install --email <you> --region <us|fr>\n" +
+      "  1. Run: npx -y @leadbay/mcp install --oauth\n" +
       "  2. Set it in your MCP client config (e.g. claude_desktop_config.json).\n" +
       "\n" +
       "Run `leadbay-mcp --help` for the full config template.\n"
@@ -369,7 +371,7 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<Resolved
     // the agent can render to the user.
     process.stderr.write(
       "leadbay-mcp: LEADBAY_TOKEN environment variable is required.\n" +
-        "  1. Run: npx -y @leadbay/mcp install --email <you> --region <us|fr>\n" +
+        "  1. Run: npx -y @leadbay/mcp install --oauth\n" +
         "  2. Set it in your MCP client config (e.g. claude_desktop_config.json).\n" +
         "\n" +
         "Run `leadbay-mcp --help` for the full config template.\n"
@@ -382,7 +384,7 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<Resolved
           error: true,
           code: "AUTH_MISSING",
           message: "LEADBAY_TOKEN environment variable is not set.",
-          hint: "Run `npx -y @leadbay/mcp install --email <you> --region <us|fr>` to mint a token, then set LEADBAY_TOKEN in your MCP client config.",
+          hint: "Run `npx -y @leadbay/mcp install --oauth` to authenticate, then set LEADBAY_TOKEN in your MCP client config.",
         },
         region
       ),
@@ -446,7 +448,7 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<Resolved
             error: true,
             code: firstAuth.code,
             message: firstAuth.message,
-            hint: "Verify your LEADBAY_TOKEN is valid. If you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr to skip auto-probing. Mint a fresh token with `leadbay-mcp login --email <you> --region <us|fr>`.",
+            hint: "Verify your LEADBAY_TOKEN is valid. If you know your region, set LEADBAY_REGION=us or LEADBAY_REGION=fr to skip auto-probing. Authenticate again with `leadbay-mcp login --oauth`.",
           },
           "us"
         ),
@@ -1545,14 +1547,19 @@ async function runInstallerGuiCommand(args: string[]): Promise<number> {
 }
 
 export async function runInstall(args: string[]): Promise<number> {
+  const useOAuth = hasFlag(args, "oauth");
+  const useStaging = hasFlag(args, "staging");
   const email = parseFlag(args, "email");
-  if (!email) {
+  if (!email && !useOAuth) {
     process.stderr.write(
-      "Usage: leadbay-mcp install --email you@example.com [--region us|fr]\n" +
+      "Usage: leadbay-mcp install --oauth [--region us|fr]\n" +
+        "       leadbay-mcp install --email you@example.com [--region us|fr]\n" +
         "                          [--allow-region-fallback] [--no-write] [--no-telemetry]\n" +
         "                          [--target claude-code,claude-desktop,cursor,codex]\n" +
         "                          [--yes] [--force-legacy]\n" +
-        "  Mints a token AND registers the MCP server with your installed clients (at user scope).\n" +
+        "  Authenticates with Leadbay and registers the MCP server with your installed clients (at user scope).\n" +
+        "  --oauth             Use browser OAuth instead of email/password.\n" +
+        "  --staging           Point OAuth at staging Leadbay endpoints.\n" +
         "  --target            Comma-separated subset; default = all detected.\n" +
         "  --no-write          Disable composite write tools (refine_prompt, report_outreach,\n" +
         "                      adjust_audience, etc.). They are ON by default since 0.3.0;\n" +
@@ -1590,7 +1597,7 @@ export async function runInstall(args: string[]): Promise<number> {
     process.stderr.write(`leadbay-mcp install: invalid --region '${regionArg}' (use us or fr)\n`);
     return 2;
   }
-  if (!pinnedRegion && !allowFallback) {
+  if (!pinnedRegion && !allowFallback && !useOAuth) {
     process.stderr.write(
       "leadbay-mcp install: --region us|fr (or $LEADBAY_REGION) is required by default.\n" +
         "  This avoids sending your password to a Leadbay backend you don't use.\n" +
@@ -1623,32 +1630,48 @@ export async function runInstall(args: string[]): Promise<number> {
     process.stderr.write(
       "leadbay-mcp install: no MCP clients detected on this machine.\n" +
         "  Install Claude Code (https://docs.claude.com/claude-code), Claude Desktop, ChatGPT Desktop, Cursor, or Codex first,\n" +
-        "  or use `leadbay-mcp login --write-config /path/to/config.json` to mint a token without auto-install.\n"
+        "  or use `leadbay-mcp login --oauth --write-config /path/to/config.json` to authenticate without auto-install.\n"
     );
     return 1;
   }
 
-  // Prompt for password BEFORE asking confirmations — so users who change their
-  // mind after typing the password don't have to redo it.
-  const password = await readPassword();
-  if (!password) {
-    process.stderr.write("leadbay-mcp install: empty password\n");
-    return 2;
-  }
-
-  // Mint token.
   let token: string;
   let region: "us" | "fr";
   try {
-    if (pinnedRegion && !allowFallback) {
-      const { REGIONS } = await import("@leadbay/core");
-      const baseUrl = REGIONS[pinnedRegion];
-      token = await loginAt(baseUrl, email, password);
-      region = pinnedRegion;
+    if (useOAuth) {
+      if (pinnedRegion) {
+        region = pinnedRegion;
+      } else {
+        process.stderr.write("Detecting your region from stargate…\n");
+        region = await inferRegionViaStargate({ staging: useStaging });
+        process.stderr.write(`Detected region: ${region.toUpperCase()}\n`);
+      }
+      const baseUrl = OAUTH_BASE_URLS[useStaging ? "staging" : "prod"][region];
+      const { hostname } = await import("node:os");
+      const { accessToken } = await oauthLogin({
+        authServerBaseUrl: baseUrl,
+        clientName: `Leadbay MCP installer @ ${hostname()}`,
+        log: (m) => process.stderr.write(m),
+      });
+      token = accessToken;
     } else {
-      const result = await resolveRegion(email, password, pinnedRegion ?? undefined);
-      token = result.token;
-      region = result.region;
+      // Prompt for password after validation so users do not type it before a
+      // fast-failing target or region error.
+      const password = await readPassword();
+      if (!password) {
+        process.stderr.write("leadbay-mcp install: empty password\n");
+        return 2;
+      }
+      if (pinnedRegion && !allowFallback) {
+        const { REGIONS } = await import("@leadbay/core");
+        const baseUrl = REGIONS[pinnedRegion];
+        token = await loginAt(baseUrl, email!, password);
+        region = pinnedRegion;
+      } else {
+        const result = await resolveRegion(email!, password, pinnedRegion ?? undefined);
+        token = result.token;
+        region = result.region;
+      }
     }
   } catch (err: any) {
     process.stderr.write(`leadbay-mcp@${VERSION} install: ${err?.message ?? String(err)}\n`);
@@ -1737,10 +1760,10 @@ export async function runInstall(args: string[]): Promise<number> {
     }
   }
   process.stderr.write(
-    `\nThe token was written into client config files but never printed to your terminal.\n` +
+    `\nThe Leadbay credential was written into client config files but never printed to your terminal.\n` +
       `Verify with: LEADBAY_TOKEN=$(...) npx -y @leadbay/mcp@0.16 doctor\n` +
       `Restart your MCP client(s) to pick up the new server.\n` +
-      `If you ever leak the token, run \`leadbay-mcp login --email <you> --region <us|fr>\` to mint a fresh one (which invalidates the prior session).\n`
+      `If you ever leak the credential, run \`leadbay-mcp login --oauth\` to create a fresh one.\n`
   );
   return anyOk ? 0 : 1;
 }

@@ -5,7 +5,7 @@
 <!--
 LLM HINT — if you're an AI agent reading this README to install the server:
   - Use ONLY the commands shown verbatim in §1. Do not invent variants.
-  - For the legacy email/password install, DO NOT tell the user
+  - Prefer OAuth install paths. For the legacy email/password install, DO NOT tell the user
     "LEADBAY_REGION is auto-detected, drop it" — the
     server's region auto-probe sends the bearer token to BOTH regions, which
     is a credential cross-leak. Always pass --region (us or fr) on that path.
@@ -53,7 +53,7 @@ On macOS, Windows, and Linux, launch the guided Electron installer from the npm 
 npx -y -p @leadbay/mcp@latest leadbay-mcp-installer
 ```
 
-It downloads the npm package, opens the installer app, asks for email/region/password, detects installed MCP clients, then installs the selected ones. No separate `.dmg`, `.exe`, `.deb`, or AppImage is published for now.
+It downloads the npm package, opens the installer app, signs in with Leadbay OAuth in your browser, detects installed MCP clients, then installs the selected ones. No separate `.dmg`, `.exe`, `.deb`, or AppImage is published for now.
 
 From a repo checkout, run the same native installer with:
 
@@ -64,8 +64,7 @@ pnpm --filter @leadbay/mcp installer:gui
 For terminal-only installs (works on macOS, Windows, and Linux):
 
 ```bash
-npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
-# (you'll be prompted for your password — it's not echoed)
+npx -y @leadbay/mcp@latest install --oauth
 ```
 
 To uninstall with the same guided app:
@@ -78,16 +77,16 @@ Only shows clients that already have Leadbay MCP configured.
 
 These commands:
 
-1. Ask for your password (hidden input).
-2. Mint a bearer token via the Leadbay backend you specified.
+1. Open Leadbay OAuth in your browser.
+2. Exchange the browser approval for a local MCP credential.
 3. Auto-detect which MCP clients you have installed (Claude Code, Claude Desktop, Cursor, Codex) and register the server in each (after asking you per-target). Claude Code is registered with `--scope user` so the server appears in any project, not just where you ran the command.
-4. Write the token into the client config files — **never to your terminal scrollback**.
+4. Write the credential into the client config files — **never to your terminal scrollback**.
 
 Add `--no-write` to disable the composite write tools (`refine_prompt`, `report_outreach`, `adjust_audience`, etc. — ON by default since 0.3.0; pass `--no-write` for a read-only agent). Add `--yes` for non-interactive runs (CI / scripts). Add `--target claude-code,cursor` to scope to specific clients. The legacy `--include-write` flag is accepted but is now a no-op.
 
-`--region us|fr` is required by default — it pins which Leadbay backend gets your password and avoids a silent cross-region credential leak. If you really don't know your region, opt in with `--allow-region-fallback` (your password will hit BOTH backends if the first 401s).
+OAuth auto-detects your region through stargate. Pass `--region us|fr` only if you need to override it.
 
-The token is **session-scoped** (full account access, password-equivalent). Treat it like your password. To rotate, re-run `npx -y @leadbay/mcp install` — minting a fresh token invalidates the prior session.
+To rotate the local MCP credential, re-run `npx -y @leadbay/mcp install --oauth`.
 
 **Don't have a Leadbay account?** [Register here](https://wow.leadbay.ai/?register=true).
 
@@ -98,7 +97,7 @@ The token is **session-scoped** (full account access, password-equivalent). Trea
 /plugin install leadbay@leadbay-leadclaw
 ```
 
-Claude Code prompts for your token and region through the plugin's `userConfig`. This is equivalent to the npm/CLI install above; users who already ran `leadbay-mcp login` can reuse that token.
+Claude Code prompts for Leadbay auth/config through the plugin's `userConfig`. This is equivalent to the npm/CLI install above.
 
 The plugin install gives you **two surfaces in one shot**:
 
@@ -121,15 +120,13 @@ If you installed Node from the official [nodejs.org](https://nodejs.org) `.pkg`,
 - **`sudo npm install -g @leadbay/mcp`** (enter your macOS password).
 - **Use a Node version manager** — [nvm](https://github.com/nvm-sh/nvm), [volta](https://volta.sh), [fnm](https://github.com/Schniz/fnm). They install Node under your home directory, so `npm install -g` works without sudo.
 
-### If you'd rather mint a token without auto-install
+### If you'd rather authenticate without auto-install
 
 ```bash
-npx -y @leadbay/mcp@0.16 login \
-  --email you@yourcompany.com \
-  --region us
+npx -y @leadbay/mcp@0.16 login --oauth
 ```
 
-Default writes a `0600`-mode JSON file at the platform-correct credentials path (`$XDG_CONFIG_HOME/leadbay/credentials.json` on Linux, `~/Library/Application Support/leadbay/credentials.json` on macOS, `%APPDATA%\leadbay\credentials.json` on Windows). Pass `--write-config /some/path.json` to override the path. Pass `--unsafe-print-token` for legacy CI flows that scrape stdout (the token will end up in scrollback / logs — only use this if you have to). Pass `--force` to overwrite an existing file from a different account.
+Default writes a `0600`-mode JSON file at the platform-correct credentials path (`$XDG_CONFIG_HOME/leadbay/credentials.json` on Linux, `~/Library/Application Support/leadbay/credentials.json` on macOS, `%APPDATA%\leadbay\credentials.json` on Windows). Pass `--write-config /some/path.json` to override the path. Pass `--force` to overwrite an existing file from a different account. The legacy email/password path still exists for scripts that cannot use a browser.
 
 ## 2. Updating the hosted MCP
 
@@ -185,6 +182,10 @@ That is convenient for quick tests, but less safe for production because the dep
 
 ## 3. Quickstart
 
+Prefer the installer in [§1](#1-install). If you need to hand-write config,
+first authenticate with `npx -y @leadbay/mcp@0.16 login --oauth`, then copy the
+`LEADBAY_TOKEN` and `LEADBAY_REGION` values from the credentials file it writes.
+
 ### Claude Desktop
 
 Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
@@ -196,7 +197,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
       "command": "npx",
       "args": ["-y", "@leadbay/mcp@0.16"],
       "env": {
-        "LEADBAY_TOKEN": "<paste-token-from-step-1>",
+        "LEADBAY_TOKEN": "<paste-oauth-token>",
         "LEADBAY_REGION": "us"
       }
     }
@@ -216,7 +217,7 @@ In Cursor settings, add the MCP server:
     "leadbay": {
       "command": "npx",
       "args": ["-y", "@leadbay/mcp@0.16"],
-      "env": { "LEADBAY_TOKEN": "<paste-token>", "LEADBAY_REGION": "us" }
+      "env": { "LEADBAY_TOKEN": "<paste-oauth-token>", "LEADBAY_REGION": "us" }
     }
   }
 }
@@ -226,7 +227,7 @@ In Cursor settings, add the MCP server:
 
 ```bash
 claude mcp add leadbay --scope user \
-  --env LEADBAY_TOKEN=<paste-token> \
+  --env LEADBAY_TOKEN=<paste-oauth-token> \
   --env LEADBAY_REGION=us \
   -- npx -y @leadbay/mcp@0.16
 ```
@@ -240,7 +241,7 @@ claude mcp add leadbay --scope user \
 Before starting Claude, run:
 
 ```bash
-LEADBAY_TOKEN=<paste-token> npx -y @leadbay/mcp@0.16 doctor
+LEADBAY_TOKEN=<paste-oauth-token> npx -y @leadbay/mcp@0.16 doctor
 ```
 
 Expected output:
@@ -462,8 +463,8 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `LEADBAY_TOKEN environment variable is required` | Token missing from config env | Add `LEADBAY_TOKEN` to the `env` block, restart client |
-| `Authentication token expired or invalid` | Token revoked or wrong region | Re-mint a token: `npx -y @leadbay/mcp install --email <you> --region <us\|fr>`; verify `LEADBAY_REGION` |
+| `LEADBAY_TOKEN environment variable is required` | Local MCP credential missing from config env | Re-run `npx -y @leadbay/mcp install --oauth`, restart client |
+| `Authentication token expired or invalid` | Credential revoked or wrong region | Re-authenticate: `npx -y @leadbay/mcp install --oauth`; verify `LEADBAY_REGION` |
 | `Leadbay doctor: could not reach any Leadbay region` | Wrong region OR network blocked | Run `doctor` with `LEADBAY_REGION=fr` to auto-probe. Check `https://api-us.leadbay.app` reachable. |
 | `No enrichment credits remaining` | Out of quota | Contact Leadbay support to extend quota |
 | Claude Desktop "loading forever" on first use | `npx` cold-start fetching the package | First run takes ~10s. Prefer `npm install -g @leadbay/mcp` for faster startup. |
@@ -475,13 +476,13 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 
 **Upgrade**: change the pinned minor in your config, e.g. `"@leadbay/mcp@0.2"` → `"@leadbay/mcp@0.16"`, then restart the client. **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadclaw/releases).
 
-**Rotate token**: re-run `npx -y @leadbay/mcp@0.16 install --email you@yourcompany.com --region us` (or `login`) — the new session token replaces the old one in your MCP client config, and logging in again invalidates the prior session on most session backends.
+**Rotate local credential**: re-run `npx -y @leadbay/mcp@0.16 install --oauth` (or `login --oauth`) — the new credential replaces the old one in your MCP client config.
 
 ## 7. Advanced
 
-### OAuth login (preview)
+### OAuth login
 
-Browser-based login is available as an alternative to email/password:
+Browser-based login is the recommended auth path:
 
 ```bash
 npx -y @leadbay/mcp login --oauth

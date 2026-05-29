@@ -2,13 +2,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { REGIONS } from "@leadbay/core";
 import {
   appendShellExports,
   installInClaudeCode,
   installInCodexConfig,
   installInJsonConfig,
-  loginAt,
   uninstallFromClaudeCode,
   uninstallFromCodexConfig,
   uninstallFromJsonConfig,
@@ -21,18 +19,24 @@ import {
   HOSTED_MCP_URL,
   type DetectedClient,
 } from "./install-shared.js";
+import { inferRegionViaStargate, oauthLogin } from "./oauth.js";
 
 declare const __LEADBAY_MCP_VERSION__: string;
 
-type LoginRequest = { email?: string; password?: string; region?: "us" | "fr" };
 type InstallRequest = { sessionId?: string; clientIds?: string[]; includeWrite?: boolean; telemetryEnabled?: boolean };
-type LoginSession = { token: string; region: "us" | "fr"; email: string; createdAt: number };
+type LoginSession = { token: string; region: "us" | "fr"; accountLabel: string; createdAt: number };
 type InstallResult = { id: string; label: string; ok: boolean; message: string };
 type LogLevel = "info" | "active" | "success" | "error" | "done";
 
 const VERSION = __LEADBAY_MCP_VERSION__;
 const PORT = Number(process.env.LEADBAY_INSTALLER_PORT ?? 0);
 const sessions = new Map<string, LoginSession>();
+const OAUTH_BASE_URLS = {
+  prod: {
+    us: "https://api-us.leadbay.app",
+    fr: "https://api-fr.leadbay.app",
+  },
+} as const;
 
 export type InstallerGuiOptions = { openBrowser?: boolean; port?: number };
 
@@ -98,20 +102,21 @@ function cleanupSessions(): void {
   }
 }
 
-async function login(body: LoginRequest): Promise<{ ok: boolean; sessionId?: string; region?: string; email?: string; error?: string }> {
+async function loginWithOAuth(): Promise<{ ok: boolean; sessionId?: string; region?: string; accountLabel?: string; error?: string }> {
   cleanupSessions();
-  const email = body.email?.trim();
-  const password = body.password ?? "";
-  const region = body.region;
-  if (!email || !password || (region !== "us" && region !== "fr")) {
-    return { ok: false, error: "Email, password, and region are required." };
-  }
 
   try {
-    const token = await loginAt(REGIONS[region], email, password);
+    const region = await inferRegionViaStargate({ staging: false });
+    const { hostname } = await import("node:os");
+    const { accessToken } = await oauthLogin({
+      authServerBaseUrl: OAUTH_BASE_URLS.prod[region],
+      clientName: `Leadbay MCP installer @ ${hostname()}`,
+      log: () => undefined,
+    });
     const sessionId = randomUUID();
-    sessions.set(sessionId, { token, region, email, createdAt: Date.now() });
-    return { ok: true, sessionId, region, email };
+    const accountLabel = `Leadbay OAuth (${region.toUpperCase()})`;
+    sessions.set(sessionId, { token: accessToken, region, accountLabel, createdAt: Date.now() });
+    return { ok: true, sessionId, region, accountLabel };
   } catch (err: any) {
     return { ok: false, error: err?.message ?? String(err) };
   }
@@ -198,7 +203,7 @@ async function streamInstall(url: URL, res: ServerResponse): Promise<void> {
     return;
   }
 
-  emit("info", `Connected to ${session.region.toUpperCase()} backend as ${session.email}.`);
+  emit("info", `Connected to ${session.accountLabel}.`);
   emit("info", `Write tools ${includeWrite ? "enabled" : "disabled"}; telemetry ${telemetryEnabled ? "enabled" : "disabled"}.`);
   emit("info", "Refreshing installed-agent detection...");
 
@@ -421,14 +426,13 @@ function pageHtml(): string {
 <body>
   <main>
     <header><div><h1>Leadbay MCP installer</h1><div class="meta" id="meta">${formatInstallOsLabel()}</div></div><div class="badge">v${VERSION}</div></header>
-    <div class="steps"><div class="step-pill active" id="pill-1">1. Account</div><div class="step-pill" id="pill-2">2. Login</div><div class="step-pill" id="pill-3">3. Agents</div><div class="step-pill" id="pill-4">4. Install</div></div>
+    <div class="steps"><div class="step-pill active" id="pill-1">1. Sign in</div><div class="step-pill" id="pill-2">2. Agents</div><div class="step-pill" id="pill-3">3. Install</div></div>
 
-    <section id="step-1"><div class="grid"><label>Email<input id="email" type="email" autocomplete="username" placeholder="you@company.com" /></label><label>Region<select id="region"><option value="us">US</option><option value="fr">FR</option></select></label></div></section>
-    <section id="step-2" class="hidden"><label>Password<input id="password" type="password" autocomplete="current-password" /></label><div class="hint">This verifies the account and creates a temporary install session. The token is never printed.</div></section>
-    <section id="step-3" class="hidden"><strong>Detected agents</strong><div class="hint">Only installed apps or CLIs are shown. ChatGPT Desktop uses the hosted MCP URL: ${HOSTED_MCP_URL}</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
-    <section id="step-4" class="hidden"><strong>Installing</strong><div class="hint">Keep this window open until the final restart message appears.</div></section>
+    <section id="step-1"><strong>Connect your Leadbay account</strong><div class="hint">This opens Leadbay in your browser. After approval, come back here to choose where to install the MCP.</div></section>
+    <section id="step-2" class="hidden"><strong>Detected agents</strong><div class="hint">Only installed apps or CLIs are shown. ChatGPT Desktop uses the hosted MCP URL: ${HOSTED_MCP_URL}</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
+    <section id="step-3" class="hidden"><strong>Installing</strong><div class="hint">Keep this window open until the final restart message appears.</div></section>
 
-    <div class="actions"><button id="back" disabled>Back</button><div class="right-actions"><button id="refresh" class="hidden">Refresh</button><button class="primary" id="next">Next</button></div></div>
+    <div class="actions"><button id="back" disabled>Back</button><div class="right-actions"><button id="refresh" class="hidden">Refresh</button><button class="primary" id="next">Sign in with Leadbay</button></div></div>
     <div id="log" class="log-panel"><div class="log-row log-info">Ready.</div></div>
   </main>
   <script>
@@ -440,14 +444,14 @@ function pageHtml(): string {
     function appendLog(level, text) { const row = document.createElement("div"); row.className = "log-row log-" + level; row.textContent = text; $("log").appendChild(row); $("log").scrollTop = $("log").scrollHeight; }
     function line(text, error = false) { clearLog(); appendLog(error ? "error" : "info", text); }
     function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-    function setStep(next) { step = next; [1,2,3,4].forEach((n) => { $("step-" + n).classList.toggle("hidden", n !== step); $("pill-" + n).classList.toggle("active", n === step); }); $("back").disabled = step === 1 || step === 4; $("refresh").classList.toggle("hidden", step !== 3); $("next").classList.toggle("hidden", step === 4); $("next").textContent = step === 3 ? "Install selected" : step === 2 ? "Sign in" : "Next"; }
+    function setStep(next) { step = next; [1,2,3].forEach((n) => { $("step-" + n).classList.toggle("hidden", n !== step); $("pill-" + n).classList.toggle("active", n === step); }); $("back").disabled = step === 1 || step === 3; $("refresh").classList.toggle("hidden", step !== 2); $("next").classList.toggle("hidden", step === 3); $("next").textContent = step === 2 ? "Install selected" : "Sign in with Leadbay"; }
     function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const badge = client.configured ? '<span class="badge-update">update</span>' : '<span class="badge-install">install</span>'; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' ' + badge + '</strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
     async function refresh() { line("Detecting agents..."); const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); line(clients.length ? "Agents detected." : "No supported agents detected."); }
-    async function doLogin() { const body = { email: $("email").value.trim(), password: $("password").value, region: $("region").value }; if (!body.email || !body.password) return line("Email and password are required.", true); $("next").disabled = true; line("Signing in..."); try { const res = await fetch("/api/login", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }); const data = await res.json(); if (!data.ok) return line(data.error || "Login failed.", true); sessionId = data.sessionId; line("Signed in. Detecting installed agents..."); setStep(3); await refresh(); } finally { $("next").disabled = false; } }
-    async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); setStep(4); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }
+    async function doLogin() { $("next").disabled = true; line("Opening Leadbay sign-in in your browser..."); try { const res = await fetch("/api/oauth-login", { method:"POST" }); const data = await res.json(); if (!data.ok) return line(data.error || "OAuth login failed.", true); sessionId = data.sessionId; line("Signed in. Detecting installed agents..."); setStep(2); await refresh(); } finally { $("next").disabled = false; } }
+    async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); setStep(3); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }
     $("back").addEventListener("click", () => setStep(Math.max(1, step - 1)));
     $("refresh").addEventListener("click", refresh);
-    $("next").addEventListener("click", async () => { if (step === 1) setStep(2); else if (step === 2) await doLogin(); else await install(); });
+    $("next").addEventListener("click", async () => { if (step === 1) await doLogin(); else await install(); });
   </script>
 </body>
 </html>`;
@@ -479,8 +483,8 @@ export async function startInstallerGui(options: InstallerGuiOptions = {}): Prom
         });
         return;
       }
-      if (req.method === "POST" && req.url === "/api/login") {
-        sendJson(res, 200, await login((await readJson(req)) as LoginRequest));
+      if (req.method === "POST" && req.url === "/api/oauth-login") {
+        sendJson(res, 200, await loginWithOAuth());
         return;
       }
       if (req.method === "POST" && req.url === "/api/install") {
