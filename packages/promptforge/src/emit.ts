@@ -1,5 +1,5 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { AssembledArtifact, AssembleResult } from "./assembler.js";
 import type { PromptArgument } from "./frontmatter.js";
 
@@ -161,6 +161,51 @@ export function emit(result: AssembleResult): EmitOutput {
     promptsModule: promptParts.join(""),
     toolDescriptionsModule: toolParts.join(""),
   };
+}
+
+/**
+ * Emit a TS module exporting one string constant per `.md` file in the given
+ * directory. Used for ambient MCP server-instruction paragraphs — content
+ * that the `initialize` handler concatenates into the `instructions` payload
+ * the agent reads on every session. Living here in promptforge keeps the
+ * paragraphs alongside the rest of the prompt content (tool descriptions,
+ * slash-command prompts, snippets) and out of hand-edited `server.ts`.
+ *
+ * Filename convention: kebab-case `.md` → SCREAMING_SNAKE_CASE TS const.
+ * `friction.md` → `FRICTION`. `quota-topup.md` → `QUOTA_TOPUP`. Plain `.md`,
+ * no frontmatter — the file's full body becomes the string value, trimmed
+ * of trailing newlines.
+ */
+export function emitServerInstructions(snippetsDir: string): string {
+  if (!existsSync(snippetsDir)) {
+    throw new Error(`server-instructions dir does not exist: ${snippetsDir}`);
+  }
+  const files = readdirSync(snippetsDir)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+  if (files.length === 0) {
+    throw new Error(`no .md files found in ${snippetsDir}`);
+  }
+  const parts: string[] = [HEADER];
+  parts.push("// Server-instruction paragraphs, alphabetized by filename.\n");
+  parts.push(
+    "// Source-of-truth: packages/promptforge/snippets/server-instructions/*.md\n\n",
+  );
+  for (const file of files) {
+    const stem = file.replace(/\.md$/, "");
+    const constName = stem.replace(/-/g, "_").toUpperCase();
+    if (!/^[A-Z][A-Z0-9_]*$/.test(constName)) {
+      throw new Error(
+        `server-instructions filename "${file}" does not produce a valid TS identifier (got "${constName}")`,
+      );
+    }
+    const content = readFileSync(join(snippetsDir, file), "utf8").trimEnd();
+    const escaped = escapeBacktick(content);
+    parts.push(`// region: ${constName} (source: snippets/server-instructions/${file})\n`);
+    parts.push(`export const ${constName}: string = \`${escaped}\`;\n`);
+    parts.push(`// endregion: ${constName}\n\n`);
+  }
+  return parts.join("");
 }
 
 export function writeIfDifferent(path: string, content: string): { changed: boolean } {

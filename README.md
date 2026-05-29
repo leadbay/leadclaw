@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">LeadClaw</h1>
-<p align="center">OpenClaw plugin that gives your B2B outreach agent superpowers. LeadClaw lets your agent tap into Leadbay’s rich knowledge base of companies, turning outreach activity from senseless spamming into meaningful connections.</p>
+<p align="center">MCP server that gives your B2B outreach agent superpowers. LeadClaw lets your agent tap into Leadbay's rich knowledge base of companies, turning outreach activity from senseless spamming into meaningful connections.</p>
 <p align="center">Ask your agent for new leads, and it will pull highly qualified companies that score well against your target profile and meet your qualification criteria.</p>
 <p align="center">Everything is personalized—nothing to configure. Leadbay runs advanced AI agents on your website and leverages deep B2B sales expertise to optimize how leads are sourced for you.</p>
 <p align="center">Tell your agent which leads you want it to prospect, connect your communication channels, and it will source contacts from Leadbay and handle outreach on your behalf. Enjoy the outreach you no longer have to do.
@@ -11,7 +11,7 @@
 
 ---
 
-> **New to Leadbay?** [Create your account here](https://wow.leadbay.ai/?register=true) before installing the plugin.
+> **New to Leadbay?** [Create your account here](https://wow.leadbay.ai/?register=true) before installing.
 
 ## How Leadbay thinks (mental model for your agent)
 
@@ -21,91 +21,124 @@
 
 ## Install
 
-Leadbay ships in three shapes depending on which host runs your agent. Pick one — they are independent installs.
+> **No Leadbay account yet?** [Register here](https://wow.leadbay.ai/?register=true) first.
 
-### Via OpenClaw
+### Step 1 — Mint a token (required for everyone)
 
-```bash
-openclaw plugins install @leadbay/openclaw-leadclaw
-openclaw config set plugins.entries.leadclaw.region "us"   # or "fr"
-```
-
-Start a conversation — the agent will ask for your Leadbay email and password when needed. The plugin logs you in and discards your credentials (only the session token is kept in memory).
-
-### Via MCP (Claude Desktop, Cursor, Cowork, any MCP client)
+Requires [Node.js 22+](https://nodejs.org).
 
 ```bash
-npx -y @leadbay/mcp@0.13 install --email you@yourcompany.com --region us
+npx -y @leadbay/mcp@latest login --email you@yourcompany.com --region us
 ```
 
-The installer auto-detects which MCP clients you have (Claude Desktop, Cursor, Claude Code), prompts you per-target, and writes the token into each client's config. Add `--no-write` to disable the composite write tools. Full per-client setup, env vars, troubleshooting, and a tour of the MCP primitives is in [`packages/mcp/README.md`](packages/mcp/README.md).
+You'll be prompted for your password (hidden, never saved). This writes a token to your machine — you'll paste it in the next step.
 
-### Via the Claude Code plugin marketplace
+> Not sure of your region? Check your Leadbay dashboard URL: `app-us.leadbay.app` → `us`, `app-fr.leadbay.app` → `fr`.
+
+---
+
+### Step 2 — Connect your client
+
+#### Claude Desktop
+
+1. Download `leadbay-mcp-*.dxt` from the [Releases page](https://github.com/leadbay/leadclaw/releases/latest)
+2. Double-click it — Claude Desktop opens and asks you to confirm the install
+3. Paste your token and confirm your region when prompted
+4. Restart Claude Desktop, open a new chat, and try: *"Show me today's leads."*
+
+#### Cursor / Claude Code / any other MCP client
+
+```bash
+npx -y @leadbay/mcp@latest install --email you@yourcompany.com --region us
+```
+
+This mints a token **and** registers the server into every MCP client it detects (Claude Desktop, Cursor, Claude Code), asking you per-target. You can skip Step 1 if you use this path.
+
+#### Claude Code plugin marketplace
 
 ```text
 /plugin marketplace add leadbay/leadclaw
 /plugin install leadbay@leadbay-leadclaw
 ```
 
-This single install registers the MCP server **and** drops six auto-discovered skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks. Claude Code prompts for your Leadbay token + region through the plugin's `userConfig` — no separate `leadbay-mcp install` step needed.
-
-### Don't have a Leadbay account?
-
-[Register here](https://wow.leadbay.ai/?register=true) before installing.
+Claude Code prompts for your token and region. Registers the MCP server **and** installs six skills (`leadbay_daily_check_in`, `leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`) that auto-trigger on natural-language asks.
 
 ## Tools
 
-### Authentication
+### Read-only (always on)
 
 | Tool | Description |
 |------|-------------|
-| `leadbay_login` | Log in with your Leadbay email and password |
+| `leadbay_pull_leads` | Pull today's fresh batch of scored leads |
+| `leadbay_pull_followups` | Pull leads that need follow-up action |
+| `leadbay_followups_map` | Geo-clustered follow-up map for travel planning |
+| `leadbay_tour_plan` | Build a visit plan for an upcoming trip |
+| `leadbay_research_lead_by_id` | Deep-dive research card for a single lead |
+| `leadbay_research_lead_by_name_fuzzy` | Look up a lead by company name |
+| `leadbay_prepare_outreach` | Build a personalized outreach brief for a lead |
+| `leadbay_account_status` | Check quota, credits, and account state |
+| `leadbay_list_campaigns` | List existing campaigns |
+| `leadbay_campaign_progression` | Campaign funnel metrics |
+| `leadbay_campaign_call_sheet` | Call sheet for a campaign |
+| `leadbay_bulk_enrich_status` | Status of a running enrichment job |
+| `leadbay_qualify_status` | Status of a running qualification job |
+| `leadbay_import_status` | Status of a running import job |
+| `leadbay_resolve_import_rows` | Resolve import rows to lead IDs |
+| `leadbay_list_mappable_fields` | List CRM fields available for mapping |
+| `leadbay_create_topup_link` | Generate a Stripe top-up link (quota recovery) |
+| `leadbay_open_billing_portal` | Open the billing portal |
 
-### Read-only (enabled by default)
+### Write actions (gated by `LEADBAY_MCP_WRITE=1`, default ON since 0.3.0)
 
 | Tool | Description |
 |------|-------------|
-| `leadbay_list_lenses` | List available lenses (saved search configs) |
-| `leadbay_discover_leads` | Get AI-recommended leads from your active lens |
-| `leadbay_get_lead_profile` | Full lead profile with AI scores, qualification Q&A, and contacts |
-| `leadbay_get_lead_activities` | Activity feed for a lead (notes, enrichments, status changes) |
-| `leadbay_get_taste_profile` | Your ideal buyer profile, purchase-intent tags, and AI qualification questions |
-| `leadbay_get_contacts` | Get contacts for a lead (with enriched emails/phones if available) |
-| `leadbay_get_quota` | Check your enrichment credit balance |
+| `leadbay_bulk_qualify_leads` | Trigger AI qualification on a batch of leads |
+| `leadbay_enrich_titles` | Enrich contact job titles |
+| `leadbay_adjust_audience` | Adjust the active lens audience |
+| `leadbay_refine_prompt` | Refine the qualification prompt |
+| `leadbay_answer_clarification` | Answer a clarification question from Leadbay |
+| `leadbay_report_outreach` | Log outreach activity (required after every contact) |
+| `leadbay_import_leads` | Import a list of company domains |
+| `leadbay_import_and_qualify` | Import + immediately qualify leads |
+| `leadbay_add_note` | Add a note to a lead |
+| `leadbay_like_lead` | Mark a lead as liked |
+| `leadbay_dislike_lead` | Mark a lead as disliked |
+| `leadbay_create_campaign` | Create a new campaign |
+| `leadbay_add_leads_to_campaign` | Add leads to a campaign |
+| `leadbay_remove_leads_from_campaign` | Remove leads from a campaign |
+| `leadbay_create_custom_field` | Create a custom CRM field |
 
-### Write actions (must be explicitly enabled)
+### Advanced granular tools (gated by `LEADBAY_MCP_ADVANCED=1`)
 
-| Tool | Description |
-|------|-------------|
-| `leadbay_qualify_lead` | Trigger AI qualification on a lead (~60s async) |
-| `leadbay_enrich_contacts` | Order email/phone enrichment for a contact (~60s async) |
-| `leadbay_add_note` | Add a note to a lead (visible to your team) |
-| `leadbay_import_leads` | Map a list of company domains to Leadbay `leadId`s, chainable into `leadbay_bulk_qualify_leads`. Wraps the CSV-import wizard; **mutates user state** (creates a CRM-imports row). Suitable for occasional automation, not high-cadence. Admin-only. |
+Low-level single-API-call tools for power users and integrations. Enabled by setting `LEADBAY_MCP_ADVANCED=1` in the MCP server's env.
 
 ## How it works
 
-The plugin automatically uses your **active lens** (the last lens you used in Leadbay). Just call `leadbay_discover_leads` and it works — no lens configuration needed.
+The MCP server automatically uses your **active lens** (the last lens you used in Leadbay). Just call `leadbay_pull_leads` and it works — no lens configuration needed.
 
-For lead profiles, `leadbay_get_lead_profile` bundles three API calls (lead details + AI qualification + contacts) into a single response. If some data isn't available yet, it returns partial results instead of failing.
+`leadbay_research_lead_by_id` bundles multiple API calls (lead details + AI qualification + contacts) into a single response. If some data isn't available yet, it returns partial results instead of failing.
+
+## Configuration
+
+| Env var | Required | Description |
+|---------|----------|-------------|
+| `LEADBAY_TOKEN` | Yes | Bearer token (set by the installer) |
+| `LEADBAY_REGION` | Yes | `us` or `fr` |
+| `LEADBAY_MCP_WRITE` | No | Set to `0` to disable write tools (default: on) |
+| `LEADBAY_MCP_ADVANCED` | No | Set to `1` to expose granular tools (default: off) |
+| `LEADBAY_API_BASE_URL` | No | Override API URL (for staging/dev) |
 
 ## Workflows
 
 The canonical inventory of what the MCP supports — supported / partial / planned / blocked-on-backend — is **[WORKFLOWS.md](WORKFLOWS.md)**. Use it to triage incoming asks: find the row that matches, or add a new one. A small audit asserts every cited tool/prompt and test path is real, so the table can't silently drift.
 
-Quick taste of what's in there:
+Quick taste:
 
 ```
-leadbay_discover_leads → leadbay_get_lead_profile          # discover & research
-leadbay_get_quota → leadbay_get_contacts → leadbay_enrich_contacts → leadbay_get_contacts   # enrich contacts
-leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach   # travel/geo follow-ups
+leadbay_pull_leads → leadbay_research_lead_by_id → leadbay_prepare_outreach   # discover & research
+leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach     # travel/geo follow-ups
+leadbay_import_leads → leadbay_bulk_qualify_leads                             # import & qualify
 ```
-
-## Configuration
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `leadbay.region` | Yes | `us` or `fr` |
-| `leadbay.baseUrl` | No | Override API URL (for staging/dev) |
 
 ## Requirements
 
@@ -115,48 +148,34 @@ leadbay_pull_followups → leadbay_followups_map → leadbay_prepare_outreach   
 ## Development
 
 ```bash
-npm install        # installs deps + vitest
-npm test           # runs contract + unit + sanity tests (no network, no secrets)
-npm run test:coverage   # coverage report via v8
-npm run build      # emits dist/
+pnpm install
+pnpm prompts:build   # .md.tmpl → generated TS
+pnpm -r build        # compile everything
+pnpm -r test         # must be green
+pnpm -r typecheck    # must be green
 ```
 
 ### Test tiers
 
-- **Contract tests** (`test/contract.test.ts`) — assert that registered tools match `openclaw.plugin.json` exactly, schemas are valid, write tools are marked `optional: true`. This catches manifest drift at CI.
-- **Unit tests** (`test/unit/**`) — error-code mapping, caching, tool branches. Use `mockHttp` from `test/harness.ts` to stub `node:https`. No network required.
-- **Live smoke tests** (`test/smoke/**`) — opt-in. Set `LEADBAY_TEST_TOKEN` (and optionally `LEADBAY_TEST_BASE_URL`) and run:
-  ```bash
-  LEADBAY_TEST_TOKEN=u.xxx npm run test:smoke
-  ```
-  Without the env var, these tests cleanly skip. Use a **dedicated test tenant** with a **read-only token** — smoke only hits read endpoints (`/users/me`, `/lenses`, taste profile).
+- **Unit tests** (`packages/core/test/unit/`) — error-code mapping, tool branches. Use `mockHttp` from `test/harness.ts` to stub `node:https`. No network required.
+- **Integration tests** (`packages/core/test/integration/`) — opt-in. Set `LEADBAY_TEST_TOKEN` and run `pnpm test:smoke`.
+- **Audit tests** (`packages/mcp/test/audit/`) — assert tool descriptions, routing blocks, and WORKFLOWS.md consistency at build time. Always run on CI.
+- **Eval tests** (`packages/mcp/test/eval/`) — LLM-graded scenarios. Gated by `EVAL=1`.
 
-### CI recommendation
-
-- Run `npm test` on every PR — no secrets needed.
-- Run `npm run test:smoke` on main merges or nightly, with the `LEADBAY_TEST_TOKEN` secret.
+See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide: tool structure, test conventions, build pipeline, and how to add a new tool.
 
 ## Publishing
 
-Publication-ready checks:
+All releases are tag-driven — **never run `npm publish` locally.** GitHub Actions owns publishing.
 
 ```bash
-npm run build            # emits dist/
-npm test                 # contract + unit must be green
-npm publish --access public --dry-run   # validate npm package
+# 1. Bump packages/mcp/package.json#version + add CHANGELOG entry, land PR
+git checkout main && git pull
+git tag mcp-v0.x.0
+git push origin mcp-v0.x.0
+# 2. Watch the release workflow: preflight-npm → publish-mcp
 ```
 
-### ClawHub (primary)
+For dry runs: Actions → `release` → "Run workflow" → `package: mcp`, `dry_run: true`.
 
-```bash
-clawhub package publish leadbay/leadclaw --dry-run
-clawhub package publish leadbay/leadclaw
-```
-
-### npm (fallback)
-
-```bash
-npm publish --access public
-```
-
-The `prepublishOnly` script wires both `build` and `test` into every publish, so a broken diff never ships.
+Full runbook (token setup, failure modes, manual re-runs): [`RELEASE.md`](RELEASE.md).
