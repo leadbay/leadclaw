@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { installInClaudeCode, isLeadbayConfiguredInClaudeCode, uninstallFromClaudeCode } from "./install-claude-code.js";
 import { installInJsonConfig, uninstallFromJsonConfig } from "./install-json-config.js";
@@ -142,12 +143,30 @@ function isAllowedOrigin(req: IncomingMessage, expectedHost: string): boolean {
   return origin === `http://${expectedHost}` || origin === `http://127.0.0.1`;
 }
 
+// Resolved once at startup from --local / --local=PATH on process.argv.
+const LOCAL_BIN_PATH: string | undefined = (() => {
+  const flag = process.argv.find(a => a === "--local" || a.startsWith("--local="));
+  if (!flag) return undefined;
+  const explicit = flag.startsWith("--local=") ? flag.slice("--local=".length) : "";
+  if (explicit) {
+    // Resolve against cwd so relative paths become absolute before being
+    // written into client configs (clients launch from their own directory).
+    return resolvePath(process.cwd(), explicit);
+  }
+  // Bare --local: resolve dist/bin.js next to this bundle. Uses static ESM
+  // imports (no require()) so this works in the bundled ESM output.
+  const here = typeof __dirname !== "undefined"
+    ? __dirname
+    : resolvePath(fileURLToPath(import.meta.url), "..");
+  return resolvePath(here, "..", "dist", "bin.js");
+})();
+
 async function installInto(client: DetectedClient, session: LoginSession, includeWrite: boolean, telemetryEnabled: boolean): Promise<InstallResult> {
   let res: { ok: boolean; message: string };
   if (client.id === "claude-code") {
-    res = await installInClaudeCode(session.token, session.region, includeWrite, telemetryEnabled);
+    res = await installInClaudeCode(session.token, session.region, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
   } else if (client.id === "codex") {
-    const configRes = await installInCodexConfig(client.configPath ?? client.detail, includeWrite, telemetryEnabled);
+    const configRes = await installInCodexConfig(client.configPath ?? client.detail, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
     if (!configRes.ok) {
       res = configRes;
     } else {
@@ -160,7 +179,7 @@ async function installInto(client: DetectedClient, session: LoginSession, includ
     res = { ok: true, message: "manual setup required; add this MCP URL in ChatGPT Settings > Apps: " + HOSTED_MCP_URL };
   } else if (client.id === "claude-desktop" && client.mode?.dxt && client.supportDir) {
     const dxtResult = await removeDxtExtension(client.supportDir);
-    const jsonResult = await installInJsonConfig(client.configPath!, session.token, session.region, includeWrite, telemetryEnabled);
+    const jsonResult = await installInJsonConfig(client.configPath!, session.token, session.region, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
     if (!jsonResult.ok) {
       res = jsonResult;
     } else {
@@ -172,7 +191,7 @@ async function installInto(client: DetectedClient, session: LoginSession, includ
       };
     }
   } else {
-    res = await installInJsonConfig(client.configPath!, session.token, session.region, includeWrite, telemetryEnabled);
+    res = await installInJsonConfig(client.configPath!, session.token, session.region, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
   }
   return { id: client.id, label: client.label, ...res };
 }
