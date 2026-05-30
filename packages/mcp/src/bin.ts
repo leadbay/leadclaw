@@ -986,17 +986,27 @@ export async function runInstall(args: string[]): Promise<number> {
   const useOAuth = hasFlag(args, "oauth");
   const useStaging = hasFlag(args, "staging");
   const email = parseFlag(args, "email");
-  const localFlag = parseFlag(args, "local");
-  // Resolve --local to an absolute path to the local dist/bin.js.
-  // Accepts --local (auto-resolves from __dirname) or --local=/abs/path/to/bin.js.
+  // --local has two valid forms:
+  //   --local              → auto-resolve to dist/bin.js next to this script
+  //   --local=some/path    → use that explicit path (resolved to absolute)
+  // hasFlag covers the bare form; parseFlag (value-only) covers the = form.
+  // Using parseFlag alone misreads `--local --target foo` as path="--target".
+  const hasLocal = hasFlag(args, "local");
+  const localValue = args.find(a => a.startsWith("--local="))?.slice("--local=".length);
   let localBinPath: string | undefined;
-  if (localFlag !== undefined) {
+  if (hasLocal || localValue !== undefined) {
     const { resolve } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const selfDir = typeof __dirname !== "undefined"
       ? __dirname
       : resolve(fileURLToPath(import.meta.url), "..");
-    localBinPath = localFlag || resolve(selfDir, "bin.js");
+    if (localValue) {
+      // Resolve explicit path relative to cwd so the absolute path is stored
+      // in client configs (clients launch from their own working directory).
+      localBinPath = resolve(process.cwd(), localValue);
+    } else {
+      localBinPath = resolve(selfDir, "bin.js");
+    }
     process.stderr.write(`[leadbay-mcp] --local: using local build at ${localBinPath}\n`);
   }
   if (!email && !useOAuth) {
@@ -1166,7 +1176,7 @@ export async function runInstall(args: string[]): Promise<number> {
     if (c.id === "claude-code") {
       res = await installInClaudeCode(token, region, includeWrite, telemetryEnabled, localBinPath);
     } else if (c.id === "codex") {
-      const configRes = await installInCodexConfig(c.configPath ?? c.detail, includeWrite, telemetryEnabled);
+      const configRes = await installInCodexConfig(c.configPath ?? c.detail, includeWrite, telemetryEnabled, localBinPath);
       if (!configRes.ok) {
         res = configRes;
       } else {

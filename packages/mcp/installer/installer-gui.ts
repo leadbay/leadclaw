@@ -160,7 +160,7 @@ async function installInto(client: DetectedClient, session: LoginSession, includ
   if (client.id === "claude-code") {
     res = await installInClaudeCode(session.token, session.region, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
   } else if (client.id === "codex") {
-    const configRes = await installInCodexConfig(client.configPath ?? client.detail, includeWrite, telemetryEnabled);
+    const configRes = await installInCodexConfig(client.configPath ?? client.detail, includeWrite, telemetryEnabled, LOCAL_BIN_PATH);
     if (!configRes.ok) {
       res = configRes;
     } else {
