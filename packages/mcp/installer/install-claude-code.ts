@@ -56,9 +56,11 @@ export async function installInClaudeCode(
   token: string,
   region: "us" | "fr",
   includeWrite: boolean,
-  telemetryEnabled: boolean
+  telemetryEnabled: boolean,
+  /** Absolute path to a local dist/bin.js for dev testing. Uses npx when unset. */
+  localBinPath?: string
 ): Promise<{ ok: boolean; message: string }> {
-  const args = buildClaudeCodeAddArgs(token, region, includeWrite, telemetryEnabled);
+  const args = buildClaudeCodeAddArgs(token, region, includeWrite, telemetryEnabled, localBinPath);
   const first = await runClaudeMcp(args);
   if (first.spawnError) return { ok: false, message: `failed to spawn claude: ${first.spawnError}` };
   if (first.code === 0) return { ok: true, message: "registered" };
