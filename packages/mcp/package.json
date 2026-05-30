@@ -44,6 +44,9 @@
     "@leadbay/core": "workspace:*",
     "@leadbay/promptforge": "workspace:*"
   },
+  "optionalDependencies": {
+    "electron": "^42.3.0"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -67,8 +70,5 @@
   },
   "homepage": "https://github.com/leadbay/leadclaw/tree/main/packages/mcp#readme",
   "author": "Leadbay",
-  "license": "MIT",
-  "optionalDependencies": {
-    "electron": "^42.3.0"
-  }
+  "license": "MIT"
 }

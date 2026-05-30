@@ -69,6 +69,26 @@ pnpm --filter @leadbay/mcp installer
 pnpm --filter @leadbay/mcp installer -- --uninstall
 ```
 
+### Testing a local build
+
+Add `--local` to install your current checkout instead of pulling from npm. Useful when developing the MCP and wanting to test changes in Claude Desktop or Claude Code without publishing.
+
+```bash
+# 1. Build
+pnpm --filter @leadbay/mcp build
+
+# 2a. GUI wizard — same OAuth flow, writes node dist/bin.js into client configs
+pnpm --filter @leadbay/mcp installer -- --local
+
+# 2b. Terminal-only
+node packages/mcp/dist/bin.js install --oauth --local
+
+# 2c. Explicit path (if running from a different directory)
+node packages/mcp/dist/bin.js install --oauth --local=/abs/path/to/packages/mcp/dist/bin.js
+```
+
+Instead of `npx -y @leadbay/mcp@latest`, each client config gets `node /absolute/path/to/dist/bin.js`. After each rebuild the next MCP session picks up your changes automatically — no reinstall needed.
+
 For terminal-only installs (works on macOS, Windows, and Linux):
 
 ```bash

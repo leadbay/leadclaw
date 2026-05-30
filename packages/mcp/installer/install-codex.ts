@@ -5,15 +5,19 @@ function shellQuote(value: string): string {
 export function buildCodexConfigBlock(
   includeWrite: boolean,
   telemetryEnabled: boolean,
-  version = "latest"
+  version = "latest",
+  /** Absolute path to a local dist/bin.js for dev testing. Uses npx when unset. */
+  localBinPath?: string
 ): string {
   const envVars = ["LEADBAY_TOKEN", "LEADBAY_REGION", "LEADBAY_TELEMETRY_ENABLED"];
   if (!includeWrite) envVars.push("LEADBAY_MCP_WRITE");
   const envVarsToml = envVars.map((v) => `"${v}"`).join(", ");
+  const commandLine = localBinPath
+    ? `command = "node"\nargs = [${JSON.stringify(localBinPath)}]\n`
+    : `command = "npx"\nargs = ["-y", "@leadbay/mcp@${version}"]\n`;
   return (
     `[mcp_servers.leadbay]\n` +
-    `command = "npx"\n` +
-    `args = ["-y", "@leadbay/mcp@${version}"]\n` +
+    commandLine +
     `env_vars = [${envVarsToml}]\n`
   );
 }
@@ -80,7 +84,9 @@ export function stripShellExportBlock(existing: string): { content: string; chan
 export async function installInCodexConfig(
   configPath: string,
   includeWrite: boolean,
-  telemetryEnabled: boolean
+  telemetryEnabled: boolean,
+  /** Absolute path to a local dist/bin.js for dev testing. Uses npx when unset. */
+  localBinPath?: string
 ): Promise<{ ok: boolean; message: string }> {
   try {
     const { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, chmodSync } = await import("node:fs");
@@ -97,7 +103,7 @@ export async function installInCodexConfig(
 
     const next = mergeCodexConfig(
       existing,
-      buildCodexConfigBlock(includeWrite, telemetryEnabled)
+      buildCodexConfigBlock(includeWrite, telemetryEnabled, "latest", localBinPath)
     );
     const tmp = `${configPath}.tmp`;
     writeFileSync(tmp, next, "utf8");
