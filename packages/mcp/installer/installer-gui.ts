@@ -263,8 +263,12 @@ async function streamInstall(url: URL, res: ServerResponse, onDone?: () => void)
     else { emit("error", `${result.label}: ${result.message}`); }
   }
 
-  emit(okCount > 0 ? "success" : "error", selectedHasOnlyManualSetup ? "Manual ChatGPT setup instructions ready." : `${okCount}/${selected.length} agent(s) installed, updated, or prepared.`);
-  finish(selectedHasOnlyManualSetup ? "Follow the manual setup instructions shown above." : "Restart your MCP client(s) to pick up the new server.");
+  const summary = selectedHasOnlyManualSetup ? "Manual ChatGPT setup instructions ready." : `${okCount}/${selected.length} agent(s) installed, updated, or prepared.`;
+  const closing = selectedHasOnlyManualSetup ? "Follow the manual setup instructions shown above." : "Restart your MCP client(s) to pick up the new server.";
+  emit(okCount > 0 ? "success" : "error", summary);
+  // Only exit the process when at least one install succeeded — all-failed is
+  // recoverable and the user should be able to retry in the same wizard.
+  if (okCount > 0) { finish(closing); } else { abort(closing); }
 }
 
 async function streamUninstall(url: URL, res: ServerResponse, onDone?: () => void): Promise<void> {
