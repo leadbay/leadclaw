@@ -469,6 +469,9 @@ function renderHTML(
   tr.rowlink{cursor:pointer}
   tr.rowlink:hover{background:#1f6feb22}
   header .lastref{color:#3fb950}
+  #refreshbtn{margin-left:10px;background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:3px 10px;font-size:12px;cursor:pointer}
+  #refreshbtn:hover{background:#30363d;border-color:#58a6ff}
+  #refreshbtn:disabled{opacity:.6;cursor:default}
   /* Modal */
   .modal-bg{position:fixed;inset:0;background:#000a;display:none;z-index:50;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
   .modal-bg.open{display:flex}
@@ -492,7 +495,7 @@ function renderHTML(
 <header><h1>MCP Telemetry Dashboard</h1>
 <div class="meta">PostHog project ${esc(PROJECT_ID)} · last ${DAYS} days · Last refreshed <span class="lastref" id="lastref" data-ts="${esc(
     generatedAt
-  )}">just now</span></div></header>
+  )}">just now</span> <button id="refreshbtn" title="Query PostHog now">↻ Refresh now</button></div></header>
 <main>${body}</main>
 <div class="modal-bg" id="modal-bg"><div class="modal" id="modal"></div></div>
 <script>window.__USERS=${JSON.stringify(userDetails)};</script>
@@ -516,6 +519,30 @@ function ago(){const s=Math.max(0,Math.round((Date.now()-genTs)/1000));
  if(s<60)return s+'s ago';const m=Math.floor(s/60);if(m<60)return m+'m '+(s%60)+'s ago';
  const h=Math.floor(m/60);return h+'h '+(m%60)+'m ago';}
 function tick(){if(lastref)lastref.textContent=ago();}
+
+// ── Manual "Refresh now" button ──
+// Hits the server's /refresh endpoint (kicks a regeneration), then polls until
+// the cached page's generation timestamp advances, then reloads.
+const refreshBtn=document.getElementById('refreshbtn');
+if(refreshBtn){refreshBtn.addEventListener('click',async()=>{
+ refreshBtn.disabled=true;const orig=refreshBtn.textContent;refreshBtn.textContent='↻ Refreshing…';
+ try{
+  const r=await fetch('/refresh',{method:'POST'});
+  if(r.status===409){refreshBtn.textContent='↻ Already refreshing…';}
+  // Poll the live page for a newer data-ts, then reload (regen takes ~30-50s).
+  const before=genTs;let waited=0;
+  const poll=setInterval(async()=>{
+   waited+=3;
+   try{
+    const html=await (await fetch('/',{cache:'no-store'})).text();
+    const m=html.match(/data-ts="([^"]+)"/);
+    const newTs=m?new Date(m[1]).getTime():before;
+    if(newTs>before){clearInterval(poll);location.reload();return;}
+   }catch(e){}
+   if(waited>=90){clearInterval(poll);refreshBtn.disabled=false;refreshBtn.textContent=orig;}
+  },3000);
+ }catch(e){refreshBtn.disabled=false;refreshBtn.textContent=orig;}
+});}
 tick();setInterval(tick,1000);
 
 // ── Per-user drill-down modal ──

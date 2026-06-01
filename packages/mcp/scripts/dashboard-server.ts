@@ -120,6 +120,19 @@ function authOk(header: string | undefined): boolean {
   return eq(u, expU) && eq(p, expP);
 }
 
+// Guard so a manual refresh can't overlap the interval regen (which would
+// double memory + double-hit PostHog's 3-concurrent-query cap).
+let regenInFlight = false;
+async function regenerateGuarded(): Promise<void> {
+  if (regenInFlight) return;
+  regenInFlight = true;
+  try {
+    await regenerate();
+  } finally {
+    regenInFlight = false;
+  }
+}
+
 const server = createServer((req, res) => {
   if (req.url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain" });
@@ -134,6 +147,19 @@ const server = createServer((req, res) => {
     res.end("Authentication required");
     return;
   }
+  // Manual refresh: kick a regeneration (non-blocking) and report status.
+  // 202 = started, 409 = one already running. The page polls then reloads.
+  if (req.url === "/refresh") {
+    if (regenInFlight) {
+      res.writeHead(409, { "content-type": "text/plain" });
+      res.end("busy");
+      return;
+    }
+    regenerateGuarded();
+    res.writeHead(202, { "content-type": "text/plain" });
+    res.end("refreshing");
+    return;
+  }
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   res.end(cachedHtml);
 });
@@ -141,6 +167,6 @@ const server = createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`[dashboard] listening on :${PORT}, refresh every ${REFRESH_MS}ms`);
   // First generation immediately, then on the interval.
-  regenerate();
-  setInterval(regenerate, REFRESH_MS);
+  regenerateGuarded();
+  setInterval(regenerateGuarded, REFRESH_MS);
 });
