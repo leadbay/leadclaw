@@ -16,6 +16,7 @@ interface AdjustAudienceParams {
   sizes?: Array<{ min?: number; max?: number }>;
   // (Locations resolution is a separate beast; not modelled here yet.)
   lensId?: number;
+  lensName?: string;             // target a lens by name (resolved → id); edit-only, does NOT switch active lens
   save_for_org?: boolean;        // admin only — propagate to org-level lens
   newLensName?: string;          // when default lens forces clone
 }
@@ -97,6 +98,42 @@ async function resolveSectors(
     }
   }
   return { resolved, ambiguities };
+}
+
+interface LensNameMatch {
+  id: number;
+  name: string;
+}
+
+/**
+ * Resolve a lens by name against GET /lenses. Mirrors the sector-resolution
+ * contract: exactly one match → that lens; zero → not_found; >1 → ambiguous.
+ * Matching is case-insensitive, exact first, then a unique substring fallback
+ * (so "joinery" finds "Joinery audience"). Does NOT change the active lens.
+ */
+async function resolveLensByName(
+  client: LeadbayClient,
+  name: string
+): Promise<
+  | { ok: true; id: number }
+  | { ok: false; reason: "not_found"; lenses: LensNameMatch[] }
+  | { ok: false; reason: "ambiguous"; matches: LensNameMatch[] }
+> {
+  const lenses = await client.request<LensPayload[]>("GET", "/lenses");
+  const all: LensNameMatch[] = lenses.map((l) => ({ id: l.id, name: l.name }));
+  const needle = name.trim().toLowerCase();
+
+  const exact = all.filter((l) => (l.name ?? "").trim().toLowerCase() === needle);
+  if (exact.length === 1) return { ok: true, id: exact[0].id };
+  if (exact.length > 1) return { ok: false, reason: "ambiguous", matches: exact };
+
+  const partial = all.filter((l) =>
+    (l.name ?? "").toLowerCase().includes(needle)
+  );
+  if (partial.length === 1) return { ok: true, id: partial[0].id };
+  if (partial.length > 1) return { ok: false, reason: "ambiguous", matches: partial };
+
+  return { ok: false, reason: "not_found", lenses: all };
 }
 
 function mergeFilter(
@@ -203,6 +240,11 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
         description: "Company size buckets, e.g. [{min:30,max:300}]",
       },
       lensId: { type: "number", description: "Lens id (escape hatch)" },
+      lensName: {
+        type: "string",
+        description:
+          "Target a lens BY NAME (e.g. 'Joinery') instead of the active one. Resolved against your lenses — edit-only, does NOT switch your active lens. Unknown/ambiguous names are surfaced to pick from. Takes effect only when lensId is not given.",
+      },
       save_for_org: {
         type: "boolean",
         description:
@@ -219,16 +261,29 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
   outputSchema: {
     type: "object",
     description:
-      "Two return shapes: 'ambiguous_sectors' when free-text sectors matched multiple candidates (agent re-calls with sector_ids), 'applied' on success.",
+      "Return shapes: 'applied' on success; 'ambiguous_sectors' when free-text sectors matched multiple candidates (re-call with sector_ids); 'lens_not_found' / 'ambiguous_lens' when a lensName didn't resolve to exactly one lens (re-call with lensId or an exact lensName).",
     properties: {
       status: {
         type: "string",
-        description: "'ambiguous_sectors' or 'applied'.",
+        description:
+          "'applied', 'ambiguous_sectors', 'lens_not_found', or 'ambiguous_lens'.",
       },
       sector_ambiguities: {
         type: "array",
         description:
           "Per ambiguous text: {sector_text, matches:[{id, name, score}]}. Agent picks an id and re-calls.",
+        items: { type: "object" },
+      },
+      lenses: {
+        type: "array",
+        description:
+          "On 'lens_not_found': the user's lenses [{id, name}] to pick from.",
+        items: { type: "object" },
+      },
+      matches: {
+        type: "array",
+        description:
+          "On 'ambiguous_lens': the lenses [{id, name}] the name matched.",
         items: { type: "object" },
       },
       message: { type: "string" },
@@ -252,8 +307,38 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
   ) => {
     const me = await client.resolveMe();
     const isAdmin = me.admin === true;
+
+    // Resolve lensName → id when given (edit-only — does NOT switch the active
+    // lens). Surfaces no-match / ambiguous the same way sectors do. An explicit
+    // lensId wins and short-circuits name resolution (no wasted GET /lenses).
+    let namedLensId: number | undefined;
+    if (
+      params.lensId == null &&
+      params.lensName != null &&
+      params.lensName.trim() !== ""
+    ) {
+      const res = await resolveLensByName(client, params.lensName);
+      if (!res.ok && res.reason === "not_found") {
+        return {
+          status: "lens_not_found",
+          lens_query: params.lensName,
+          lenses: res.lenses,
+          message: `No lens named "${params.lensName}". Pick one of the listed lenses (pass lensId or an exact lensName), or create it first.`,
+        };
+      }
+      if (!res.ok && res.reason === "ambiguous") {
+        return {
+          status: "ambiguous_lens",
+          lens_query: params.lensName,
+          matches: res.matches,
+          message: `"${params.lensName}" matched multiple lenses. Re-call with the exact lensName or the lensId of the one you mean.`,
+        };
+      }
+      if (res.ok) namedLensId = res.id;
+    }
+
     const startingLensId =
-      params.lensId ?? me.last_requested_lens ?? (await client.resolveDefaultLens());
+      params.lensId ?? namedLensId ?? me.last_requested_lens ?? (await client.resolveDefaultLens());
 
     // Resolve free-text sectors (taxonomy lookup with fuzzy matching).
     const includeTexts = [

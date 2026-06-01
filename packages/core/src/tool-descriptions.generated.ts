@@ -109,6 +109,8 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // region: leadbay_adjust_audience
 export const leadbay_adjust_audience: string = `Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. Permission routing is hidden: the default lens auto-clones to a new user lens; an org-level lens defaults to a per-user draft (admins can override with \`save_for_org:true\`). Filter MERGES with existing criteria (unrelated criteria are not dropped).
 
+**Targeting a lens.** By default this edits the user's ACTIVE lens. To edit a DIFFERENT lens by name without switching to it, pass \`lensName\` (e.g. "add fintech to my Joinery lens" → \`lensName:"Joinery"\`). The name resolves against the user's lenses (case-insensitive, exact then unique-substring); it is edit-only and does NOT change which lens is active. An unmatched name returns \`status:"lens_not_found"\` with the lens list, and a name matching several returns \`status:"ambiguous_lens"\` with the candidates — surface them and re-call with the exact \`lensName\` or a \`lensId\`. Use \`leadbay_my_lenses\` if the user first wants to SEE or SWITCH lenses.
+
 WHEN TO USE: when the user wants to see different kinds of leads (sector / size / etc.).
 
 WHEN NOT TO USE: to refine BEYOND firmographics — that's leadbay_refine_prompt.
