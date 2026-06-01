@@ -21,7 +21,7 @@ interface AdjustAudienceParams {
   newLensName?: string;          // when default lens forces clone
 }
 
-interface SectorAmbiguity {
+export interface SectorAmbiguity {
   sector_text: string;
   matches: Array<{ id: string; name: string; score: number }>;
 }
@@ -55,7 +55,7 @@ function bestMatches(
   return ranked.slice(0, 5);
 }
 
-async function resolveSectors(
+export async function resolveSectors(
   client: LeadbayClient,
   texts: string[],
   ctx?: ToolContext
@@ -136,7 +136,7 @@ async function resolveLensByName(
   return { ok: false, reason: "not_found", lenses: all };
 }
 
-function mergeFilter(
+export function mergeFilter(
   current: FilterPayload,
   toAddSectors: string[],
   toExcludeSectors: string[],

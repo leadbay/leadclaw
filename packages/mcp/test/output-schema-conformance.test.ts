@@ -988,6 +988,48 @@ const CASES: ConformanceCase[] = [
       ]);
     },
   },
+  {
+    // Create with one sector + explicit base (skips resolveDefaultLens).
+    toolName: "leadbay_new_lens",
+    arguments: { name: "Joinery", sectors: ["Fintech"], base: 42, _triggered_by: "test: new_lens conformance" },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: "/1.5/users/me",
+          status: 200,
+          body: {
+            id: "u-1",
+            email: "u@example.com",
+            organization: { id: "org-1", name: "Acme" },
+            language: "en",
+            last_requested_lens: 42,
+          },
+        },
+        {
+          method: "GET",
+          path: "/1.5/sectors/all?lang=en&includeInvisible=false",
+          status: 200,
+          body: [
+            { id: "1", name: "Fintech" },
+            { id: "2", name: "Plomberie" },
+          ],
+        },
+        {
+          method: "POST",
+          path: "/1.5/lenses",
+          status: 200,
+          body: { id: 555, name: "Joinery", user_id: "u-1", is_default: false },
+        },
+        {
+          method: "POST",
+          path: "/1.5/lenses/555/filter",
+          status: 200,
+          body: {},
+        },
+      ]);
+    },
+  },
 ];
 
 // -----------------------------------------------------------------------

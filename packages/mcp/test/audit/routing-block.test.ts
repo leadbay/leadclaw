@@ -51,6 +51,7 @@ const TOOLS_WITH_ROUTING = new Set([
   // doesn't apply because there is no user-facing trigger phrase.
   "leadbay_extend_lens",
   "leadbay_my_lenses",
+  "leadbay_new_lens",
 ]);
 
 const ALL_TOOLS: Tool[] = [
