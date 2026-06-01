@@ -103,6 +103,7 @@ import { adjustAudience } from "./composite/adjust-audience.js";
 import { refinePrompt } from "./composite/refine-prompt.js";
 import { seedCandidates } from "./composite/seed-candidates.js";
 import { extendLens } from "./composite/extend-lens.js";
+import { myLenses } from "./composite/my-lenses.js";
 import { answerClarification } from "./composite/answer-clarification.js";
 import { reportOutreach } from "./composite/report-outreach.js";
 import { reportFriction } from "./composite/report-friction.js";
@@ -304,6 +305,11 @@ export const compositeWriteTools: Tool[] = [
   // Lens extend — agent-driven on-demand fill (additive). Gated behind
   // LEADBAY_MCP_WRITE=1. Subject to per-org daily LENS_EXTRA_REFILL quota.
   extendLens,
+  // Lens list/switch — read-first (no args = pure list); a switchToLensId
+  // changes the active lens. In compositeWriteTools because the switch path
+  // mutates last_requested_lens, but it stays on the default surface
+  // (write is on by default since 0.3.0).
+  myLenses,
 ];
 
 // Backward-compat alias for existing consumers.

@@ -959,6 +959,35 @@ const CASES: ConformanceCase[] = [
       ]);
     },
   },
+  {
+    // List path (no switch) — pure read, simplest deterministic happy path.
+    toolName: "leadbay_my_lenses",
+    arguments: { _triggered_by: "test: my_lenses conformance" },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: "/1.5/lenses",
+          status: 200,
+          body: [
+            { id: 42, name: "Default audience", description: "All sectors", is_last_active: true },
+            { id: 99, name: "Joinery", description: null, is_last_active: false },
+          ],
+        },
+        {
+          method: "GET",
+          path: "/1.5/users/me",
+          status: 200,
+          body: {
+            id: "u-1",
+            email: "u@example.com",
+            organization: { id: "org-1", name: "Acme" },
+            last_requested_lens: 42,
+          },
+        },
+      ]);
+    },
+  },
 ];
 
 // -----------------------------------------------------------------------

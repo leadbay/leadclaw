@@ -1,0 +1,68 @@
+---
+name: leadbay_my_lenses
+kind: tool-description
+short_description: |
+  List the user's lenses (audiences), marking the active one. Pass
+  `switchToLensId` to switch the active lens and get the refreshed list back.
+  With no args it is a pure read.
+routing:
+  triggers:
+    - "show me my lenses"
+    - "list my lenses"
+    - "which audiences do I have"
+    - "what lenses do I have"
+    - "switch to my <name> lens"
+    - "change lens"
+    - "which lens am I on"
+  anti_triggers:
+    - phrase: "narrow the audience"
+      route_to: leadbay_adjust_audience
+    - phrase: "stop showing me <sector>"
+      route_to: leadbay_refine_prompt
+    - phrase: "more leads on this lens"
+      route_to: leadbay_extend_lens
+    - phrase: "show me today's leads"
+      route_to: leadbay_pull_leads
+  prefer_when: "user wants to SEE which lenses exist or CHANGE which one is active — not edit a lens's criteria"
+  examples:
+    positive:
+      - "Show me my lenses."
+      - "Which audiences do I have set up?"
+      - "Switch to my Joinery lens."
+    negative:
+      - "Narrow the audience to fintech only."
+      - "I want more leads on this lens."
+      - "Show me today's leads."
+rendering_hint: |
+  Small markdown table, active lens first: col 1 = ⭐ prefix when active +
+  lens name; col 2 = description (or `—`). After a switch, lead with
+  "Now showing **<name>**." Full algorithm below.
+next_steps: my-lenses
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+---
+List the user's lenses (saved audiences) and, when asked, switch which one is active. A lens shapes the kind of leads delivered each day; this tool is how the user sees their audiences and moves between them — it does NOT edit a lens's criteria (that's `leadbay_adjust_audience`).
+
+**Two modes, one tool:**
+
+- **List (no args)** — pure read. Returns `{status:"listed", lenses:[{id, name, description, is_active}], active_lens_id}`. The active lens is resolved from the user's last-requested lens, so `is_active` is authoritative even if a row's flag is stale.
+- **Switch (`switchToLensId`)** — changes the active lens to that id and returns the REFRESHED list (so you don't need a second call to show the result). The id MUST be one of the user's lenses; an unknown id returns `{status:"not_found"}` with the current list and a hint — surface the list and ask the user to pick, do NOT invent an id. Switching to the already-active lens is a harmless no-op (`switched:false`).
+
+**When the user is vague** ("switch lens" with no target), list first, then offer the lenses as a quick choice via `ask_user_input_v0` rather than guessing.
+
+{{include:headers/tool-when-to-use}} when the user wants to see their lenses or switch the active one. Canonical phrasings: "show me my lenses", "which audiences do I have", "switch to my <name> lens".
+
+{{include:headers/tool-when-not-to-use}} to change a lens's audience criteria — that's `leadbay_adjust_audience`. Not for refining beyond firmographics (`leadbay_refine_prompt`), not for topping up the same lens (`leadbay_extend_lens`), not for the daily pull (`leadbay_pull_leads`).
+
+{{include:headers/verification-required-if-write}}
+
+{{include:gates/builtin-widgets}}
+
+---
+
+{{include:rendering/my-lenses-table}}
+
+{{include:next-steps/my-lenses}}
