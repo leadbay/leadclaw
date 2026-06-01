@@ -509,14 +509,17 @@ function pageHtml(): string {
 async function openBrowser(url: string): Promise<void> {
   const { spawn } = await import("node:child_process");
 
+  // Returns true only if the process exits 0. On Linux, xdg-open and friends
+  // may be installed but exit non-zero when they cannot find a browser or
+  // display — treating those as failures lets the loop fall through to the
+  // next candidate and ultimately print the manual URL hint.
   const trySpawn = (command: string, args: string[]): Promise<boolean> =>
     new Promise((resolve) => {
       try {
         const child = spawn(command, args, { stdio: "ignore", detached: true });
         child.unref();
         child.on("error", () => resolve(false));
-        // Give it 500 ms — if it hasn't errored by then, assume success.
-        setTimeout(() => resolve(true), 500);
+        child.on("close", (code) => resolve(code === 0));
       } catch {
         resolve(false);
       }
