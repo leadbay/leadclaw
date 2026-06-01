@@ -9,11 +9,14 @@ async function main(): Promise<void> {
     ? await startUninstallerGui(opts)
     : await startInstallerGui(opts);
 
-  // Keep the process alive until the user closes the browser tab or Ctrl+C.
-  await new Promise<void>((resolve) => {
-    process.once("SIGINT", () => resolve());
-    process.once("SIGTERM", () => resolve());
-  });
+  // Exit when install completes or when the user hits Ctrl+C.
+  await Promise.race([
+    handle.done,
+    new Promise<void>((resolve) => {
+      process.once("SIGINT", () => resolve());
+      process.once("SIGTERM", () => resolve());
+    }),
+  ]);
   await handle.close().catch(() => undefined);
 }
 
