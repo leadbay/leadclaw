@@ -57,7 +57,8 @@ describe("leadbay_new_lens", () => {
     const createPost = getHttpRequests().find(
       (r) => r.method === "POST" && r.path === "/1.5/lenses"
     );
-    expect(JSON.parse(createPost!.body!)).toMatchObject({ base: 42, name: "Joinery" });
+    // base is coerced to a STRING — backend rejects numeric base (400).
+    expect(JSON.parse(createPost!.body!)).toMatchObject({ base: "42", name: "Joinery" });
   });
 
   it("ambiguous sector — lens is NOT created", async () => {
@@ -114,6 +115,6 @@ describe("leadbay_new_lens", () => {
     const createPost = getHttpRequests().find(
       (r) => r.method === "POST" && r.path === "/1.5/lenses"
     );
-    expect(JSON.parse(createPost!.body!)).toMatchObject({ base: 123 });
+    expect(JSON.parse(createPost!.body!)).toMatchObject({ base: "123" });
   });
 });

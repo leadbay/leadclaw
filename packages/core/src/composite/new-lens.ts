@@ -15,7 +15,7 @@
  */
 import type { LeadbayClient } from "../client.js";
 import type { Tool, ToolContext, LensPayload, FilterPayload } from "../types.js";
-import { resolveSectors, mergeFilter } from "./adjust-audience.js";
+import { resolveSectors, mergeFilter, filterWriteBody } from "./adjust-audience.js";
 
 import { leadbay_new_lens as NEW_LENS_DESCRIPTION } from "../tool-descriptions.generated.js";
 
@@ -144,8 +144,12 @@ export const newLens: Tool<NewLensParams> = {
     const base = params.base ?? (await client.resolveDefaultLens());
 
     // 3. Create the lens.
+    // The backend's POST /lenses deserializer requires `base` as a STRING
+    // (lens ids are strings server-side, e.g. "39107"); sending a number
+    // yields 400 "JSON deserialization error". Coerce here — the rest of the
+    // codebase carries ids as numbers, which is harmless for URL paths.
     const created = await client.request<LensPayload>("POST", "/lenses", {
-      base,
+      base: String(base),
       name: params.name,
       description: params.description,
     });
@@ -159,7 +163,12 @@ export const newLens: Tool<NewLensParams> = {
     );
     const hasCriteria = merged.lens_filter.items[0].criteria.length > 0;
     if (hasCriteria) {
-      await client.requestVoid("POST", `/lenses/${created.id}/filter`, merged);
+      // POST /filter wants the unwrapped {items:[...]} body, not the envelope.
+      await client.requestVoid(
+        "POST",
+        `/lenses/${created.id}/filter`,
+        filterWriteBody(merged)
+      );
     }
 
     // The lens list cache the client maintains is now stale.

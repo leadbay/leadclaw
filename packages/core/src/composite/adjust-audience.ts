@@ -182,13 +182,22 @@ export function mergeFilter(
     }
   }
 
-  // size — replace if provided (single canonical size criterion).
+  // size — replace if provided (single canonical size criterion). The backend
+  // deserializer requires BOTH min and max on every size bucket; "under N"
+  // (max only) must carry min:0 or it 400s. Default the missing bound.
   if (sizes && sizes.length > 0) {
+    // Backend requires both bounds and rejects out-of-range ints (e.g.
+    // MAX_SAFE_INTEGER 400s). Default min→0; for an open-ended upper bound
+    // use 1_000_000 (well above any real company headcount, within range).
+    const normalizedSizes = sizes.map((s) => ({
+      min: s.min ?? 0,
+      max: s.max ?? 1_000_000,
+    }));
     const idx = criteria.findIndex((c) => c.type === "size");
     if (idx >= 0) {
-      criteria[idx] = { type: "size", is_excluded: false, sizes };
+      criteria[idx] = { type: "size", is_excluded: false, sizes: normalizedSizes };
     } else {
-      criteria.push({ type: "size", is_excluded: false, sizes });
+      criteria.push({ type: "size", is_excluded: false, sizes: normalizedSizes });
     }
   }
 
@@ -196,6 +205,17 @@ export function mergeFilter(
     lens_filter: { items: [{ criteria }] },
     locations: current.locations ?? { results: [], parents: [] },
   };
+}
+
+/**
+ * POST /lenses/:id/filter expects the UNWRAPPED body `{items:[{criteria}]}` —
+ * NOT the `{lens_filter:{items}, locations}` envelope that GET returns (and
+ * that mergeFilter produces). Sending the wrapped envelope 400s with
+ * "JSON deserialization error". This adapts the merged FilterPayload to the
+ * write shape. Verified live against the backend.
+ */
+export function filterWriteBody(filter: FilterPayload): { items: FilterPayload["lens_filter"]["items"] } {
+  return { items: filter.lens_filter.items };
 }
 
 export const adjustAudience: Tool<AdjustAudienceParams> = {
@@ -394,6 +414,10 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
       excludeRes.resolved,
       params.sizes
     );
+    // The write endpoint wants the unwrapped {items:[...]} body, not the
+    // {lens_filter, locations} envelope. `merged` stays the envelope for the
+    // return value (filter_applied); mergedBody is what we POST.
+    const mergedBody = filterWriteBody(merged);
 
     const isDefault = lens.is_default || lens.default;
     const isUserLevel = lens.user_id != null;
@@ -416,7 +440,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
       await client.requestVoid(
         "POST",
         `/lenses/${targetLensId}/filter`,
-        merged
+        mergedBody
       );
       // Set as active.
       await client.requestVoid(
@@ -428,7 +452,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
         await client.requestVoid(
           "POST",
           `/lenses/${startingLensId}/filter`,
-          merged
+          mergedBody
         );
       } catch (err: any) {
         if (err?.code === "FORBIDDEN") {
@@ -442,7 +466,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           await client.requestVoid(
             "POST",
             `/lenses/${targetLensId}/filter`,
-            merged
+            mergedBody
           );
           await client.requestVoid(
             "POST",
@@ -465,7 +489,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           await client.requestVoid(
             "POST",
             `/lenses/${targetLensId}/filter`,
-            merged
+            mergedBody
           );
         } catch (err: any) {
           // Orphan-draft handling: try DELETE; if not supported, surface for manual cleanup.
@@ -495,7 +519,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           await client.requestVoid(
             "POST",
             `/lenses/${startingLensId}/filter`,
-            merged
+            mergedBody
           );
         } catch (err: any) {
           throw err;
