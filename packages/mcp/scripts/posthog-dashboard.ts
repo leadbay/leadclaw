@@ -291,6 +291,17 @@ interface UserDetail {
   byTool: Row[]; // [tool, calls, ok, failed, avg_ms]
   errors: Row[]; // [tool, error_code, n]
   prompts: Row[]; // [ts, tool, ok, error_code, prompt]
+  // Plan & credits. PostHog carries quota-HIT events, not a running credit
+  // ledger — so this is consumption *pressure* (when/which window they blew
+  // through), NOT an exact remaining balance. The UI labels it as such.
+  billing: {
+    freemium: string;      // 'true' | 'false' | ''
+    status: string;        // billingStatus: OK / NOT_SET_UP / ...
+    resetsAt: string;      // quota_exceeded_resets_at
+    plan: string;          // latest quota_plan_changed.new_plan
+  };
+  quotaHits: Row[];        // [resource_type, window_type, hits] — how credits were consumed
+  topups: { count: number; totalCents: number };
 }
 
 // One combined per-user query keeps us well under PostHog's 3-concurrent-query
@@ -317,7 +328,35 @@ async function fetchUserDetail(user: string): Promise<UserDetail> {
                   AND properties.triggered_by IS NOT NULL AND properties.triggered_by != ''
             ORDER BY ts DESC LIMIT 200`),
   ];
+
+  // Plan & billing from the person record (current state) + latest plan change.
+  const billingRows = await hogql(
+    `SELECT p.properties.is_freemium AS freemium, p.properties.billingStatus AS status,
+            p.properties.quota_exceeded_resets_at AS resets_at,
+            (SELECT properties.new_plan FROM events
+               WHERE event='quota_plan_changed' AND distinct_id='${u}'
+               ORDER BY timestamp DESC LIMIT 1) AS plan
+     FROM person_distinct_ids pdi JOIN persons p ON pdi.person_id = p.id
+     WHERE pdi.distinct_id='${u}' LIMIT 1`
+  ).catch(() => [] as Row[]);
+
+  // Credit consumption pressure: which budget window they blew through, and
+  // how often. NOT a balance — PostHog only records the quota-exceeded moments.
+  const quotaHits = await hogql(
+    `SELECT properties.resource_type AS resource, properties.window_type AS window, count() AS hits
+     FROM events WHERE event='quota_exceeded' AND distinct_id='${u}' AND ${WINDOW}
+     GROUP BY resource, window ORDER BY hits DESC`
+  ).catch(() => [] as Row[]);
+
+  // Top-ups: real money spent unblocking quota.
+  const topupRows = await hogql(
+    `SELECT count() AS n, sum(toInt(properties.payment_amount_cents)) AS cents
+     FROM events WHERE event='topup_purchased' AND distinct_id='${u}' AND ${WINDOW}`
+  ).catch(() => [] as Row[]);
+
   const s = (summaryRows[0] as unknown[]) ?? [];
+  const b = (billingRows[0] as unknown[]) ?? [];
+  const t = (topupRows[0] as unknown[]) ?? [];
   return {
     user,
     summary: {
@@ -325,6 +364,12 @@ async function fetchUserDetail(user: string): Promise<UserDetail> {
       tools: Number(s[3] ?? 0), firstSeen: String(s[4] ?? ""), lastSeen: String(s[5] ?? ""),
     },
     byTool, errors, prompts,
+    billing: {
+      freemium: String(b[0] ?? ""), status: String(b[1] ?? ""),
+      resetsAt: String(b[2] ?? ""), plan: String(b[3] ?? ""),
+    },
+    quotaHits,
+    topups: { count: Number(t[0] ?? 0), totalCents: Number(t[1] ?? 0) },
   };
 }
 
@@ -561,6 +606,22 @@ function openUser(user){
  let html='<button class="close">&times;</button>';
  html+='<h2>'+esc(user)+'</h2><div class="muser">first seen '+esc(s.firstSeen)+' · last seen '+esc(s.lastSeen)+'</div>';
  html+='<div class="stats">'+stat(s.calls,'tool calls')+stat(succ+'%','success')+stat(s.failed,'failed')+stat(s.tools,'distinct tools')+'</div>';
+ // ── Plan & credits ──
+ const bl=d.billing||{};
+ const planLabel=bl.plan?bl.plan:(bl.freemium==='true'?'FREEMIUM':(bl.freemium==='false'?'PAID':'—'));
+ const euros=c=>'€'+(Number(c||0)/100).toFixed(0);
+ html+='<h3>Plan &amp; credits</h3>';
+ html+='<div class="stats">'+stat(esc(planLabel),'plan')+stat(esc(bl.status||'—'),'billing')
+   +stat(d.topups&&d.topups.count?euros(d.topups.totalCents):'€0','topped up')
+   +stat(d.topups?d.topups.count:0,'top-ups')+'</div>';
+ if(bl.resetsAt)html+='<div class="muser">quota window resets: '+esc(bl.resetsAt)+'</div>';
+ // credit-consumption pressure (quota_exceeded hits) — NOT an exact balance
+ if(d.quotaHits&&d.quotaHits.length){
+  html+='<div class="muser" style="margin-top:8px">Credit pressure — when they hit a quota wall (consumption, not a balance):</div>';
+  html+='<div class="tablewrap"><table><thead><tr><th>Resource</th><th>Window</th><th>Times hit</th></tr></thead><tbody>';
+  d.quotaHits.forEach(r=>{html+='<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>'+r[2]+'</td></tr>';});
+  html+='</tbody></table></div>';
+ } else { html+='<div class="muser" style="margin-top:8px">No quota walls hit in window — credits comfortably within budget.</div>'; }
  // tool breakdown
  html+='<h3>Tools used</h3><div class="tablewrap"><table><thead><tr><th>Tool</th><th>Calls</th><th>OK</th><th>Failed</th><th>Avg ms</th></tr></thead><tbody>';
  d.byTool.forEach(r=>{html+='<tr><td>'+esc(r[0])+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td><td>'+esc(r[4])+'</td></tr>';});
