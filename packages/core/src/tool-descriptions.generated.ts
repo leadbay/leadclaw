@@ -395,9 +395,9 @@ WHEN TO USE: poll this after leadbay_enrich_titles returns a \`bulk_id\`. Defaul
 
 WHEN NOT TO USE: as a substitute for leadbay_research_lead_by_id — that already includes enriched contacts for a single lead.
 
-## CREDIT COST — report actual spend when done
+## CREDIT COST — report actual spend, discreetly
 
-Once \`all_done\` is true the result carries the REAL cost of the enrichment: \`credits_used_total\` (exact AI credits consumed, summed per contact) and \`credits_remaining\` (the post-spend balance). Tell the user **"Enriched — {credits_used_total} credits used, {credits_remaining} remaining."** This is the actual figure, not an estimate. If \`credits_used_total\` is absent, the backend didn't report per-contact cost — say enrichment finished without a cost figure rather than reporting 0. If \`credits_remaining\` is null, billing is unavailable — don't read it as zero.
+Once \`all_done\` is true the result carries the REAL cost: \`credits_used_total\` (exact AI credits consumed, summed per contact) and \`credits_remaining\` (post-spend balance). Do NOT make a fuss about it — no sentence, no callout. Just append ONE small italic line in parentheses at the very END of your reply: \`_(X credits used | Y remaining)_\` using credits_used_total and credits_remaining. These are real figures, not estimates. If \`credits_used_total\` is absent (backend didn't report per-contact cost), omit the line entirely rather than printing 0. If \`credits_remaining\` is null, show just \`_(X credits used)_\`.
 `;
 // endregion: leadbay_bulk_enrich_status
 
@@ -907,9 +907,9 @@ WHEN TO USE: when you have a specific \`contact_id\` (from leadbay_get_contacts)
 
 WHEN NOT TO USE: for bulk enrichment by job title across many leads — use leadbay_enrich_titles, which handles the selection lifecycle and returns a clean preview/launch flow.
 
-## CREDIT COST
+## CREDIT COST — discreet
 
-This is a paid call. The result returns \`credits_remaining\` (the balance from billing.ai_credits, read before the spend). Before enriching, tell the user their balance — **"You have {credits_remaining} credits; enriching this contact."** — and confirm if the balance is low. Don't quote an exact per-contact cost (the rate is backend-only). After enrichment, the actual per-contact cost (enrichment.credits_used) shows up on the contact via leadbay_get_contacts. If \`credits_remaining\` is null, billing is unavailable — say the balance is unknown, don't assume zero.
+This is a paid call. The result returns \`credits_remaining\` (billing.ai_credits, read before the spend). Don't make a fuss about credits: only flag the balance if it's low (e.g. ≤ a few credits) so the user can decide. Otherwise append it quietly as a small italic parenthetical at the END of your reply — \`_(N credits remaining)_\`. Don't quote an exact per-contact cost (the rate is backend-only). The actual per-contact cost (enrichment.credits_used) appears on the contact via leadbay_get_contacts after enrichment. If \`credits_remaining\` is null, omit the line — don't assume zero.
 
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;
@@ -928,7 +928,7 @@ Enrichment is the main PAID operation. Surface cost both before and after.
 
 **BEFORE (confirm before launching).** The discover / preview_only / dry_run modes return \`credits_remaining\` (the balance) and \`enrichable_contacts\` (the volume that would be enriched). Tell the user plainly: **"You have {credits_remaining} credits. This will enrich {enrichable_contacts} contacts."** then ask them to confirm before you launch the paid run. Route that confirmation through \`ask_user_input_v0\` ("Enrich {enrichable_contacts} contacts now?" → ["Yes, enrich", "No, cancel"]). Do NOT state an exact estimated cost — the per-contact credit rate lives backend-side and is not in the preview; show the balance and the count, never a fabricated "will cost N credits". If \`credits_remaining\` is null, billing is unavailable — say the balance is unknown, don't assume zero or unlimited.
 
-**AFTER (report actual spend).** The real cost lands once the job finishes — poll \`leadbay_bulk_enrich_status\`, which returns \`credits_used_total\` (exact credits consumed) and \`credits_remaining\` (post-spend balance). When done, tell the user **"Enriched — {credits_used_total} credits used, {credits_remaining} remaining."** If \`credits_used_total\` is absent the backend didn't report per-contact cost; say enrichment completed without a cost figure rather than reporting 0.
+**AFTER (report actual spend, discreetly).** The real cost lands once the job finishes — poll \`leadbay_bulk_enrich_status\`, which returns \`credits_used_total\` (exact credits consumed) and \`credits_remaining\` (post-spend balance). Don't make a fuss: append ONE small italic line in parentheses at the very END of your reply — \`_(X credits used | Y remaining)_\`. Omit the line if \`credits_used_total\` is absent (don't print 0); show just \`_(X credits used)_\` if \`credits_remaining\` is null.
 
 ## GATE — PREFER BUILT-IN HOST WIDGETS
 
