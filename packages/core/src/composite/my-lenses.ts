@@ -123,7 +123,7 @@ export const myLenses: Tool<MyLensesParams> = {
       status: {
         type: "string",
         description:
-          "'listed', 'switched', 'edited', 'deleted', 'delete_preview' (confirm to proceed), 'cannot_delete_default', or 'not_found'.",
+          "'listed', 'switched', 'already_active', 'edited', 'deleted', 'delete_preview' (confirm to proceed), 'cannot_delete_default', or 'not_found'.",
       },
       switched: { type: "boolean", description: "True when this call changed the active lens." },
       edited: { type: "boolean", description: "True when this call renamed/re-described a lens." },
@@ -272,8 +272,10 @@ export const myLenses: Tool<MyLensesParams> = {
         };
       }
       if (target.is_active) {
+        // Honest no-op status: don't claim "switched" when nothing changed, so a
+        // consumer keying on status doesn't announce a switch that didn't happen.
         return {
-          status: "switched",
+          status: "already_active",
           switched: false,
           edited: false,
           active_lens_id: before.active_lens_id,

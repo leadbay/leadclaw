@@ -306,11 +306,16 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
           "On 'ambiguous_lens': the lenses [{id, name}] the name matched.",
         items: { type: "object" },
       },
+      lens_query: {
+        type: "string",
+        description:
+          "On 'lens_not_found' / 'ambiguous_lens': the lensName the user asked for.",
+      },
       message: { type: "string" },
       lens_used: {
         type: "object",
         description:
-          "Resolved lens metadata: {id, name, was_draft, was_new, save_for_org}.",
+          "Resolved lens metadata: {id, name, was_draft, was_new, active_lens_changed, save_for_org}.",
       },
       filter_applied: {
         type: "object",
@@ -436,9 +441,11 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
 
     if (isDefault) {
       // Cannot edit default. Clone via POST /lenses {base, name}.
+      // base MUST be a string — a numeric base yields 400 "JSON
+      // deserialization error" (same backend contract as new_lens/create_lens).
       const name = params.newLensName ?? `Custom audience — ${new Date().toISOString().slice(0, 10)}`;
       const newLens = await client.request<LensPayload>("POST", "/lenses", {
-        base: startingLensId,
+        base: String(startingLensId),
         name,
       });
       targetLensId = newLens.id;

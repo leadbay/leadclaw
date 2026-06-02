@@ -149,5 +149,12 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
       getHttpRequests().some((r) => r.path.includes("update_last_requested"))
     ).toBe(false);
     expect(result.message).toMatch(/active lens is unchanged/i);
+    // The clone POST must send base as a STRING — a numeric base 400s
+    // (same backend contract as new_lens). Regression guard for the
+    // default-lens clone path, which no other test's body assertion covered.
+    const clonePost = getHttpRequests().find(
+      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+    );
+    expect(JSON.parse(clonePost!.body!).base).toBe("4242");
   });
 });
