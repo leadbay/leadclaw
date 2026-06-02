@@ -53,6 +53,14 @@ npx -y -p @leadbay/mcp@latest installer
 
 It opens a window where you click **Sign in with Leadbay**, then pick which assistants to connect. Available on macOS and Windows.
 
+**To uninstall**, run the same installer with `--uninstall`:
+
+```bash
+npx -y -p @leadbay/mcp@latest installer --uninstall
+```
+
+It opens an uninstall window showing only the assistants that have Leadbay connected — pick the ones to remove and click **Remove selected**. It only removes Leadbay; your other settings and connections are left untouched.
+
 ---
 
 # For developers
