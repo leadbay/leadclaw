@@ -2,20 +2,20 @@
 name: leadbay_my_lenses
 kind: tool-description
 short_description: |
-  List the user's lenses (audiences), marking the active one. Pass
-  `switchToLensId` to switch the active lens, or `renameLensId`+`newName` to
-  rename one. With no args it is a pure read.
+  List the user's lenses (audiences), marking the active one. Switch active
+  (`switchToLensId`), rename (`renameLensId`+`newName`), or delete
+  (`deleteLensId`, confirm-gated). With no args it is a pure read.
 routing:
   triggers:
     - "show me my lenses"
     - "list my lenses"
     - "which audiences do I have"
-    - "what lenses do I have"
     - "switch to my <name> lens"
     - "change lens"
     - "which lens am I on"
     - "rename my <name> lens to <X>"
-    - "rename this lens"
+    - "delete my <name> lens"
+    - "remove this lens"
   anti_triggers:
     - phrase: "narrow the audience"
       route_to: leadbay_adjust_audience
@@ -25,12 +25,12 @@ routing:
       route_to: leadbay_extend_lens
     - phrase: "show me today's leads"
       route_to: leadbay_pull_leads
-  prefer_when: "user wants to SEE which lenses exist, CHANGE which is active, or RENAME one — not edit a lens's sector/size criteria"
+  prefer_when: "user wants to SEE lenses, CHANGE which is active, RENAME one, or DELETE one — not edit a lens's sector/size criteria"
   examples:
     positive:
       - "Show me my lenses."
       - "Switch to my Joinery lens."
-      - "Rename my Auto lens to Automotive Targets."
+      - "Delete my old Auto lens."
     negative:
       - "Narrow the audience to fintech only."
       - "I want more leads on this lens."
@@ -54,8 +54,9 @@ List the user's lenses (saved audiences) and, when asked, switch which one is ac
 - **List (no args)** — pure read. Returns `{status:"listed", lenses:[{id, name, description, is_active}], active_lens_id}`. The active lens is resolved from the user's last-requested lens, so `is_active` is authoritative even if a row's flag is stale.
 - **Switch (`switchToLensId`)** — changes the active lens to that id and returns the REFRESHED list. The id MUST be one of the user's lenses; an unknown id returns `{status:"not_found"}` with the current list — surface it and ask the user to pick, do NOT invent an id. Switching to the already-active lens is a harmless no-op.
 - **Rename (`renameLensId` + `newName`)** — renames a lens and returns the REFRESHED list. Same not_found handling. Use the `id` from the list for the lens the user named.
+- **Delete (`deleteLensId`)** — DESTRUCTIVE and confirm-gated. Without `confirm:true` it returns `status:"delete_preview"` with `will_delete` and removes NOTHING — show it, get the user's explicit yes, then re-call with `confirm:true`. The DEFAULT lens cannot be deleted (`status:"cannot_delete_default"`). Deleting the active lens leaves no active lens until the next switch/pull resolves one.
 
-**Lens ids are strings** (e.g. `"40005"`) — pass the `id` value straight from the list when switching/renaming; it is fine to pass it as the string it came as.
+**Lens ids are strings** (e.g. `"40005"`) — pass the `id` value straight from the list when switching/renaming/deleting; it is fine to pass it as the string it came as.
 
 **When the user is vague** ("switch lens" with no target), list first, then offer the lenses as a quick choice via `ask_user_input_v0` rather than guessing.
 

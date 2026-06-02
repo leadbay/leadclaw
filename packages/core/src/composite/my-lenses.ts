@@ -27,6 +27,8 @@ interface MyLensesParams {
   switchToLensId?: string | number;
   renameLensId?: string | number;
   newName?: string;
+  deleteLensId?: string | number;
+  confirm?: boolean; // required (=true) to actually delete; otherwise previews
 }
 
 interface LensListEntry {
@@ -34,6 +36,7 @@ interface LensListEntry {
   name: string;
   description?: string | null;
   is_active: boolean;
+  is_default: boolean;
 }
 
 // Normalize any id (string or number) to the string form the backend uses.
@@ -58,6 +61,7 @@ async function listWithActive(
       name: l.name,
       description: l.description ?? null,
       is_active: sid(l.id) === active_lens_id,
+      is_default: l.is_default === true || (l as { default?: boolean }).default === true,
     })),
   };
 }
@@ -91,6 +95,16 @@ export const myLenses: Tool<MyLensesParams> = {
         type: "string",
         description: "The new name — required when renameLensId is set.",
       },
+      deleteLensId: {
+        type: ["string", "number"],
+        description:
+          "When set, delete this lens. DESTRUCTIVE — returns a delete_preview unless confirm:true. Cannot delete the default lens.",
+      },
+      confirm: {
+        type: "boolean",
+        description:
+          "Required (=true) to actually delete. Without it, deleteLensId returns a preview to confirm with the user first.",
+      },
     },
     additionalProperties: false,
   },
@@ -100,10 +114,15 @@ export const myLenses: Tool<MyLensesParams> = {
       status: {
         type: "string",
         description:
-          "'listed', 'switched', 'renamed', or 'not_found' (unknown switch/rename id).",
+          "'listed', 'switched', 'renamed', 'deleted', 'delete_preview' (confirm to proceed), 'cannot_delete_default', or 'not_found'.",
       },
       switched: { type: "boolean", description: "True when this call changed the active lens." },
       renamed: { type: "boolean", description: "True when this call renamed a lens." },
+      deleted: { type: "boolean", description: "True when this call deleted a lens." },
+      will_delete: {
+        type: "object",
+        description: "On 'delete_preview': the lens that WILL be deleted {id, name}. Nothing removed yet.",
+      },
       active_lens_id: { type: ["string", "null"] },
       lenses: {
         type: "array",
@@ -115,6 +134,64 @@ export const myLenses: Tool<MyLensesParams> = {
     required: ["status", "lenses", "active_lens_id"],
   },
   execute: async (client: LeadbayClient, params: MyLensesParams) => {
+    // Delete path — destructive, so confirm-gated. Validate target, refuse the
+    // default lens up front (backend rejects it anyway), preview unless confirmed.
+    if (params.deleteLensId != null) {
+      const targetId = sid(params.deleteLensId)!;
+      const before = await listWithActive(client);
+      const target = before.lenses.find((l) => l.id === targetId);
+      if (!target) {
+        return {
+          status: "not_found",
+          switched: false,
+          renamed: false,
+          deleted: false,
+          active_lens_id: before.active_lens_id,
+          lenses: before.lenses,
+          message: `No lens with id ${targetId}. Pick one from the list.`,
+        };
+      }
+      if (target.is_default) {
+        return {
+          status: "cannot_delete_default",
+          switched: false,
+          renamed: false,
+          deleted: false,
+          active_lens_id: before.active_lens_id,
+          lenses: before.lenses,
+          message: `"${target.name}" is the default lens and can't be deleted.`,
+        };
+      }
+      if (params.confirm !== true) {
+        return {
+          status: "delete_preview",
+          switched: false,
+          renamed: false,
+          deleted: false,
+          active_lens_id: before.active_lens_id,
+          lenses: before.lenses,
+          will_delete: { id: target.id, name: target.name },
+          message: `About to delete "${target.name}". This can't be undone. Confirm with the user, then re-call with confirm:true.`,
+        };
+      }
+
+      await client.requestVoid("DELETE", `/lenses/${targetId}`);
+      // Deleting the active lens clears last_requested_lens server-side.
+      client.invalidateMe();
+      client.invalidateDefaultLens();
+
+      const after = await listWithActive(client);
+      return {
+        status: "deleted",
+        switched: false,
+        renamed: false,
+        deleted: true,
+        active_lens_id: after.active_lens_id,
+        lenses: after.lenses,
+        message: `Deleted "${target.name}".`,
+      };
+    }
+
     // Rename path — validate the target, POST the new name, return refreshed list.
     if (params.renameLensId != null) {
       const targetId = sid(params.renameLensId)!;

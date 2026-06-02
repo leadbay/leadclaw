@@ -1503,18 +1503,18 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // region: leadbay_my_lenses
 export const leadbay_my_lenses: string = `## WHEN TO USE
 
-Trigger phrases: "show me my lenses", "list my lenses", "which audiences do I have", "what lenses do I have", "switch to my <name> lens", "change lens", "which lens am I on", "rename my <name> lens to <X>", "rename this lens".
+Trigger phrases: "show me my lenses", "list my lenses", "which audiences do I have", "switch to my <name> lens", "change lens", "which lens am I on", "rename my <name> lens to <X>", "delete my <name> lens", "remove this lens".
 
 **Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
 
 Do NOT use for: "narrow the audience" → \`leadbay_adjust_audience\`; "stop showing me <sector>" → \`leadbay_refine_prompt\`; "more leads on this lens" → \`leadbay_extend_lens\`; "show me today's leads" → \`leadbay_pull_leads\`.
 
-Prefer when: user wants to SEE which lenses exist, CHANGE which is active, or RENAME one — not edit a lens's sector/size criteria
+Prefer when: user wants to SEE lenses, CHANGE which is active, RENAME one, or DELETE one — not edit a lens's sector/size criteria
 
 Examples that SHOULD invoke this tool:
 - "Show me my lenses."
 - "Switch to my Joinery lens."
-- "Rename my Auto lens to Automotive Targets."
+- "Delete my old Auto lens."
 
 Examples that should NOT invoke this tool (sound similar, route elsewhere):
 - "Narrow the audience to fintech only."
@@ -1537,8 +1537,9 @@ List the user's lenses (saved audiences) and, when asked, switch which one is ac
 - **List (no args)** — pure read. Returns \`{status:"listed", lenses:[{id, name, description, is_active}], active_lens_id}\`. The active lens is resolved from the user's last-requested lens, so \`is_active\` is authoritative even if a row's flag is stale.
 - **Switch (\`switchToLensId\`)** — changes the active lens to that id and returns the REFRESHED list. The id MUST be one of the user's lenses; an unknown id returns \`{status:"not_found"}\` with the current list — surface it and ask the user to pick, do NOT invent an id. Switching to the already-active lens is a harmless no-op.
 - **Rename (\`renameLensId\` + \`newName\`)** — renames a lens and returns the REFRESHED list. Same not_found handling. Use the \`id\` from the list for the lens the user named.
+- **Delete (\`deleteLensId\`)** — DESTRUCTIVE and confirm-gated. Without \`confirm:true\` it returns \`status:"delete_preview"\` with \`will_delete\` and removes NOTHING — show it, get the user's explicit yes, then re-call with \`confirm:true\`. The DEFAULT lens cannot be deleted (\`status:"cannot_delete_default"\`). Deleting the active lens leaves no active lens until the next switch/pull resolves one.
 
-**Lens ids are strings** (e.g. \`"40005"\`) — pass the \`id\` value straight from the list when switching/renaming; it is fine to pass it as the string it came as.
+**Lens ids are strings** (e.g. \`"40005"\`) — pass the \`id\` value straight from the list when switching/renaming/deleting; it is fine to pass it as the string it came as.
 
 **When the user is vague** ("switch lens" with no target), list first, then offer the lenses as a quick choice via \`ask_user_input_v0\` rather than guessing.
 
@@ -1632,6 +1633,8 @@ quick-select options (each option = a lens name → \`leadbay_my_lenses(switchTo
 |--------------------------------------|------------------------------------------|------------------------------------------------------|
 | User wants a different lens          | "Switch to <lens name>"                  | \`leadbay_my_lenses(switchToLensId=<id>)\`             |
 | User wants to rename a lens          | "Rename <lens> to <new name>"            | \`leadbay_my_lenses(renameLensId=<id>, newName=<X>)\`  |
+| User wants to delete a lens          | "Delete <lens>"                          | \`leadbay_my_lenses(deleteLensId=<id>)\` → confirm → \`confirm=true\` |
+| \`delete_preview\` (not yet deleted)   | "Yes, delete it"                         | \`leadbay_my_lenses(deleteLensId=<id>, confirm=true)\` |
 | User wants leads on the active lens  | "Pull today's leads"                     | \`leadbay_pull_leads()\`                               |
 | User wants to change the audience    | "Adjust this lens's audience"            | \`leadbay_adjust_audience(...)\`                       |
 | User wants more of the same          | "Get a bigger batch on this lens"        | \`leadbay_extend_lens(...)\`                           |
