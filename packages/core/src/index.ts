@@ -89,6 +89,7 @@ import { campaignProgression } from "./composite/campaign-progression.js";
 import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
 import { researchLeadById } from "./composite/research-lead-by-id.js";
 import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
+import { accountHistory } from "./composite/account-history.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
@@ -246,6 +247,13 @@ export const compositeReadTools: Tool[] = [
   campaignCallSheet,
   researchLeadById,
   researchLeadByNameFuzzy,
+  // accountHistory layers FULL notes + activity timeline on top of research
+  // so the agent can write the US4 "why has this dormant account resurfaced"
+  // narrative in ONE call. ALWAYS exposed (compositeReadTools) — the underlying
+  // get_lead_notes / get_lead_activities are ADVANCED-gated, but the
+  // reprioritize-a-neglected-account workflow (#3630 GAP C) must work in a
+  // default deployment without LEADBAY_MCP_ADVANCED=1.
+  accountHistory,
   recallOrderedTitles,
   accountStatus,
   bulkEnrichStatus,

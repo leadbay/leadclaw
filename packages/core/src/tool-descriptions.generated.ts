@@ -4,6 +4,155 @@
 
 // Tool descriptions, alphabetized by frontmatter.name.
 
+// region: leadbay_account_history
+export const leadbay_account_history: string = `## WHEN TO USE
+
+Trigger phrases: "what's the history on this account", "why should I revisit this account", "summarize everything we've done with <Company>", "has this account gone cold", "give me the back-story on lead <UUID>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "live signals only, no history" → \`leadbay_research_lead_by_id\`; "which accounts should I follow up with" → \`leadbay_pull_followups\`.
+
+Prefer when: user wants ONE account's full back-story — notes + past activity + current signals together; pass \`leadId\`
+
+Examples that SHOULD invoke this tool:
+- "What's the full history on this account — why did it resurface?"
+- "Summarize everything we've logged on that lead and whether it's worth another visit."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Tell me the current AI take on this lead."
+- "Which accounts should I follow up with this week?"
+
+## RENDER (quick)
+
+Single resurfaced-account card. Lead the card with the current signal/trigger
+line (from \`signals\`), then a "History" section: notes digest
+(chronological) + the activity timeline. Close with a one-line "why revisit
+now" synthesis and a suggested outreach angle tied to the freshest signal.
+
+---
+
+Give me one account's full back-story in a single call. This is the tool for
+the **reprioritize-a-neglected-account** workflow: the user has an account
+that was contacted or quoted long ago and wants to know, in one shot, whether
+a fresh signal makes it worth another visit.
+
+It bundles three reads on one \`leadId\`:
+
+1. **Current state** — passed through verbatim from \`leadbay_research_lead_by_id\`:
+   \`signals\` (web-research signals with hot flags + sources), \`firmographics\`,
+   \`qualification\` answers, \`contacts\`, and \`engagement\` counts. This is the
+   "why is this account hot NOW" layer.
+2. **\`notes\`** — the FULL list of notes logged on the record (note body +
+   \`created_at\`), chronological. \`leadbay_research_lead_by_id\` only returns a
+   \`notes_count\`; this tool returns the bodies so you can summarize the
+   historical context.
+3. **\`activities\`** — the interaction timeline (\`{type, date}\` entries, newest
+   first) plus the total count. Drives the "no contact in N months" judgement.
+
+\`notes\` and \`activities\` **degrade gracefully**: if either read fails the card
+still returns with that section empty (\`notes: []\` /
+\`activities.total: 0\`). The current-state block is load-bearing — if research
+itself errors the whole call fails, because there is nothing to narrate.
+
+Params: \`leadId\` (required UUID) and \`activityCount\` (optional, default 50,
+max 100).
+
+Companion tools: **leadbay_research_lead_by_id** when the user only wants the
+live AI take with no history; **leadbay_pull_followups** when the user wants a
+LIST of accounts to act on rather than one account's deep history.
+
+## RENDERING — single-record research card, mode-adaptive
+
+Present as a single-record card, not a table. This tool gets invoked in two distinct user contexts — detect which and adapt the body density accordingly.
+
+**MODE A — Discovery.** The user is evaluating whether to pursue this company as a target. Signals: "tell me about", "what do they do", "is this a fit", "research [company]", arrival via a click-through from \`leadbay_pull_leads\`, no prior outreach context in the conversation. Next step is usually qualify, deep-dive via \`leadbay_research_lead_by_id\`, or decide whether to start outreach.
+
+**MODE B — Contact preparation.** The user is about to call or email someone at this company and needs the talking points. Signals: "I'm calling them", "draft an email", "before my call", "outreach prep", "what should I say", or the conversation has already touched on a specific contact. Next step is usually \`leadbay_prepare_outreach\`.
+
+Default to MODE A when uncertain. Always offer the cross-mode pivot at the end so the user can redirect if you guessed wrong.
+
+### Common structure (both modes)
+
+- **Header** (H4 or H5): \`<10-segment score bar>\` \`[Company name](website)\`. Use the score-bar algorithm; the bar lives in a single inline-code span. Prefix \`https://\` to website if it's a bare hostname.
+- **Pill row** (immediately below the header): short location · compact size · social pill chips iterated over \`social_urls\` (each non-null platform becomes \`[<platform-label>](<url>)\`) · \`[website-domain](website)\` · \`☎ phone\` when \`phone_numbers[]\` is non-empty (use the first number). All \` · \`-separated.
+- **Blurb**: render \`description\` (preferred) or \`short_description\` as a single blockquoted paragraph.
+- **Staleness line**: italic, \`"Researched <relative time>"\` from \`web_insights_fetched_at\`. Use \`"today"\` / \`"yesterday"\` / \`"N days ago"\` up to 30 days, then absolute date. Prefix with \`⚠\` if older than 30 days.
+- **Contacts table** (always at the bottom):
+  \`\`\`
+  |   | Name | Title | LinkedIn |
+  \`\`\`
+  Markers in column 1:
+  - \`★\` — \`recommended_contact\` match.
+  - \`💎\` — name fuzzy-matches a \`hot: true\` entry in \`web_insights\` key_people. (Use \`💎\`, not \`🔥\`, to avoid glyph collision with the follow-up status badge.)
+  Sort \`★\` first, then \`💎\`-only rows, then API order. Link the name via \`linkedin_page\` first; fall back to LinkedIn people-search with \`<First>+<Last>+<Company>\`. Append \`°\` only when the fallback is in use AND \`social_presence.linkedin == false\`. Cap to 6 rows; if \`contacts_count > shown\`, end with \`"+N more — ask to see the full list"\`.
+
+### MODE A body (Discovery, fuller, scannable)
+
+Render each non-empty \`web_insights\` section as H5 with the emoji + label intact. Section order: \`🏢 company profile\` → \`📈 business signals\` → \`💡 prospecting clues\` → \`🧩 strategic positioning\` → \`🔎 technologies & innovation\`. Inside each, bullet 3–5 items. Sort \`hot: true\` items first. **Bold** the description text of hot items; leave cold items plain. Render \`source\` as \`[source](url)\` at the end; include \`date\` when present. Omit empty sections. Skip \`🔗 social links\` (already in the pill row) and \`👤 key people\` (already in the contacts table).
+
+### MODE B body (Contact preparation, tighter)
+
+Render exactly two H5 sections:
+
+##### 🎯 Conversation hooks
+
+Distill the 3 most recent / most hot signals from \`📈 business signals\` and \`💡 prospecting clues\` into one-sentence talking points in salesperson voice. Strip the academic framing. Cite the source inline.
+
+##### 👤 About the person *(only when recommended_contact is non-empty)*
+
+2-line summary: their title + any context from \`web_insights\` key_people. If they appear in a hot signal ("X appointed CEO"), surface that prominently.
+
+Skip 🏢 profile, 🧩 strategic positioning, 🔎 technologies in MODE B — context the user doesn't need for the next 30 seconds.
+
+If \`qualification[]\` is non-empty, append one collapsed line: \`"Qualification: N questions answered, avg boost X"\` and offer to expand in NEXT STEPS.
+
+**Hide:** \`id\`, \`lead.id\`, \`contact.id\`, \`lead.location.pos\`, \`web_fetch_in_progress\`, \`enrichment_in_progress\`, \`recommended_contact_title\` (duplicates \`recommended_contact.job_title\`), empty arrays, fields whose value is the string \`"null"\`, \`contact.source\` (internal), insights whose \`source\` is empty.
+
+**Legend (print once below the card):** \`\` \`▰\` firmographic · \`❖\` AI booster · \`▱\` unfilled · ★ recommended · 💎 hot in web_insights · ° = no company LinkedIn (fallback link only) \`\`
+
+## Linking a contact's name
+
+**MANDATORY: every contact name in your output — table cells, prose, headers, "Reach <Name>" callouts — MUST be wrapped in markdown link syntax \`[Name](URL)\`. Never render a contact name as bare text. A plain-text name is a broken contact card; the underlined name is the user's primary affordance for "take me to this person's profile". No "no URL available" exception — the search URL below is always constructable from name + company.**
+
+URL priority (first applicable wins):
+
+1. **Real profile** — \`contact.linkedin_page\` when it's a string starting with \`https://\` (the MCP coerces the legacy literal \`"null"\` string to real null before you see it).
+2. **Constructed people-search** — \`https://www.linkedin.com/search/results/people/?keywords=<First>+<Last>+<Company>\`. URL-encode params. Strip Inc / LLC / Corp / Ltd / GmbH / Co / S.A. / S.L. / PLC / AG / SAS / SARL suffixes from the company. Append a trailing \` °\` to the rendered name ONLY when this fallback is in use AND \`social_presence.linkedin == false\`. Never append \`°\` when a real \`linkedin_page\` was used.
+
+Never link a person's name to the company's LinkedIn page (and vice versa) — the two surfaces are different and conflating them quietly degrades the workflow.
+
+## Linking the company
+
+Use the lead's \`website\` as the company-name link target — prefix \`https://\` if the value is a bare hostname. (The MCP does NOT synthesize a Leadbay-app deep-link URL; the team has not standardized one. Linking to \`website\` is always real data.)
+
+When the response carries \`social_urls\` (the post-fix multi-platform URL block on rich-lead responses), render every non-null platform as a pill chip in the company-info row. Iterate over \`social_urls\`'s keys — never hardcode a fixed list — and emit each as \`[<platform-label>](<url>)\`. Skip platforms whose URL is null.
+
+\`social_presence\` carries booleans for the same 6 platforms (crunchbase, facebook, instagram, linkedin, tiktok, twitter) — useful when you only care that the company has a profile somewhere. Use it as the °-flag signal in the contact people-search fallback (see linking/contact-linkedin).
+
+
+
+### RENDERING — the history layer (on top of the card above)
+
+After the research card, add a **History** section so the user sees why this
+account resurfaced:
+
+- **##### 🗒 Notes** — render \`notes\` chronologically (oldest → newest). Each
+  as a bullet: \`**<relative date from created_at>** — <note body>\`. Cap at 8;
+  if \`_meta.notes_count > shown\`, end with \`"+N more notes"\`. Omit the section
+  entirely when \`notes\` is empty.
+- **##### 🕓 Timeline** — render \`activities.activities\` newest-first as a
+  compact bullet list: \`<relative date> · <type>\`. Cap at 10; if
+  \`activities.total > shown\`, end with \`"+N earlier"\`. Omit when empty.
+- **##### ↻ Why revisit now** — one or two sentences synthesizing the freshest
+  HOT signal from \`signals\` against the gap in \`activities\` (e.g. "Won a public
+  tender last month; no logged contact since the 2024 quote — strong re-open
+  angle"). Then one suggested outreach angle tied to that signal. This
+  synthesis is the payload of the whole tool — always include it when there is
+  at least one hot signal.
+`;
+// endregion: leadbay_account_history
+
 // region: leadbay_account_status
 export const leadbay_account_status: string = `## WHEN TO USE
 
@@ -3274,6 +3423,7 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 
 // Map for legacy callers; prefer importing the named constant directly.
 export const TOOL_DESCRIPTIONS = {
+  leadbay_account_history,
   leadbay_account_status,
   leadbay_add_leads_to_campaign,
   leadbay_add_note,
