@@ -1,5 +1,15 @@
 # Changelog — @leadbay/mcp
 
+## 0.17.3 — 2026-06-01
+
+- **Lens management on the default surface**: lenses are now fully manageable from chat, no `LEADBAY_MCP_ADVANCED` needed.
+  - `leadbay_my_lenses` (write) — list your lenses, switch the active one, rename / set description, or delete (delete is confirm-gated and refuses the default lens).
+  - `leadbay_new_lens` (write) — create a named lens with sector/size criteria in one call; previews and confirms before creating, and rolls back the created lens if applying its filter fails (no orphan half-built lenses).
+  - `leadbay_adjust_audience` — new `lensName` param edits a lens **by name** without switching your active lens (edit-only).
+  - `leadbay_list_sectors` (read, always-on) — the sector taxonomy lookup, so the agent stops guessing sector names.
+- **Routing**: `leadbay_adjust_audience` and `leadbay_refine_prompt` gained routing blocks so "create a lens" reaches `new_lens` (not `refine_prompt`) and "add X to my Y lens" fills `lensName` instead of editing the active lens.
+- **Backend contract fixes** (were causing `400 JSON deserialization error` on lens create/edit, verified live): `POST /lenses` `base` sent as a string; `POST /lenses/:id/filter` sent as the unwrapped `{items:[…]}` body; `size` criteria carry both `min` and `max`.
+
 ## 0.17.2 — 2026-06-01
 
 - **Linux installer fix**: skip Electron when no display is available (`$DISPLAY`/`$WAYLAND_DISPLAY` unset) and go straight to browser fallback — eliminates the double GUI URL on headless Linux terminals.
