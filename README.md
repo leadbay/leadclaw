@@ -43,7 +43,9 @@ Claude will prompt you to connect Leadbay. Sign in with your Leadbay account and
 
 ## Using another assistant?
 
-LeadMCP also works with Claude Desktop, ChatGPT Desktop, Cursor, and Codex. The **universal installer** sets everything up for you and lets you sign in with Leadbay:
+LeadMCP also works with Claude Desktop, ChatGPT Desktop, Cursor, and Codex. The **universal installer** sets everything up for you and lets you sign in with Leadbay.
+
+Requires [Node.js 22+](https://nodejs.org). Then run:
 
 ```bash
 npx -y -p @leadbay/mcp@latest installer
@@ -75,12 +77,23 @@ pnpm --filter @leadbay/mcp installer -- --local
 
 `--local` registers the MCP client(s) against the build in your working tree rather than `@leadbay/mcp@latest`. OAuth is handled automatically — you don't need to pass `--oauth`. The installer asks per-target before writing anything.
 
-Useful flags:
+## All install methods
 
-- `--yes` — skip the per-client prompts after auth.
-- `--target claude-code,cursor` — scope the install to specific clients.
+Every supported way to connect LeadMCP, from one-click to fully manual:
 
-The installer only touches clients that are actually installed on the machine:
+| Method | Command / action | Platforms | Notes |
+|--------|------------------|-----------|-------|
+| **`.dxt` / `.mcpb` bundle** | Download from [Releases](https://github.com/leadbay/leadclaw/releases/latest), double-click → **Install** | Claude Desktop | One-click. The recommended path for end users. |
+| **Guided installer (GUI)** | `npx -y -p @leadbay/mcp@latest installer` | macOS, Windows | Electron wizard: sign in with Leadbay, pick clients. |
+| **Headless CLI install** | `npx -y @leadbay/mcp@latest install --oauth` | macOS, Windows, Linux | One-shot: browser OAuth + register every detected client; confirms before each write. The only path on Linux. |
+| **Local dev build** | `pnpm --filter @leadbay/mcp installer -- --local` | macOS, Windows, Linux | Registers clients against your local build. OAuth automatic. Build from source first (above). |
+| **Claude Code plugin marketplace** | `/plugin marketplace add leadbay/leadclaw` then `/plugin install leadbay@leadbay-leadclaw` | Claude Code | Registers the MCP server **and** installs auto-triggering skills. |
+| **Hosted MCP URL** | `https://leadbay-mcp-prod.fly.dev/mcp` via the client's connector flow | ChatGPT Desktop | No local config write — connect + approve Leadbay in-app. |
+| **Manual config** | Mint a token with `npx -y @leadbay/mcp@latest login --oauth`, then paste the `mcpServers.leadbay` entry into your client config | Any | Lower-level; use when you want to edit the config file yourself. |
+
+### What each installer writes per client
+
+The GUI/CLI installers only touch clients that are actually installed on the machine:
 
 | Client | Installer behavior |
 |--------|--------------------|
@@ -90,27 +103,7 @@ The installer only touches clients that are actually installed on the machine:
 | Codex | Writes/removes only the `[mcp_servers.leadbay]` block in `~/.codex/config.toml` and the Leadbay-managed shell export block |
 | ChatGPT Desktop | Uses the hosted MCP URL, no local config write |
 
-### Connecting specific clients
-
-**ChatGPT Desktop** connects to the hosted MCP URL instead of a local config file:
-
-```text
-https://leadbay-mcp-prod.fly.dev/mcp
-```
-
-Use the connector auth flow to approve Leadbay.
-
-**Claude Code plugin marketplace:**
-
-```text
-/plugin marketplace add leadbay/leadclaw
-```
-
-```text
-/plugin install leadbay@leadbay-leadclaw
-```
-
-Claude Code prompts for Leadbay auth/config. Registers the MCP server **and** installs skills (`leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`, and others) that auto-trigger on natural-language asks.
+The Claude Code plugin marketplace path installs skills (`leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`, and others) that auto-trigger on natural-language asks.
 
 ### Uninstall
 
