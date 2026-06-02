@@ -2,6 +2,7 @@ import type { LeadbayClient } from "../client.js";
 import type { Notification, Tool, ToolContext } from "../types.js";
 import { getContacts } from "../tools/get-contacts.js";
 import { isValidBulkId, type BulkRecord } from "../jobs/bulk-store.js";
+import { readCreditsRemaining, sumCreditsUsed } from "./_credits-helpers.js";
 
 // Read a single notification by id from the paginated list endpoint.
 // Backend exposes list + per-id mutations only; this short list pass is
@@ -116,6 +117,16 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       all_done: {
         type: "boolean",
         description: "True when overall_progress.done === total AND no partial_failures.",
+      },
+      credits_used_total: {
+        type: "number",
+        description:
+          "Real AI credits consumed by this enrichment, summed from each contact's enrichment.credits_used. Present ONLY when the backend reported per-contact cost (older backends omit it). Tell the user this exact figure after enrichment.",
+      },
+      credits_remaining: {
+        type: ["number", "null"],
+        description:
+          "AI-credit balance re-read after the spend (force-refreshed /users/me → billing.ai_credits). Present only when all_done. Null = billing unavailable (don't read as zero).",
       },
       partial_failures: {
         type: "array",
@@ -315,6 +326,9 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       done: number;
       total: number;
       contacts?: any[];
+      // Always carried for cost aggregation, independent of include_contacts.
+      credits_used: number;
+      credits_reported: boolean;
     };
     type Fail = {
       kind: "fail";
@@ -338,6 +352,7 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
           const enrichable = contacts.filter((c) => c && c.enrichment);
           const done = enrichable.filter((c) => c.enrichment?.done === true).length;
           const total = enrichable.length;
+          const { total: leadCredits, any_reported } = sumCreditsUsed(contacts);
           doneSoFar += 1;
           ctx?.progress?.({
             progress: doneSoFar,
@@ -350,6 +365,8 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
             done,
             total,
             contacts: includeContacts ? contacts : undefined,
+            credits_used: leadCredits,
+            credits_reported: any_reported,
           };
         } catch (err: any) {
           doneSoFar += 1;
@@ -377,6 +394,8 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
     }> = [];
     let totalDone = 0;
     let totalAll = 0;
+    let creditsUsedTotal = 0;
+    let anyCreditsReported = false;
     for (const r of results) {
       if (r.kind === "fail") {
         partialFailures.push({
@@ -393,6 +412,8 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       });
       totalDone += r.done;
       totalAll += r.total;
+      creditsUsedTotal += r.credits_used;
+      anyCreditsReported = anyCreditsReported || r.credits_reported;
     }
 
     const overallProgress = {
@@ -408,6 +429,17 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       }`
     );
 
+    // Cost surfacing (AFTER). credits_used_total is the real per-contact cost
+    // summed from enrichment.credits_used; only included when the backend
+    // actually reported it (older backends omit it → field absent, not 0).
+    // credits_remaining is re-read with force=true so it reflects the
+    // post-spend balance; only fetched once the job is done to avoid an extra
+    // /me call on every interim poll. Null when billing is unavailable.
+    let creditsRemaining: number | null = null;
+    if (allDone) {
+      creditsRemaining = await readCreditsRemaining(client, true);
+    }
+
     return {
       bulk_id: record.bulk_id,
       launched_at: record.launched_at,
@@ -420,6 +452,8 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
       leads,
       overall_progress: overallProgress,
       all_done: allDone,
+      ...(anyCreditsReported ? { credits_used_total: creditsUsedTotal } : {}),
+      ...(allDone ? { credits_remaining: creditsRemaining } : {}),
       ...(partialFailures.length > 0 ? { partial_failures: partialFailures } : {}),
     };
   },

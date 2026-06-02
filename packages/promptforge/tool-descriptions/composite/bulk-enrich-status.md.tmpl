@@ -16,3 +16,7 @@ Check status + per-lead contacts for a bulk enrichment you previously launched v
 {{include:headers/tool-when-to-use}} poll this after leadbay_enrich_titles returns a `bulk_id`. Default `include_contacts=false` for cheap status polls; set `include_contacts=true` once `all_done` flips for the final read.
 
 {{include:headers/tool-when-not-to-use}} as a substitute for leadbay_research_lead_by_id — that already includes enriched contacts for a single lead.
+
+## CREDIT COST — report actual spend when done
+
+Once `all_done` is true the result carries the REAL cost of the enrichment: `credits_used_total` (exact AI credits consumed, summed per contact) and `credits_remaining` (the post-spend balance). Tell the user **"Enriched — {credits_used_total} credits used, {credits_remaining} remaining."** This is the actual figure, not an estimate. If `credits_used_total` is absent, the backend didn't report per-contact cost — say enrichment finished without a cost figure rather than reporting 0. If `credits_remaining` is null, billing is unavailable — don't read it as zero.

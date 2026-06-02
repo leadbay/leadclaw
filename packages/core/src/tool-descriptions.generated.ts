@@ -394,6 +394,10 @@ export const leadbay_bulk_enrich_status: string = `Check status + per-lead conta
 WHEN TO USE: poll this after leadbay_enrich_titles returns a \`bulk_id\`. Default \`include_contacts=false\` for cheap status polls; set \`include_contacts=true\` once \`all_done\` flips for the final read.
 
 WHEN NOT TO USE: as a substitute for leadbay_research_lead_by_id — that already includes enriched contacts for a single lead.
+
+## CREDIT COST — report actual spend when done
+
+Once \`all_done\` is true the result carries the REAL cost of the enrichment: \`credits_used_total\` (exact AI credits consumed, summed per contact) and \`credits_remaining\` (the post-spend balance). Tell the user **"Enriched — {credits_used_total} credits used, {credits_remaining} remaining."** This is the actual figure, not an estimate. If \`credits_used_total\` is absent, the backend didn't report per-contact cost — say enrichment finished without a cost figure rather than reporting 0. If \`credits_remaining\` is null, billing is unavailable — don't read it as zero.
 `;
 // endregion: leadbay_bulk_enrich_status
 
@@ -903,6 +907,10 @@ WHEN TO USE: when you have a specific \`contact_id\` (from leadbay_get_contacts)
 
 WHEN NOT TO USE: for bulk enrichment by job title across many leads — use leadbay_enrich_titles, which handles the selection lifecycle and returns a clean preview/launch flow.
 
+## CREDIT COST
+
+This is a paid call. The result returns \`credits_remaining\` (the balance from billing.ai_credits, read before the spend). Before enriching, tell the user their balance — **"You have {credits_remaining} credits; enriching this contact."** — and confirm if the balance is low. Don't quote an exact per-contact cost (the rate is backend-only). After enrichment, the actual per-contact cost (enrichment.credits_used) shows up on the contact via leadbay_get_contacts. If \`credits_remaining\` is null, billing is unavailable — say the balance is unknown, don't assume zero.
+
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;
 // endregion: leadbay_enrich_contacts
@@ -913,6 +921,35 @@ export const leadbay_enrich_titles: string = `Order contact enrichments by job t
 WHEN TO USE: as the agent's go-to enrichment entry point, immediately before proposing outreach.
 
 WHEN NOT TO USE: to enrich a single contact — that's leadbay_enrich_contacts (granular). Speculatively, before the user has committed to outreaching — enrichment spends credits.
+
+## CREDIT COST — make spend visible
+
+Enrichment is the main PAID operation. Surface cost both before and after.
+
+**BEFORE (confirm before launching).** The discover / preview_only / dry_run modes return \`credits_remaining\` (the balance) and \`enrichable_contacts\` (the volume that would be enriched). Tell the user plainly: **"You have {credits_remaining} credits. This will enrich {enrichable_contacts} contacts."** then ask them to confirm before you launch the paid run. Route that confirmation through \`ask_user_input_v0\` ("Enrich {enrichable_contacts} contacts now?" → ["Yes, enrich", "No, cancel"]). Do NOT state an exact estimated cost — the per-contact credit rate lives backend-side and is not in the preview; show the balance and the count, never a fabricated "will cost N credits". If \`credits_remaining\` is null, billing is unavailable — say the balance is unknown, don't assume zero or unlimited.
+
+**AFTER (report actual spend).** The real cost lands once the job finishes — poll \`leadbay_bulk_enrich_status\`, which returns \`credits_used_total\` (exact credits consumed) and \`credits_remaining\` (post-spend balance). When done, tell the user **"Enriched — {credits_used_total} credits used, {credits_remaining} remaining."** If \`credits_used_total\` is absent the backend didn't report per-contact cost; say enrichment completed without a cost figure rather than reporting 0.
+
+## GATE — PREFER BUILT-IN HOST WIDGETS
+
+Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can route into. These ALWAYS produce a better UX than markdown tables / inline prose for the data shapes they support — they're tappable on mobile, persistent across turns, and integrate with the host's quick-actions.
+
+**The Big Three** — when a tool result fits, route there:
+
+| Host widget | Use when | Field map (from Leadbay payload) |
+|---|---|---|
+| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
+| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+
+ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
+
+**Rules:**
+- The widget IS the visual. Do NOT emit a markdown table or prose list of the same data alongside — that produces two competing UIs.
+- Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
+- When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
+- One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+
 
 This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
 `;

@@ -15,4 +15,8 @@ Order email and/or phone enrichment for a specific contact. Performs an advisory
 
 {{include:headers/tool-when-not-to-use}} for bulk enrichment by job title across many leads — use leadbay_enrich_titles, which handles the selection lifecycle and returns a clean preview/launch flow.
 
+## CREDIT COST
+
+This is a paid call. The result returns `credits_remaining` (the balance from billing.ai_credits, read before the spend). Before enriching, tell the user their balance — **"You have {credits_remaining} credits; enriching this contact."** — and confirm if the balance is low. Don't quote an exact per-contact cost (the rate is backend-only). After enrichment, the actual per-contact cost (enrichment.credits_used) shows up on the contact via leadbay_get_contacts. If `credits_remaining` is null, billing is unavailable — say the balance is unknown, don't assume zero.
+
 {{include:headers/verification-required-if-write}}
