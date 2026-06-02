@@ -107,7 +107,37 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_add_note
 
 // region: leadbay_adjust_audience
-export const leadbay_adjust_audience: string = `Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. Permission routing is hidden: the default lens auto-clones to a new user lens; an org-level lens defaults to a per-user draft (admins can override with \`save_for_org:true\`). Filter MERGES with existing criteria (unrelated criteria are not dropped).
+export const leadbay_adjust_audience: string = `## WHEN TO USE
+
+Trigger phrases: "narrow the audience to <sector>", "add <sector> to my <name> lens", "remove <sector> from this lens", "only show me companies of <size>", "stop including <sector>", "broaden this lens to also include <sector>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "create a new lens called X" → \`leadbay_new_lens\`; "make a new audience for Y" → \`leadbay_new_lens\`; "show me / list / switch my lenses" → \`leadbay_my_lenses\`; "focus on a kind of company beyond sector/size (e.g. 'hospitals running their own IT')" → \`leadbay_refine_prompt\`.
+
+Prefer when: user wants to change an EXISTING lens's sectors/sizes. If the user NAMES a lens ('my Joinery lens'), you MUST pass lensName with that name — do NOT edit the active lens. To create a brand-new lens use leadbay_new_lens instead.
+
+Examples that SHOULD invoke this tool:
+- "Add fintech to my Joinery lens."
+- "Narrow my audience to manufacturing companies, 50–500 people."
+- "Stop including retail in this lens."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Create a lens called Joinery for fintech."
+- "Show me my lenses."
+- "Focus on hospitals that run their own IT."
+
+## RENDER (quick)
+
+On \`applied\`: confirm the lens edited (name) + the sectors/sizes added as
+chips. On \`ambiguous_sectors\` / \`ambiguous_lens\` / \`lens_not_found\`: surface
+the candidates and ask the user to pick, then re-call with the id/exact name.
+
+---
+
+Restrict (or expand) the lens audience by sector / size. Free-text sectors are auto-resolved against the sector taxonomy; ambiguous matches are surfaced to the agent rather than guessed silently. Permission routing is hidden: the default lens auto-clones to a new user lens; an org-level lens defaults to a per-user draft (admins can override with \`save_for_org:true\`). Filter MERGES with existing criteria (unrelated criteria are not dropped).
+
+**Targeting a lens — READ THIS.** By default this edits the user's ACTIVE lens. **If the user names a lens** ("add fintech to my **Joinery** lens", "in my Nordics lens, exclude retail"), you MUST pass \`lensName\` with that name (\`lensName:"Joinery"\`). Do NOT silently edit the active lens when a different one was named — that corrupts the wrong audience and is a top friction source. The name resolves against the user's lenses (case-insensitive, exact then unique-substring); it is edit-only and does NOT change which lens is active. An unmatched name returns \`status:"lens_not_found"\` with the lens list, and a name matching several returns \`status:"ambiguous_lens"\` with the candidates — surface them and re-call with the exact \`lensName\` or a \`lensId\`. Use \`leadbay_my_lenses\` if the user first wants to SEE or SWITCH lenses. To CREATE a brand-new lens, use \`leadbay_new_lens\` — not this tool.
 
 WHEN TO USE: when the user wants to see different kinds of leads (sector / size / etc.).
 
@@ -1470,6 +1500,264 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_login
 
+// region: leadbay_my_lenses
+export const leadbay_my_lenses: string = `## WHEN TO USE
+
+Trigger phrases: "show me my lenses", "list my lenses", "which audiences do I have", "switch to my <name> lens", "change lens", "rename my <name> lens to <X>", "set the description of my <name> lens", "delete my <name> lens", "remove this lens".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "narrow the audience" → \`leadbay_adjust_audience\`; "stop showing me <sector>" → \`leadbay_refine_prompt\`; "more leads on this lens" → \`leadbay_extend_lens\`; "show me today's leads" → \`leadbay_pull_leads\`.
+
+Prefer when: user wants to SEE lenses, CHANGE which is active, RENAME one, or DELETE one — not edit a lens's sector/size criteria
+
+Examples that SHOULD invoke this tool:
+- "Show me my lenses."
+- "Rename my Auto lens to Automotive and add a description."
+- "Delete my old Auto lens."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Narrow the audience to fintech only."
+- "I want more leads on this lens."
+- "Show me today's leads."
+
+## RENDER (quick)
+
+Small markdown table, active lens first: col 1 = ⭐ prefix when active +
+lens name; col 2 = description (or \`—\`). After a switch lead with
+"Now showing **<name>**."; after a rename lead with the rename confirmation.
+Full algorithm below.
+
+---
+
+List the user's lenses (saved audiences) and, when asked, switch which one is active. A lens shapes the kind of leads delivered each day; this tool is how the user sees their audiences and moves between them — it does NOT edit a lens's criteria (that's \`leadbay_adjust_audience\`).
+
+**Three modes, one tool:**
+
+- **List (no args)** — pure read. Returns \`{status:"listed", lenses:[{id, name, description, is_active}], active_lens_id}\`. The active lens is resolved from the user's last-requested lens, so \`is_active\` is authoritative even if a row's flag is stale.
+- **Switch (\`switchToLensId\`)** — changes the active lens to that id and returns the REFRESHED list. The id MUST be one of the user's lenses; an unknown id returns \`{status:"not_found"}\` with the current list — surface it and ask the user to pick, do NOT invent an id. Switching to the already-active lens is a harmless no-op.
+- **Edit (\`editLensId\` + \`newName\` and/or \`newDescription\`)** — rename and/or set the description of a lens in one call, returns the REFRESHED list. Provide either or both; pass \`newDescription:""\` to clear a description. Same not_found handling. Use the \`id\` from the list for the lens the user named.
+- **Delete (\`deleteLensId\`)** — DESTRUCTIVE and confirm-gated. Without \`confirm:true\` it returns \`status:"delete_preview"\` with \`will_delete\` and removes NOTHING — show it, get the user's explicit yes, then re-call with \`confirm:true\`. The DEFAULT lens cannot be deleted (\`status:"cannot_delete_default"\`). Deleting the active lens leaves no active lens until the next switch/pull resolves one.
+
+**Lens ids are strings** (e.g. \`"40005"\`) — pass the \`id\` value straight from the list when switching/renaming/deleting; it is fine to pass it as the string it came as.
+
+**When the user is vague** ("switch lens" with no target), list first, then offer the lenses as a quick choice via \`ask_user_input_v0\` rather than guessing.
+
+WHEN TO USE: when the user wants to see their lenses or switch the active one. Canonical phrasings: "show me my lenses", "which audiences do I have", "switch to my <name> lens".
+
+WHEN NOT TO USE: to change a lens's audience criteria — that's \`leadbay_adjust_audience\`. Not for refining beyond firmographics (\`leadbay_refine_prompt\`), not for topping up the same lens (\`leadbay_extend_lens\`), not for the daily pull (\`leadbay_pull_leads\`).
+
+This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
+
+
+## GATE — PREFER BUILT-IN HOST WIDGETS
+
+Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can route into. These ALWAYS produce a better UX than markdown tables / inline prose for the data shapes they support — they're tappable on mobile, persistent across turns, and integrate with the host's quick-actions.
+
+**The Big Three** — when a tool result fits, route there:
+
+| Host widget | Use when | Field map (from Leadbay payload) |
+|---|---|---|
+| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
+| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+
+ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
+
+**Rules:**
+- The widget IS the visual. Do NOT emit a markdown table or prose list of the same data alongside — that produces two competing UIs.
+- Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
+- When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
+- One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+
+
+---
+
+## RENDERING — lenses table, active-first
+
+Markdown table with TWO columns. Sort **active lens first**, then by \`name\`
+ascending. **No score bar** — the \`▰❖▱\` glyph identity belongs to lead
+discovery, not lenses.
+
+**Column 1 — Lens**
+- Prefix \`⭐ \` when \`is_active\` is true; otherwise no prefix.
+- The lens name in **bold**. (Lenses have no public URL — do not fabricate a link.)
+
+**Column 2 — Description**
+- \`description\` verbatim, clipped to ≤ 18 words.
+- When null/empty: render \`—\`.
+
+**After a \`switched: true\` response**, open with a single confirmation line
+ABOVE the table: \`Now showing **<name>**.\` For \`status: "not_found"\`, lead with
+the \`message\` (the bad id) and render the list so the user can pick a real one.
+
+**Empty list** (\`lenses: []\`): render \`*You don't have any lenses yet.*\` — do not
+render an empty table.
+
+**Legend:** ⭐ active lens.
+
+
+## NEXT STEPS — after \`leadbay_my_lenses\`
+
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
+Pick the 2–3 rows that fit what the user is likely to want next. When the user
+named no target but wants to switch, offer the lenses themselves as the
+quick-select options (each option = a lens name → \`leadbay_my_lenses(switchToLensId=<id>)\`).
+
+| Observation                          | Suggest                                  | Calls                                                |
+|--------------------------------------|------------------------------------------|------------------------------------------------------|
+| User wants a different lens          | "Switch to <lens name>"                  | \`leadbay_my_lenses(switchToLensId=<id>)\`             |
+| User wants to rename / describe a lens| "Rename or describe <lens>"             | \`leadbay_my_lenses(editLensId=<id>, newName?=<X>, newDescription?=<Y>)\` |
+| User wants to delete a lens          | "Delete <lens>"                          | \`leadbay_my_lenses(deleteLensId=<id>)\` → confirm → \`confirm=true\` |
+| \`delete_preview\` (not yet deleted)   | "Yes, delete it"                         | \`leadbay_my_lenses(deleteLensId=<id>, confirm=true)\` |
+| User wants leads on the active lens  | "Pull today's leads"                     | \`leadbay_pull_leads()\`                               |
+| User wants to change the audience    | "Adjust this lens's audience"            | \`leadbay_adjust_audience(...)\`                       |
+| User wants more of the same          | "Get a bigger batch on this lens"        | \`leadbay_extend_lens(...)\`                           |
+
+If nothing fits, default to "pull today's leads on the active lens" — never
+invent a tool that doesn't exist.
+`;
+// endregion: leadbay_my_lenses
+
+// region: leadbay_new_lens
+export const leadbay_new_lens: string = `## WHEN TO USE
+
+Trigger phrases: "create a lens", "create a new lens called <name>", "create a lens specialized in/into <X>", "make me a new audience for <X>", "set up a lens for <sector>", "new lens named <name>", "I want a lens just for <X>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "narrow the audience / add or remove a sector on an EXISTING lens" → \`leadbay_adjust_audience\`; "add <sector> to my <name> lens" → \`leadbay_adjust_audience\`; "focus on a qualitative trait beyond sector/size" → \`leadbay_refine_prompt\`; "show me / list / switch my lenses" → \`leadbay_my_lenses\`; "more leads on this lens" → \`leadbay_extend_lens\`.
+
+Prefer when: user wants a brand-new lens (create/make/set up, often 'specialized in <X>'). Editing an existing lens → leadbay_adjust_audience (use lensName). Qualitative refinement → refine_prompt (admin-only).
+
+Examples that SHOULD invoke this tool:
+- "Create a lens called Joinery for the fintech sector."
+- "Make me a new audience for healthcare companies, 30–300 people."
+- "Set up a new lens named Nordics SaaS."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add fintech to my Joinery lens."
+- "Show me my lenses."
+- "I want more leads on this lens."
+
+## RENDER (quick)
+
+On \`preview\` (default — NOTHING created yet): show the lens that WILL be
+created (name + resolved sectors/sizes as chips) and ASK the user to confirm
+via ask_user_input_v0 ("Create this lens?" / "Change something"). Only on
+"yes" re-call with confirm:true. On \`created\`: confirm "Created **<name>**."
+On \`ambiguous_sectors\`: surface the candidate sectors to pick from.
+
+---
+
+Create a brand-new lens (saved audience) and apply its sector/size criteria. Clones a base lens (the user's active/default lens unless \`base\` is given), names it, and applies the filter.
+
+**Confirm before creating — two-step by default.** A call WITHOUT \`confirm:true\` is a dry run: it resolves the sectors/sizes and returns \`status:"preview"\` with \`will_create\` (what it WOULD build) — **nothing is created**. Show that to the user, get an explicit yes (ask via \`ask_user_input_v0\`), then re-call the SAME args with \`confirm:true\` to actually create. Never pass \`confirm:true\` on the first call — the user must see the preview first. (Sector ambiguity is still surfaced in the preview step, so they pick before confirming.)
+
+**Sectors resolve first.** Free-text \`sectors\`/\`exclude_sectors\` are auto-resolved against the taxonomy. If any don't resolve, the tool returns \`status:"ambiguous_sectors"\` with the candidates and **does NOT create the lens** — so re-calling after picking the right sector won't leave orphan half-built lenses. To discover valid sector labels up front, use \`leadbay_list_sectors\`.
+
+**Does not switch the active lens.** The new lens is created but the user stays on their current one. Offer \`leadbay_my_lenses(switchToLensId=<new id>)\` as a next step if they want to start pulling from it.
+
+WHEN TO USE: when the user wants a NEW lens. Canonical phrasings: "create a lens called X", "make a new audience for Y", "set up a lens for <sector>".
+
+WHEN NOT TO USE: to EDIT an existing lens — use \`leadbay_adjust_audience\` (pass \`lensName\` to target one by name). Not for listing/switching (\`leadbay_my_lenses\`) or topping up (\`leadbay_extend_lens\`).
+
+This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible for confirming intent before invocation; the MCP server does not soft-prompt for confirmation. See \`annotations.destructiveHint\`.
+
+
+## GATE — PREFER BUILT-IN HOST WIDGETS
+
+Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can route into. These ALWAYS produce a better UX than markdown tables / inline prose for the data shapes they support — they're tappable on mobile, persistent across turns, and integrate with the host's quick-actions.
+
+**The Big Three** — when a tool result fits, route there:
+
+| Host widget | Use when | Field map (from Leadbay payload) |
+|---|---|---|
+| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
+| \`ask_user_input_v0\` (Claude) | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | \`{questions: [{question: "What next?", type: "single_select", options: [<2-4 short button labels>]}]}\`; max 3 questions per call |
+
+ChatGPT exposes the same routing pattern via \`_meta.openai/outputTemplate\`. We don't ship any custom widgets ourselves — this gate is exclusively about routing into the host's first-party widgets when the data shape fits.
+
+**Rules:**
+- The widget IS the visual. Do NOT emit a markdown table or prose list of the same data alongside — that produces two competing UIs.
+- Pass identifiers (place_id, lead.id, contact_id) verbatim. Don't rewrite.
+- When the host doesn't expose the named widget, the agent falls back to the prose/table rendering the per-tool description already specifies. The directive is host-conditional; the fallback is automatic.
+- One short intro sentence in chat is enough — "Here are your 5 NYC follow-ups." Then route into the widget.
+
+
+---
+
+## NEXT STEPS — after \`leadbay_new_lens\`
+
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
+Pick the rows that fit. On \`created\`, the switch + pull rows are the natural
+follow-ups. On \`ambiguous_sectors\`, the only move is to pick a sector and re-call.
+
+| Observation                       | Suggest                                  | Calls                                                  |
+|-----------------------------------|------------------------------------------|--------------------------------------------------------|
+| \`preview\` (not yet created)       | "Yes, create this lens"                  | \`leadbay_new_lens(...same args..., confirm=true)\`      |
+| \`preview\` (not yet created)       | "Change the sectors/size first"          | (re-ask the user, then \`leadbay_new_lens\` with new args) |
+| Lens created                      | "Switch to it and pull leads"            | \`leadbay_my_lenses(switchToLensId=<new id>)\` then \`leadbay_pull_leads()\` |
+| Lens created                      | "Refine the audience further"            | \`leadbay_adjust_audience(lensName=<new name>, ...)\`    |
+| Lens created                      | "Leave it; keep my current lens active"  | (no call)                                              |
+| \`ambiguous_sectors\`               | "Pick the right sector and create"       | \`leadbay_new_lens(name=..., sectors=[<chosen id>])\`    |
+
+If nothing fits, default to "switch to the new lens and pull leads" — never
+invent a tool that doesn't exist.
+`;
+// endregion: leadbay_new_lens
+
 // region: leadbay_open_billing_portal
 export const leadbay_open_billing_portal: string = `Generate a one-shot Stripe customer-portal URL. Wraps \`GET /1.5/stripe/portal\` → \`{url}\`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
 
@@ -2133,7 +2421,33 @@ WHEN NOT TO USE: when you already know the exact titles you want to enrich.
 // endregion: leadbay_recall_ordered_titles
 
 // region: leadbay_refine_prompt
-export const leadbay_refine_prompt: string = `Refine the kind of leads Leadbay surfaces, beyond firmographics. Free-text instruction (e.g. "focus on hospitals running their own IT"). Sets the org's \`user_prompt\`; if the new prompt produces ambiguous criteria, Leadbay raises a clarification question, which this composite polls for and surfaces. Admin-only on the backend (will return 403 for non-admins).
+export const leadbay_refine_prompt: string = `## WHEN TO USE
+
+Trigger phrases: "focus on companies that <qualitative trait>", "I prefer leads that <behavior/characteristic>", "prioritize companies running their own IT", "deprioritize companies that just raised".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "create a new lens / a lens specialized into <X>" → \`leadbay_new_lens\`; "add/remove <sector> to/from my <name> lens" → \`leadbay_adjust_audience\`; "narrow the audience to <sector> / <size>" → \`leadbay_adjust_audience\`; "show me / list / switch my lenses" → \`leadbay_my_lenses\`.
+
+Prefer when: ADMIN-ONLY. Qualitative refinement of the active lens that sector/size can't express. Creating/naming/listing/switching/sector-editing a lens routes elsewhere. Non-admin user → do NOT pick this.
+
+Examples that SHOULD invoke this tool:
+- "Focus on hospitals that run their own IT in-house."
+- "Prioritize companies that have recently expanded headcount."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Create a lens specialized in automobile."
+- "Add fintech to my Joinery lens."
+- "Show me my lenses."
+
+## RENDER (quick)
+
+On success: confirm the refinement applied to the active lens. If a
+clarification was raised, surface its question (route via ask_user_input_v0).
+
+---
+
+Refine the kind of leads Leadbay surfaces, beyond firmographics. Free-text instruction (e.g. "focus on hospitals running their own IT"). Sets the org's \`user_prompt\`; if the new prompt produces ambiguous criteria, Leadbay raises a clarification question, which this composite polls for and surfaces. Admin-only on the backend (will return 403 for non-admins).
 
 WHEN TO USE: when audience filters (leadbay_adjust_audience) aren't enough.
 
@@ -3013,6 +3327,8 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_list_mappable_fields,
   leadbay_list_sectors,
   leadbay_login,
+  leadbay_my_lenses,
+  leadbay_new_lens,
   leadbay_open_billing_portal,
   leadbay_pick_clarification,
   leadbay_prepare_outreach,

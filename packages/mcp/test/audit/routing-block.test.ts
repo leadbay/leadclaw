@@ -50,6 +50,10 @@ const TOOLS_WITH_ROUTING = new Set([
   // the agent know when NOT to call it, but the ≥2-positive-example audit
   // doesn't apply because there is no user-facing trigger phrase.
   "leadbay_extend_lens",
+  "leadbay_my_lenses",
+  "leadbay_new_lens",
+  "leadbay_adjust_audience",
+  "leadbay_refine_prompt",
 ]);
 
 const ALL_TOOLS: Tool[] = [

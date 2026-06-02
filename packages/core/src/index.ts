@@ -103,6 +103,8 @@ import { adjustAudience } from "./composite/adjust-audience.js";
 import { refinePrompt } from "./composite/refine-prompt.js";
 import { seedCandidates } from "./composite/seed-candidates.js";
 import { extendLens } from "./composite/extend-lens.js";
+import { myLenses } from "./composite/my-lenses.js";
+import { newLens } from "./composite/new-lens.js";
 import { answerClarification } from "./composite/answer-clarification.js";
 import { reportOutreach } from "./composite/report-outreach.js";
 import { reportFriction } from "./composite/report-friction.js";
@@ -179,7 +181,6 @@ export const granularReadTools: Tool[] = [
   getQuota,
   getLensFilter,
   getLensScoring,
-  listSectors,
   listLocations,
   getUserPrompt,
   getClarification,
@@ -258,6 +259,11 @@ export const compositeReadTools: Tool[] = [
   // it for discoverability; expose it always-on so agents can find custom fields
   // without needing LEADBAY_MCP_ADVANCED=1.
   listMappableFields,
+  // listSectors is granular-shaped but ALWAYS exposed: it's the sector taxonomy
+  // lookup the agent needs to STOP guessing sector names (and to feed
+  // leadbay_new_lens / leadbay_adjust_audience). Without it the agent can only
+  // probe sectors by trial-and-error or ask the user to read the web UI.
+  listSectors,
   // Billing / top-up tools — granular-shaped but ALWAYS exposed because
   // they're the canonical recovery path from a QUOTA_EXCEEDED wall. If
   // they were gated behind LEADBAY_MCP_ADVANCED=1 the agent would
@@ -304,6 +310,15 @@ export const compositeWriteTools: Tool[] = [
   // Lens extend — agent-driven on-demand fill (additive). Gated behind
   // LEADBAY_MCP_WRITE=1. Subject to per-org daily LENS_EXTRA_REFILL quota.
   extendLens,
+  // Lens list/switch — read-first (no args = pure list); a switchToLensId
+  // changes the active lens. In compositeWriteTools because the switch path
+  // mutates last_requested_lens, but it stays on the default surface
+  // (write is on by default since 0.3.0).
+  myLenses,
+  // Lens creation — make a brand-new named lens with sectors/sizes in one
+  // call. Default-surface so "create a lens called X for Y" works without
+  // the advanced gate.
+  newLens,
 ];
 
 // Backward-compat alias for existing consumers.

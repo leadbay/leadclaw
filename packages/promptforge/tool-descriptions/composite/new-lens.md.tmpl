@@ -1,0 +1,69 @@
+---
+name: leadbay_new_lens
+kind: tool-description
+short_description: |
+  Create a new named lens (audience) in one call — clones a base lens, names
+  it, and applies sector/size criteria. Free-text sectors auto-resolve; the
+  lens is NOT created until they resolve. Does not switch the active lens.
+routing:
+  triggers:
+    - "create a lens"
+    - "create a new lens called <name>"
+    - "create a lens specialized in/into <X>"
+    - "make me a new audience for <X>"
+    - "set up a lens for <sector>"
+    - "new lens named <name>"
+    - "I want a lens just for <X>"
+  anti_triggers:
+    - phrase: "narrow the audience / add or remove a sector on an EXISTING lens"
+      route_to: leadbay_adjust_audience
+    - phrase: "add <sector> to my <name> lens"
+      route_to: leadbay_adjust_audience
+    - phrase: "focus on a qualitative trait beyond sector/size"
+      route_to: leadbay_refine_prompt
+    - phrase: "show me / list / switch my lenses"
+      route_to: leadbay_my_lenses
+    - phrase: "more leads on this lens"
+      route_to: leadbay_extend_lens
+  prefer_when: "user wants a brand-new lens (create/make/set up, often 'specialized in <X>'). Editing an existing lens → leadbay_adjust_audience (use lensName). Qualitative refinement → refine_prompt (admin-only)."
+  examples:
+    positive:
+      - "Create a lens called Joinery for the fintech sector."
+      - "Make me a new audience for healthcare companies, 30–300 people."
+      - "Set up a new lens named Nordics SaaS."
+    negative:
+      - "Add fintech to my Joinery lens."
+      - "Show me my lenses."
+      - "I want more leads on this lens."
+rendering_hint: |
+  On `preview` (default — NOTHING created yet): show the lens that WILL be
+  created (name + resolved sectors/sizes as chips) and ASK the user to confirm
+  via ask_user_input_v0 ("Create this lens?" / "Change something"). Only on
+  "yes" re-call with confirm:true. On `created`: confirm "Created **<name>**."
+  On `ambiguous_sectors`: surface the candidate sectors to pick from.
+next_steps: new-lens
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: false
+  openWorldHint: true
+---
+Create a brand-new lens (saved audience) and apply its sector/size criteria. Clones a base lens (the user's active/default lens unless `base` is given), names it, and applies the filter.
+
+**Confirm before creating — two-step by default.** A call WITHOUT `confirm:true` is a dry run: it resolves the sectors/sizes and returns `status:"preview"` with `will_create` (what it WOULD build) — **nothing is created**. Show that to the user, get an explicit yes (ask via `ask_user_input_v0`), then re-call the SAME args with `confirm:true` to actually create. Never pass `confirm:true` on the first call — the user must see the preview first. (Sector ambiguity is still surfaced in the preview step, so they pick before confirming.)
+
+**Sectors resolve first.** Free-text `sectors`/`exclude_sectors` are auto-resolved against the taxonomy. If any don't resolve, the tool returns `status:"ambiguous_sectors"` with the candidates and **does NOT create the lens** — so re-calling after picking the right sector won't leave orphan half-built lenses. To discover valid sector labels up front, use `leadbay_list_sectors`.
+
+**Does not switch the active lens.** The new lens is created but the user stays on their current one. Offer `leadbay_my_lenses(switchToLensId=<new id>)` as a next step if they want to start pulling from it.
+
+{{include:headers/tool-when-to-use}} when the user wants a NEW lens. Canonical phrasings: "create a lens called X", "make a new audience for Y", "set up a lens for <sector>".
+
+{{include:headers/tool-when-not-to-use}} to EDIT an existing lens — use `leadbay_adjust_audience` (pass `lensName` to target one by name). Not for listing/switching (`leadbay_my_lenses`) or topping up (`leadbay_extend_lens`).
+
+{{include:headers/verification-required-if-write}}
+
+{{include:gates/builtin-widgets}}
+
+---
+
+{{include:next-steps/new-lens}}
