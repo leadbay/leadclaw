@@ -174,13 +174,13 @@ Examples that should NOT invoke this tool (sound similar, route elsewhere):
 
 ## RENDER (quick)
 
-ALWAYS render quota.resources as a markdown table, never prose: rows =
-resources (llm_completion · ai_rescore · web_fetch, + others if present),
-cols = Daily / Weekly / Monthly used \`count\`. Above: org + admin, then
-active lens. \`count\` is amount USED; there is NO cap field and \`plan\`
-may be null — NEVER invent a denominator or call a missing cap / null
-plan "unlimited" or "no limits". If any \`count\` > 0 you MUST show the
-numbers; never say "no usage" or "nothing throttled". Note \`resets_at\`.
+If \`quota_error\` is set the call FAILED — say quota is unreadable; on
+401/403 tell the user to reconnect (re-run OAuth). NEVER report zero usage
+or "no limits". Else ALWAYS render quota.resources as a table (never
+prose): rows = resources (llm_completion · ai_rescore · web_fetch +
+others), cols = Daily/Weekly/Monthly used \`count\`. \`count\` = amount USED;
+no cap field, \`plan\` may be null — never invent a denominator. Empty
+resources = a 0 table, not "unlimited". Above: org + admin, active lens.
 
 ---
 
