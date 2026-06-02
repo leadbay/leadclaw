@@ -72,7 +72,7 @@ describe("leadbay_my_lenses", () => {
     ).toBe(true);
   });
 
-  it("rename — POSTs the new name and returns the refreshed list", async () => {
+  it("edit — name + description in one POST, returns the refreshed list", async () => {
     mockHttp([
       { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
       { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
@@ -81,32 +81,52 @@ describe("leadbay_my_lenses", () => {
         method: "GET",
         path: "/1.5/lenses",
         status: 200,
-        body: [LENSES[0], { ...LENSES[1], name: "Joinery Pro" }],
+        body: [LENSES[0], { ...LENSES[1], name: "Joinery Pro", description: "Woodworking <1000" }],
       },
       { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {
-      renameLensId: "99",
+      editLensId: "99",
       newName: "Joinery Pro",
+      newDescription: "Woodworking <1000",
     });
 
-    expect(result.status).toBe("renamed");
-    expect(result.renamed).toBe(true);
-    expect(result.lenses.find((l: any) => l.id === "99").name).toBe("Joinery Pro");
+    expect(result.status).toBe("edited");
+    expect(result.edited).toBe(true);
+    const row = result.lenses.find((l: any) => l.id === "99");
+    expect(row.name).toBe("Joinery Pro");
+    expect(row.description).toBe("Woodworking <1000");
     const post = getHttpRequests().find(
       (r) => r.method === "POST" && r.path === "/1.5/lenses/99"
     );
-    expect(JSON.parse(post!.body!)).toMatchObject({ name: "Joinery Pro" });
+    expect(JSON.parse(post!.body!)).toEqual({ name: "Joinery Pro", description: "Woodworking <1000" });
   });
 
-  it("rename — missing newName → not_found, no POST", async () => {
+  it("edit — description only (no rename) sends just description", async () => {
+    mockHttp([
+      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "POST", path: "/1.5/lenses/99", status: 200, body: {} },
+      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+    ]);
+
+    await myLenses.execute(newClient(), { editLensId: "99", newDescription: "Just a note" });
+
+    const post = getHttpRequests().find(
+      (r) => r.method === "POST" && r.path === "/1.5/lenses/99"
+    );
+    expect(JSON.parse(post!.body!)).toEqual({ description: "Just a note" });
+  });
+
+  it("edit — nothing to change → not_found, no POST", async () => {
     mockHttp([
       { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
       { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
     ]);
 
-    const result: any = await myLenses.execute(newClient(), { renameLensId: "99" });
+    const result: any = await myLenses.execute(newClient(), { editLensId: "99" });
 
     expect(result.status).toBe("not_found");
     expect(getHttpRequests().some((r) => r.method === "POST")).toBe(false);

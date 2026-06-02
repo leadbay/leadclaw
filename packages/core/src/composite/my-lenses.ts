@@ -25,8 +25,9 @@ import { leadbay_my_lenses as MY_LENSES_DESCRIPTION } from "../tool-descriptions
 
 interface MyLensesParams {
   switchToLensId?: string | number;
-  renameLensId?: string | number;
+  editLensId?: string | number; // rename and/or re-describe a lens
   newName?: string;
+  newDescription?: string;
   deleteLensId?: string | number;
   confirm?: boolean; // required (=true) to actually delete; otherwise previews
 }
@@ -86,14 +87,19 @@ export const myLenses: Tool<MyLensesParams> = {
         description:
           "When set, switch the active lens to this id (must be one of the user's lenses), then return the refreshed list.",
       },
-      renameLensId: {
+      editLensId: {
         type: ["string", "number"],
         description:
-          "When set (with newName), rename this lens. Must be one of the user's lenses.",
+          "When set, edit this lens's metadata — provide newName and/or newDescription. Must be one of the user's lenses.",
       },
       newName: {
         type: "string",
-        description: "The new name — required when renameLensId is set.",
+        description: "New lens name (used with editLensId).",
+      },
+      newDescription: {
+        type: "string",
+        description:
+          "New lens description (used with editLensId). Pass an empty string to clear it.",
       },
       deleteLensId: {
         type: ["string", "number"],
@@ -114,10 +120,10 @@ export const myLenses: Tool<MyLensesParams> = {
       status: {
         type: "string",
         description:
-          "'listed', 'switched', 'renamed', 'deleted', 'delete_preview' (confirm to proceed), 'cannot_delete_default', or 'not_found'.",
+          "'listed', 'switched', 'edited', 'deleted', 'delete_preview' (confirm to proceed), 'cannot_delete_default', or 'not_found'.",
       },
       switched: { type: "boolean", description: "True when this call changed the active lens." },
-      renamed: { type: "boolean", description: "True when this call renamed a lens." },
+      edited: { type: "boolean", description: "True when this call renamed/re-described a lens." },
       deleted: { type: "boolean", description: "True when this call deleted a lens." },
       will_delete: {
         type: "object",
@@ -144,7 +150,7 @@ export const myLenses: Tool<MyLensesParams> = {
         return {
           status: "not_found",
           switched: false,
-          renamed: false,
+          edited: false,
           deleted: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
@@ -155,7 +161,7 @@ export const myLenses: Tool<MyLensesParams> = {
         return {
           status: "cannot_delete_default",
           switched: false,
-          renamed: false,
+          edited: false,
           deleted: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
@@ -166,7 +172,7 @@ export const myLenses: Tool<MyLensesParams> = {
         return {
           status: "delete_preview",
           switched: false,
-          renamed: false,
+          edited: false,
           deleted: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
@@ -184,7 +190,7 @@ export const myLenses: Tool<MyLensesParams> = {
       return {
         status: "deleted",
         switched: false,
-        renamed: false,
+        edited: false,
         deleted: true,
         active_lens_id: after.active_lens_id,
         lenses: after.lenses,
@@ -192,44 +198,58 @@ export const myLenses: Tool<MyLensesParams> = {
       };
     }
 
-    // Rename path — validate the target, POST the new name, return refreshed list.
-    if (params.renameLensId != null) {
-      const targetId = sid(params.renameLensId)!;
+    // Edit path — rename and/or re-describe a lens. Both go through the same
+    // POST /lenses/:id; set newName, newDescription, or both in one call.
+    if (params.editLensId != null) {
+      const targetId = sid(params.editLensId)!;
       const before = await listWithActive(client);
       const target = before.lenses.find((l) => l.id === targetId);
       if (!target) {
         return {
           status: "not_found",
           switched: false,
-          renamed: false,
+          edited: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
           message: `No lens with id ${targetId}. Pick one from the list.`,
         };
       }
-      const newName = (params.newName ?? "").trim();
-      if (newName === "") {
+
+      const body: { name?: string; description?: string } = {};
+      const newName = params.newName?.trim();
+      if (newName) body.name = newName;
+      // Allow clearing the description with an explicit empty string.
+      if (params.newDescription !== undefined) body.description = params.newDescription;
+
+      if (Object.keys(body).length === 0) {
         return {
           status: "not_found",
           switched: false,
-          renamed: false,
+          edited: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
-          message: `Provide a newName to rename "${target.name}".`,
+          message: `Nothing to change on "${target.name}" — provide newName and/or newDescription.`,
         };
       }
 
-      await client.requestVoid("POST", `/lenses/${targetId}`, { name: newName });
+      await client.requestVoid("POST", `/lenses/${targetId}`, body);
       client.invalidateDefaultLens();
+
+      const changed = [
+        body.name != null ? `renamed to "${body.name}"` : null,
+        body.description !== undefined ? "description updated" : null,
+      ]
+        .filter(Boolean)
+        .join(", ");
 
       const after = await listWithActive(client);
       return {
-        status: "renamed",
+        status: "edited",
         switched: false,
-        renamed: true,
+        edited: true,
         active_lens_id: after.active_lens_id,
         lenses: after.lenses,
-        message: `Renamed "${target.name}" → "${newName}".`,
+        message: `"${target.name}" — ${changed}.`,
       };
     }
 
@@ -242,7 +262,7 @@ export const myLenses: Tool<MyLensesParams> = {
         return {
           status: "not_found",
           switched: false,
-          renamed: false,
+          edited: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
           message: `No lens with id ${targetId}. Pick an id from the list.`,
@@ -252,7 +272,7 @@ export const myLenses: Tool<MyLensesParams> = {
         return {
           status: "switched",
           switched: false,
-          renamed: false,
+          edited: false,
           active_lens_id: before.active_lens_id,
           lenses: before.lenses,
           message: `"${target.name}" is already your active lens.`,
@@ -269,7 +289,7 @@ export const myLenses: Tool<MyLensesParams> = {
       return {
         status: "switched",
         switched: true,
-        renamed: false,
+        edited: false,
         active_lens_id: after.active_lens_id,
         lenses: after.lenses,
         message: `Now showing "${target.name}".`,
@@ -278,6 +298,6 @@ export const myLenses: Tool<MyLensesParams> = {
 
     // List path (pure read).
     const { lenses, active_lens_id } = await listWithActive(client);
-    return { status: "listed", switched: false, renamed: false, active_lens_id, lenses };
+    return { status: "listed", switched: false, edited: false, active_lens_id, lenses };
   },
 };
