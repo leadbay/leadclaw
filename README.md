@@ -43,7 +43,7 @@ Claude will prompt you to connect Leadbay. Sign in with your Leadbay account and
 
 ## Using another assistant?
 
-LeadMCP also works with Claude Desktop, Cursor, and Codex. The **universal installer** sets everything up for you and lets you sign in with Leadbay.
+LeadMCP also works with Claude Code, Claude Desktop, Cursor, and Codex. The **universal installer** sets everything up for you and lets you sign in with Leadbay.
 
 Requires [Node.js 22+](https://nodejs.org). Then run:
 
@@ -95,6 +95,7 @@ Every supported way to connect LeadMCP, from one-click to fully manual:
 | **Guided installer (GUI)** | `npx -y -p @leadbay/mcp@latest installer` | macOS, Windows | Electron wizard: sign in with Leadbay, pick clients. |
 | **Headless CLI install** | `npx -y @leadbay/mcp@latest install --oauth` | macOS, Windows, Linux | One-shot: browser OAuth + register every detected client; confirms before each write. The only path on Linux. |
 | **Local dev build** | `pnpm --filter @leadbay/mcp installer -- --local` | macOS, Windows, Linux | Registers clients against your local build. OAuth automatic. Build from source first (above). |
+| **Claude Code plugin marketplace** | `/plugin marketplace add leadbay/leadclaw` then `/plugin install leadbay@leadbay-leadclaw` | Claude Code | Registers the MCP server **and** installs auto-triggering skills. |
 | **Manual config** | Mint a token with `npx -y @leadbay/mcp@latest login --oauth`, then paste the `mcpServers.leadbay` entry into your client config | Any | Lower-level; use when you want to edit the config file yourself. |
 
 ### What each installer writes per client
@@ -103,9 +104,12 @@ The GUI/CLI installers only touch clients that are actually installed on the mac
 
 | Client | Installer behavior |
 |--------|--------------------|
+| Claude Code | Registers/removes `leadbay` with `claude mcp add/remove --scope user` |
 | Claude Desktop | Writes/removes only the `mcpServers.leadbay` entry in `claude_desktop_config.json` |
 | Cursor | Writes/removes only the `mcpServers.leadbay` entry in Cursor's MCP config |
 | Codex | Writes/removes only the `[mcp_servers.leadbay]` block in `~/.codex/config.toml` and the Leadbay-managed shell export block |
+
+The Claude Code plugin marketplace path installs skills (`leadbay_research_a_domain`, `leadbay_import_file`, `leadbay_log_outreach`, `leadbay_qualify_top_n`, `leadbay_refine_audience`, and others) that auto-trigger on natural-language asks.
 
 ### Uninstall
 
@@ -113,7 +117,7 @@ The GUI/CLI installers only touch clients that are actually installed on the mac
 npx -y -p @leadbay/mcp@latest installer --uninstall
 ```
 
-Opens the uninstall wizard — only shows clients that already have Leadbay MCP configured. Strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`. Uninstall is scoped to Leadbay — it never rewrites unrelated client settings or removes other MCP servers.
+Opens the uninstall wizard — only shows clients that already have Leadbay MCP configured. De-registers Claude Code, strips the JSON stanza from Claude Desktop / Cursor configs, removes the `[mcp_servers.leadbay]` TOML block from Codex, and strips the managed `export LEADBAY_*` block from `~/.zshrc` / `~/.bashrc`. Uninstall is scoped to Leadbay — it never rewrites unrelated client settings or removes other MCP servers.
 
 ## How Leadbay thinks (mental model for your agent)
 
