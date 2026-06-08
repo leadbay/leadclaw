@@ -45,8 +45,10 @@ export const createLens: Tool<CreateLensParams> = {
     required: ["id", "name"],
   },
   execute: async (client: LeadbayClient, params: CreateLensParams) => {
+    // Backend requires `base` as a STRING (lens ids are strings server-side);
+    // a numeric base yields 400 "JSON deserialization error".
     const lens = await client.request<LensPayload>("POST", "/lenses", {
-      base: params.base,
+      base: String(params.base),
       name: params.name,
       description: params.description,
     });

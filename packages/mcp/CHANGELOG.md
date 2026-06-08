@@ -1,6 +1,6 @@
 # Changelog — @leadbay/mcp
 
-## 0.18.0 — 2026-05-29
+## 0.18.0 — 2026-06-08
 
 Backend long-task notifications are now consumed by the MCP. When the user (or agent) initiates a bulk operation — contact enrichment, lead qualification, CSV / CRM import — the MCP listens to the backend WebSocket for the completion event and surfaces it on the agent's next tool call so prior outputs that depended on the now-finished data can be revised.
 
@@ -13,6 +13,26 @@ Backend long-task notifications are now consumed by the MCP. When the user (or a
 - **`bulk_enrich_status` fast path** — reads `bulk_progress` from the notification in a single REST call instead of fanning out `get_contacts` per lead. Falls back to the legacy per-lead path for records minted before this PR.
 - **`qualify_status` surfaces `bulk_progress`** — bulk counters (success / failure / quota_hit) appear alongside the existing per-lead refresh. `quota_hit_count > 0` triggers an upgrade-or-wait hint.
 - **Vocabulary**: "notifications" everywhere. Not "pending actions", not "tasks", not "async results" — matches the backend ADR (`docs/adr/notifications.md`).
+
+## 0.17.3 — 2026-06-01
+
+- **Lens management on the default surface**: lenses are now fully manageable from chat, no `LEADBAY_MCP_ADVANCED` needed.
+  - `leadbay_my_lenses` (write) — list your lenses, switch the active one, rename / set description, or delete (delete is confirm-gated and refuses the default lens).
+  - `leadbay_new_lens` (write) — create a named lens with sector/size criteria in one call; previews and confirms before creating, and rolls back the created lens if applying its filter fails (no orphan half-built lenses).
+  - `leadbay_adjust_audience` — new `lensName` param edits a lens **by name** without switching your active lens (edit-only).
+  - `leadbay_list_sectors` (read, always-on) — the sector taxonomy lookup, so the agent stops guessing sector names.
+- **Routing**: `leadbay_adjust_audience` and `leadbay_refine_prompt` gained routing blocks so "create a lens" reaches `new_lens` (not `refine_prompt`) and "add X to my Y lens" fills `lensName` instead of editing the active lens.
+- **Backend contract fixes** (were causing `400 JSON deserialization error` on lens create/edit, verified live): `POST /lenses` `base` sent as a string; `POST /lenses/:id/filter` sent as the unwrapped `{items:[…]}` body; `size` criteria carry both `min` and `max`.
+
+## 0.17.2 — 2026-06-01
+
+- **Linux installer fix**: skip Electron when no display is available (`$DISPLAY`/`$WAYLAND_DISPLAY` unset) and go straight to browser fallback — eliminates the double GUI URL on headless Linux terminals.
+- **Browser open fallbacks**: on Linux, try `xdg-open` → `sensible-browser` → `google-chrome` → `chromium-browser` → `firefox` in order. If all fail, print a clear "Open this URL in your browser" message instead of silently doing nothing.
+- **GitHub release notes**: release body now contains the actual CHANGELOG section for the version instead of "see CHANGELOG.md".
+
+## 0.17.1 — 2026-06-01
+
+- **Publish fix**: the `installer` npm bin (`npx -y -p @leadbay/mcp@latest installer`) was missing from the 0.17.0 tarball because the package was published before the installer wizard merged. This patch re-publishes with the correct bin entries.
 
 ## 0.17.0 — 2026-05-29
 
@@ -63,8 +83,16 @@ Backend long-task notifications are now consumed by the MCP. When the user (or a
   the 60-70% null rate the optional-everywhere `triggered_by` field
   carries on `mcp tool called`.
 
-## 0.16.0 — 2026-05-28
+## 0.16.0 — 2026-05-29
 
+- **Guided installer wizard**: Electron GUI (browser fallback) for install and uninstall. Detects Claude Code, Claude Desktop, Cursor, Codex, and ChatGPT Desktop automatically. OAuth sign-in built in — no token copy-paste.
+- **Hosted MCP server**: Hono HTTP server at `https://leadbay-mcp-prod.fly.dev/mcp` for ChatGPT Desktop and other remote-MCP clients. Supports Streamable HTTP (`POST /mcp`) and legacy SSE (`GET /sse`, `POST /messages`).
+- **Installer logic reorganised**: all install/uninstall logic moved from `src/bin.ts` into dedicated files under `installer/` (`install-claude-code.ts`, `install-json-config.ts`, `install-codex.ts`, `install-dxt.ts`, `install-wizard.ts`). `bin.ts` is now a thin MCP server entrypoint.
+- **DXT extension removal**: when Claude Desktop 2026 DXT markers are detected, the installer removes the Leadbay DXT bundle (`Claude Extensions/local.dxt.leadbay.leadbay/` + registry entry) and writes `claude_desktop_config.json` as the authoritative config source.
+- **macOS path fix**: `DetectedClient` now carries a `configPath` field; dropped the `detail.split(" ")[0]` pattern that truncated paths containing spaces (e.g. `~/Library/Application Support/Claude/...`).
+- **SSE double-write fix**: `/sse` and `/messages` now return the `x-hono-already-sent` sentinel so Hono's Node adapter does not attempt a second header write after `SSEServerTransport` has already written headers.
+- **Browser fallback uninstall fix**: `runBrowserFallback()` now opens the uninstaller GUI when `--uninstall` is passed, matching the Electron main process.
+- **`@latest` pin**: all generated client configs now use `npx -y @leadbay/mcp@latest` instead of a hardcoded minor version.
 - **OAuth login** (`leadbay-mcp login --oauth`): browser-based Authorization
   Code + PKCE flow with Dynamic Client Registration (RFC 7591). No password
   ever touches the CLI. The resulting `o.<token>` is interchangeable with the

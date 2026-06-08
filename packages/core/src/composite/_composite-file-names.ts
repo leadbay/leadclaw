@@ -25,6 +25,8 @@ export const COMPOSITE_FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "leadbay_import_leads",
   "leadbay_import_status",
   "leadbay_list_campaigns",
+  "leadbay_my_lenses",
+  "leadbay_new_lens",
   "leadbay_prepare_outreach",
   "leadbay_pull_followups",
   "leadbay_pull_leads",
