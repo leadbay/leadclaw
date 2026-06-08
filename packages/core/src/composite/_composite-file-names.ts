@@ -10,6 +10,7 @@
 // that audit.
 export const COMPOSITE_FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "leadbay_account_status",
+  "leadbay_add_contact",
   "leadbay_add_leads_to_campaign",
   "leadbay_adjust_audience",
   "leadbay_answer_clarification",

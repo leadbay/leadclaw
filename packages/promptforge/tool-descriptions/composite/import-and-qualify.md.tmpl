@@ -5,36 +5,6 @@ short_description: |
   Composite: import a list of leads (CSV-shaped records OR a list of domains),
   then trigger Leadbay's AI qualification on every imported leadId, and return
   both the import outcome and the per-lead qualification answers — in one call.
-routing:
-  triggers:
-    - "add a contact to this company"
-    - "add this person to <company>"
-    - "create a contact from this LinkedIn URL"
-    - "this company has no contacts — add one"
-    - "I found someone on LinkedIn, add them to <lead>"
-    - "import these companies and qualify them"
-    - "import this list and run AI qualification"
-  anti_triggers:
-    - phrase: "show me new leads / discovery"
-      route_to: leadbay_pull_leads
-    - phrase: "deep dive on a single lead I already picked"
-      route_to: leadbay_research_lead_by_id
-    - phrase: "get email/phone for a contact already on the company"
-      route_to: leadbay_enrich_titles
-  prefer_when: "user wants to attach a known person (esp. a LinkedIn URL) to an already-identified company — pass one `records[]` row with `CONTACT_*` fields keyed by the parent `LEADBAY_ID` (else `LEAD_NAME`/`LEAD_WEBSITE`)"
-  examples:
-    positive:
-      - "Acme has no suggested contacts — add Jane Doe, VP Eng, here's her LinkedIn."
-      - "Add this person I found on LinkedIn to that company."
-      - "Import these 40 domains from my CRM and qualify them."
-    negative:
-      - "Show me today's leads."
-      - "Tell me everything about that lead I just picked."
-      - "Get me the email for the contact already on this company."
-rendering_hint: |
-  Use the import-result layout: summarize imported/qualified vs not-imported
-  counts, then per-lead qualification answers. For a single added contact,
-  confirm the person now sits on the parent company.
 annotations:
   readOnlyHint: false
   destructiveHint: true
@@ -42,24 +12,6 @@ annotations:
   openWorldHint: true
 ---
 Import + qualify leads in one call. Pass either `domains: [{domain, name?}]` (Mode A) OR `records[]` with `mappings` (Mode B). At least one mapped field must be LEADBAY_ID, CRM_ID, SIREN, LEAD_NAME, or LEAD_WEBSITE. Discover the org's mappable surface via `leadbay_list_mappable_fields`. For messy files, prefer the `leadbay_import_file` prompt which walks an agent through scan → resolve → preserve → commit phases.
-
-**Add a single contact to a known company** (the "create_contact" path): this is just Mode B with one record. Map the parent company + `CONTACT_*` fields — the import **creates an org contact** on that company. **`LEAD_NAME` is required even when you pass `LEADBAY_ID`** — the import rejects the row with `missing LEAD_NAME field` otherwise. So always send both: `LEADBAY_ID` (the exact match key) AND `LEAD_NAME` (the company's display name). Minimal call:
-
-```
-records: [{
-  LEADBAY_ID: "<lead uuid>",        // exact match key for the existing company
-  LEAD_NAME:  "SHOWROOM AUTO, LLC", // REQUIRED — send alongside LEADBAY_ID
-  CONTACT_FIRST_NAME: "Jane",
-  CONTACT_LAST_NAME:  "Doe",
-  CONTACT_TITLE:      "VP Eng",     // optional
-  CONTACT_LINKEDIN:   "https://www.linkedin.com/in/janedoe",  // optional
-  CONTACT_EMAIL:      "jane@acme.com",   // optional
-  CONTACT_PHONE_NUMBER: "+1...",         // optional
-}]
-mappings: { fields: { LEADBAY_ID: "LEADBAY_ID", LEAD_NAME: "LEAD_NAME", CONTACT_FIRST_NAME: "CONTACT_FIRST_NAME", /* … */ } }
-```
-
-If you don't have the `LEADBAY_ID`, key on `LEAD_NAME` (+ optional `LEAD_WEBSITE`) alone and the import fuzzy-matches to the existing company. Repeating the same parent across rows adds multiple contacts to that one company. After the contact lands, enrich its email/phone via `leadbay_enrich_titles`. Use this when a rep found a person (often just a LinkedIn URL) and wants them on an already-identified Leadbay company without leaving the conversation.
 
 {{include:headers/tool-when-to-use}} agent has a list of companies (domains, or CSV-shaped rows from the user's CRM) and wants the full AI qualification — qualification answers, web-research signals — without orchestrating import + bulk_qualify_leads + lead_profile chains by hand.
 

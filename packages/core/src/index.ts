@@ -95,6 +95,7 @@ import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
 import { resolveImportRows } from "./composite/resolve-import-rows.js";
 import { importLeads } from "./composite/import-leads.js";
 import { importAndQualify } from "./composite/import-and-qualify.js";
+import { addContact } from "./composite/add-contact.js";
 import { removeContact } from "./composite/remove-contact.js";
 import { importStatus } from "./composite/import-status.js";
 import { qualifyStatus } from "./composite/qualify-status.js";
@@ -293,9 +294,12 @@ export const compositeWriteTools: Tool[] = [
   reportOutreach,
   importLeads,
   importAndQualify,
-  // removeContact — the undo for the add-a-contact path. Soft-deletes
-  // (archives) a single contact via POST /contacts/{id}/archive. Default
-  // write surface so "remove this contact" works without the advanced gate.
+  // addContact / removeContact — add or remove a single person on a known
+  // company, in-conversation (product#3703). addContact wraps the direct
+  // POST /leads/{id}/contacts endpoint (same one the web UI uses — NOT the
+  // import pipeline, which 401s on some accounts). removeContact is the undo,
+  // archiving via POST /contacts/{id}/archive. Default write surface.
+  addContact,
   removeContact,
   // createCustomField is granular-shaped but file-import prompts depend on it
   // to preserve source-system links without requiring advanced-tool exposure.
