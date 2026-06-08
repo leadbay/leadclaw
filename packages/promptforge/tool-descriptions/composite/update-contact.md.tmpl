@@ -1,0 +1,51 @@
+---
+name: leadbay_update_contact
+kind: tool-description
+short_description: |
+  Edit an existing contact in place — change their title, LinkedIn, email,
+  phone, or name. Use when the user wants to fix or update a contact's
+  details. Don't use it to add a new contact or remove one.
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+routing:
+  triggers:
+    - "update this contact"
+    - "fix this contact's title"
+    - "change their email / phone / LinkedIn"
+    - "edit this person's details"
+    - "correct the contact's name"
+  anti_triggers:
+    - phrase: "add a new contact to this company"
+      route_to: leadbay_add_contact
+    - phrase: "remove / delete this contact"
+      route_to: leadbay_remove_contact
+    - phrase: "get email/phone for a contact (enrichment)"
+      route_to: leadbay_enrich_titles
+  prefer_when: "user wants to change details on an EXISTING contact — pass that contact's own `contact_id` plus first_name + last_name (required) and the fields to change"
+  examples:
+    positive:
+      - "Update Jane's title to SVP Engineering."
+      - "Fix this contact's LinkedIn URL."
+      - "Change John's email to john@acme.com."
+    negative:
+      - "Add a new contact to this company."
+      - "Remove that contact, wrong person."
+      - "Get me the email for this contact."
+rendering_hint: |
+  One-line confirmation naming the contact and what changed. No table.
+---
+
+Edit an existing contact in place — change their `job_title`, `linkedin_page`, `email`, `phone_number`, or name.
+
+Pass the contact's **own** `contact_id` (the `id` field from `leadbay_research_lead_by_id` or a contacts list) — **not** the parent lead id.
+
+**`first_name` + `last_name` are required even on an edit.** The backend validates the full contact identity and rejects a partial body (`invalid contact`). So pass the contact's *current* first/last name even when you're only changing the title — read the current values via `leadbay_research_lead_by_id` first if you don't have them.
+
+Backend: `POST /contacts/{contact_id}/update` (snake_case body) → 200 with the updated contact. Edits in place (same id). Camel-case bodies are rejected.
+
+Returns `{ updated: true, contact_id, contact: { id, first_name, last_name, job_title, linkedin_page, email, phone_number } }`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).

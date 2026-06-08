@@ -99,6 +99,7 @@ import { addContact } from "./composite/add-contact.js";
 import { removeContact } from "./composite/remove-contact.js";
 import { pinContact } from "./composite/pin-contact.js";
 import { unpinContact } from "./composite/unpin-contact.js";
+import { updateContact } from "./composite/update-contact.js";
 import { importStatus } from "./composite/import-status.js";
 import { qualifyStatus } from "./composite/qualify-status.js";
 import { enrichTitles } from "./composite/enrich-titles.js";
@@ -307,6 +308,9 @@ export const compositeWriteTools: Tool[] = [
   // POST /contacts/{id}/pin | /unpin. Default write surface.
   pinContact,
   unpinContact,
+  // updateContact — edit an existing contact in place via
+  // POST /contacts/{id}/update (snake_case; first/last name required).
+  updateContact,
   // createCustomField is granular-shaped but file-import prompts depend on it
   // to preserve source-system links without requiring advanced-tool exposure.
   createCustomField,

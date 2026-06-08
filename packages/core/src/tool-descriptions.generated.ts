@@ -3411,6 +3411,47 @@ Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
 `;
 // endregion: leadbay_unpin_contact
 
+// region: leadbay_update_contact
+export const leadbay_update_contact: string = `## WHEN TO USE
+
+Trigger phrases: "update this contact", "fix this contact's title", "change their email / phone / LinkedIn", "edit this person's details", "correct the contact's name".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "add a new contact to this company" → \`leadbay_add_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`; "get email/phone for a contact (enrichment)" → \`leadbay_enrich_titles\`.
+
+Prefer when: user wants to change details on an EXISTING contact — pass that contact's own \`contact_id\` plus first_name + last_name (required) and the fields to change
+
+Examples that SHOULD invoke this tool:
+- "Update Jane's title to SVP Engineering."
+- "Fix this contact's LinkedIn URL."
+- "Change John's email to john@acme.com."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add a new contact to this company."
+- "Remove that contact, wrong person."
+- "Get me the email for this contact."
+
+## RENDER (quick)
+
+One-line confirmation naming the contact and what changed. No table.
+
+---
+
+Edit an existing contact in place — change their \`job_title\`, \`linkedin_page\`, \`email\`, \`phone_number\`, or name.
+
+Pass the contact's **own** \`contact_id\` (the \`id\` field from \`leadbay_research_lead_by_id\` or a contacts list) — **not** the parent lead id.
+
+**\`first_name\` + \`last_name\` are required even on an edit.** The backend validates the full contact identity and rejects a partial body (\`invalid contact\`). So pass the contact's *current* first/last name even when you're only changing the title — read the current values via \`leadbay_research_lead_by_id\` first if you don't have them.
+
+Backend: \`POST /contacts/{contact_id}/update\` (snake_case body) → 200 with the updated contact. Edits in place (same id). Camel-case bodies are rejected.
+
+Returns \`{ updated: true, contact_id, contact: { id, first_name, last_name, job_title, linkedin_page, email, phone_number } }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_update_contact
+
 // region: leadbay_update_lens
 export const leadbay_update_lens: string = `Update lens metadata (name, description, mode flags). Does NOT change the audience filter — use leadbay_update_lens_filter for that.
 
@@ -3520,6 +3561,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_set_user_prompt,
   leadbay_tour_plan,
   leadbay_unpin_contact,
+  leadbay_update_contact,
   leadbay_update_lens,
   leadbay_update_lens_filter,
 } as const;

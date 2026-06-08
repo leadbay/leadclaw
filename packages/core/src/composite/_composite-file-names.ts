@@ -45,4 +45,5 @@ export const COMPOSITE_FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "leadbay_seed_candidates",
   "leadbay_tour_plan",
   "leadbay_unpin_contact",
+  "leadbay_update_contact",
 ]);

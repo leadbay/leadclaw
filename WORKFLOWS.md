@@ -30,6 +30,7 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 16 | **Remove a contact from a company** — "remove this contact", "delete that person, wrong one", "undo the contact I just added" | `leadbay_remove_contact` (archives by the contact's own `contact_id`) | "Remove Jane Doe from that company — I added her by mistake" |
 | 17 | **Pin a contact as priority** — "pin this contact", "mark this person as the main contact", "favourite this contact" | `leadbay_pin_contact` (by the contact's own `contact_id`) | "Pin Jane Doe as the main contact on this company" |
 | 18 | **Unpin a contact** — "unpin this contact", "remove the pin", "not the priority anymore" | `leadbay_unpin_contact` (by the contact's own `contact_id`) | "Unpin Jane Doe — she's not the priority anymore" |
+| 19 | **Update a contact's details** — "update this contact's title", "fix their email/LinkedIn", "edit this person" | `leadbay_update_contact` (by `contact_id`; first/last name required) | "Update Jane Doe's title to SVP Engineering" |
 
 ---
 
@@ -304,6 +305,23 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Unpin the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) — she's not the priority anymore"
+```
+
+```yaml expected
+workflow_name: Update a contact's details
+prompt_name: ~
+required_calls:
+  - leadbay_update_contact
+forbidden_calls:
+  - leadbay_remove_contact
+  - leadbay_add_contact
+success_criteria:
+  - "called leadbay_update_contact with the contact's own contact_id plus first_name + last_name and the changed field"
+  - "did NOT add a new contact or remove the existing one — edited in place"
+```
+
+```yaml scenario
+prompt: "Update the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) — change her title to SVP Engineering"
 ```
 
 ---
