@@ -1825,6 +1825,45 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_pick_clarification
 
+// region: leadbay_pin_contact
+export const leadbay_pin_contact: string = `## WHEN TO USE
+
+Trigger phrases: "pin this contact", "mark this person as priority", "make this the main contact", "favourite this contact".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "unpin / remove the pin" → \`leadbay_unpin_contact\`; "add a contact to this company" → \`leadbay_add_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`.
+
+Prefer when: user wants ONE person flagged as the priority on a company — pass that contact's own \`contact_id\`
+
+Examples that SHOULD invoke this tool:
+- "Pin Jane Doe as the main contact on this company."
+- "Mark this person as the priority contact."
+- "Favourite that contact so it shows first."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add a contact to this company."
+- "Remove that contact, wrong person."
+- "Stop showing me this lead."
+
+## RENDER (quick)
+
+One-line confirmation that the named contact (or id) is now pinned. No table.
+
+---
+
+Pin a single contact on a company so it surfaces first as a priority / favourite. Use when the user wants to flag a specific person as the one to focus on.
+
+Pass the contact's **own** \`contact_id\` (the \`id\` field on a contact object from \`leadbay_research_lead_by_id\` or a contacts list) — **not** the parent lead id.
+
+Backend: \`POST /contacts/{contact_id}/pin\` → 204. Idempotent. The inverse is \`leadbay_unpin_contact\`.
+
+Returns \`{ pinned: true, contact_id, action: "pinned" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_pin_contact
+
 // region: leadbay_prepare_outreach
 export const leadbay_prepare_outreach: string = `## WHEN TO USE
 
@@ -3332,6 +3371,46 @@ WHEN NOT TO USE: if the user only wants follow-ups (use \`leadbay_followups_map\
 `;
 // endregion: leadbay_tour_plan
 
+// region: leadbay_unpin_contact
+export const leadbay_unpin_contact: string = `## WHEN TO USE
+
+Trigger phrases: "unpin this contact", "remove the pin from this contact", "this person isn't the priority anymore", "unfavourite this contact".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "pin / mark as priority" → \`leadbay_pin_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`.
+
+Prefer when: user wants to clear the pinned flag on a contact (but keep the contact) — pass that contact's own \`contact_id\`
+
+Examples that SHOULD invoke this tool:
+- "Unpin Jane Doe — she's not the priority anymore."
+- "Remove the pin from that contact."
+- "Unfavourite this person."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Pin this contact as priority."
+- "Remove that contact entirely."
+- "Add a new contact to this company."
+
+## RENDER (quick)
+
+One-line confirmation that the named contact (or id) is no longer pinned.
+No table.
+
+---
+
+Unpin a single contact on a company — clears its priority / favourite flag. The contact stays on the company; only the pin is removed (to remove the contact entirely, use \`leadbay_remove_contact\`).
+
+Pass the contact's **own** \`contact_id\` — not the parent lead id.
+
+Backend: \`POST /contacts/{contact_id}/unpin\` → 204. Idempotent. The inverse is \`leadbay_pin_contact\`.
+
+Returns \`{ pinned: false, contact_id, action: "unpinned" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_unpin_contact
+
 // region: leadbay_update_lens
 export const leadbay_update_lens: string = `Update lens metadata (name, description, mode flags). Does NOT change the audience filter — use leadbay_update_lens_filter for that.
 
@@ -3414,6 +3493,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_new_lens,
   leadbay_open_billing_portal,
   leadbay_pick_clarification,
+  leadbay_pin_contact,
   leadbay_prepare_outreach,
   leadbay_preview_bulk_enrichment,
   leadbay_promote_lens,
@@ -3439,6 +3519,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_set_pushback,
   leadbay_set_user_prompt,
   leadbay_tour_plan,
+  leadbay_unpin_contact,
   leadbay_update_lens,
   leadbay_update_lens_filter,
 } as const;

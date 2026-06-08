@@ -56,6 +56,8 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_refine_prompt",
   "leadbay_add_contact",
   "leadbay_remove_contact",
+  "leadbay_pin_contact",
+  "leadbay_unpin_contact",
 ]);
 
 const ALL_TOOLS: Tool[] = [

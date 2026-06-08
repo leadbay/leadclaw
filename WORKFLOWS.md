@@ -28,6 +28,8 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 14 | **Lens creation — make a named audience** — "create a lens called X for sector Y", "set up a new audience" | `leadbay_new_lens` | "Create a lens called Joinery for the fintech sector" |
 | 15 | **Add a contact to a known company** — "this company has no contacts — add Jane Doe, here's her LinkedIn", "add this person I found to that lead" | `leadbay_add_contact` (direct `POST /leads/{id}/contacts`; pass `lead_id` + name + optional linkedin/title/email/phone) | "Acme has no contacts — add Jane Doe, VP Eng, here's her LinkedIn" |
 | 16 | **Remove a contact from a company** — "remove this contact", "delete that person, wrong one", "undo the contact I just added" | `leadbay_remove_contact` (archives by the contact's own `contact_id`) | "Remove Jane Doe from that company — I added her by mistake" |
+| 17 | **Pin a contact as priority** — "pin this contact", "mark this person as the main contact", "favourite this contact" | `leadbay_pin_contact` (by the contact's own `contact_id`) | "Pin Jane Doe as the main contact on this company" |
+| 18 | **Unpin a contact** — "unpin this contact", "remove the pin", "not the priority anymore" | `leadbay_unpin_contact` (by the contact's own `contact_id`) | "Unpin Jane Doe — she's not the priority anymore" |
 
 ---
 
@@ -270,6 +272,38 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Remove the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) from that company — I added her by mistake"
+```
+
+```yaml expected
+workflow_name: Pin a contact as priority
+prompt_name: ~
+required_calls:
+  - leadbay_pin_contact
+forbidden_calls:
+  - leadbay_remove_contact
+success_criteria:
+  - "called leadbay_pin_contact with the target contact's own contact_id"
+  - "did NOT remove the contact (leadbay_remove_contact) — only pinned it"
+```
+
+```yaml scenario
+prompt: "Pin the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) as the main contact on that company"
+```
+
+```yaml expected
+workflow_name: Unpin a contact
+prompt_name: ~
+required_calls:
+  - leadbay_unpin_contact
+forbidden_calls:
+  - leadbay_remove_contact
+success_criteria:
+  - "called leadbay_unpin_contact with the target contact's own contact_id"
+  - "did NOT remove the contact — only cleared the pin"
+```
+
+```yaml scenario
+prompt: "Unpin the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) — she's not the priority anymore"
 ```
 
 ---

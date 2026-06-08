@@ -97,6 +97,8 @@ import { importLeads } from "./composite/import-leads.js";
 import { importAndQualify } from "./composite/import-and-qualify.js";
 import { addContact } from "./composite/add-contact.js";
 import { removeContact } from "./composite/remove-contact.js";
+import { pinContact } from "./composite/pin-contact.js";
+import { unpinContact } from "./composite/unpin-contact.js";
 import { importStatus } from "./composite/import-status.js";
 import { qualifyStatus } from "./composite/qualify-status.js";
 import { enrichTitles } from "./composite/enrich-titles.js";
@@ -301,6 +303,10 @@ export const compositeWriteTools: Tool[] = [
   // archiving via POST /contacts/{id}/archive. Default write surface.
   addContact,
   removeContact,
+  // pin/unpin a contact — flag a person as the priority on a company.
+  // POST /contacts/{id}/pin | /unpin. Default write surface.
+  pinContact,
+  unpinContact,
   // createCustomField is granular-shaped but file-import prompts depend on it
   // to preserve source-system links without requiring advanced-tool exposure.
   createCustomField,
