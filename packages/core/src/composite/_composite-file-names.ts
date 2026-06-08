@@ -33,6 +33,7 @@ export const COMPOSITE_FILE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "leadbay_qualify_status",
   "leadbay_recall_ordered_titles",
   "leadbay_refine_prompt",
+  "leadbay_remove_contact",
   "leadbay_remove_leads_from_campaign",
   "leadbay_report_friction",
   "leadbay_report_outreach",

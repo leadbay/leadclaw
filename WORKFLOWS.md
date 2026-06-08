@@ -26,6 +26,8 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 12 | **Lens extension — on-demand fill for bigger appetite** — "I want more leads on this lens / I need a bigger batch today" | `leadbay_extend_my_lens` | "I want more leads on this lens — bigger batch today" |
 | 13 | **Lens management — list / switch audiences** — "show me my lenses", "which audiences do I have", "switch to my Joinery lens" | `leadbay_my_lenses` | "Show me my lenses and switch to the Joinery one" |
 | 14 | **Lens creation — make a named audience** — "create a lens called X for sector Y", "set up a new audience" | `leadbay_new_lens` | "Create a lens called Joinery for the fintech sector" |
+| 15 | **Add a contact to a known company** — "this company has no contacts — add Jane Doe, here's her LinkedIn", "add this person I found to that lead" | `leadbay_import_and_qualify` (one `records[]` row, `CONTACT_*` fields keyed by parent `LEADBAY_ID`) | "Acme has no contacts — add Jane Doe, VP Eng, here's her LinkedIn" |
+| 16 | **Remove a contact from a company** — "remove this contact", "delete that person, wrong one", "undo the contact I just added" | `leadbay_remove_contact` (archives by the contact's own `contact_id`) | "Remove Jane Doe from that company — I added her by mistake" |
 
 ---
 
@@ -233,6 +235,41 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Set up a prospecting campaign for my team"
+```
+
+```yaml expected
+workflow_name: Add a contact to a known company
+prompt_name: ~
+required_calls:
+  - leadbay_import_and_qualify
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_import_and_qualify with one records[] row carrying CONTACT_* fields keyed by the parent company (LEADBAY_ID / LEAD_NAME / LEAD_WEBSITE)"
+  - "did NOT switch to an external CRM or claim Leadbay can't add contacts"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Acme (lead id 11111111-1111-1111-1111-111111111111) has no suggested contacts — add Jane Doe, VP Eng, https://www.linkedin.com/in/janedoe"
+```
+
+```yaml expected
+workflow_name: Remove a contact from a company
+prompt_name: ~
+required_calls:
+  - leadbay_remove_contact
+forbidden_calls:
+  - leadbay_dislike_lead
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_remove_contact with the target contact's own contact_id"
+  - "did NOT dislike/skip the whole lead (leadbay_dislike_lead) — only the contact was removed"
+  - "confirmed the contact was removed"
+```
+
+```yaml scenario
+prompt: "Remove the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) from that company — I added her by mistake"
 ```
 
 ---

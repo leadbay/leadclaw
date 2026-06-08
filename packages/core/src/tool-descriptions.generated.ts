@@ -1132,7 +1132,53 @@ WHEN NOT TO USE: as the first read on a lead — the leadbay_research_lead_by_id
 // endregion: leadbay_get_web_fetch
 
 // region: leadbay_import_and_qualify
-export const leadbay_import_and_qualify: string = `Import + qualify leads in one call. Pass either \`domains: [{domain, name?}]\` (Mode A) OR \`records[]\` with \`mappings\` (Mode B). At least one mapped field must be LEADBAY_ID, CRM_ID, SIREN, LEAD_NAME, or LEAD_WEBSITE. Discover the org's mappable surface via \`leadbay_list_mappable_fields\`. For messy files, prefer the \`leadbay_import_file\` prompt which walks an agent through scan → resolve → preserve → commit phases.
+export const leadbay_import_and_qualify: string = `## WHEN TO USE
+
+Trigger phrases: "add a contact to this company", "add this person to <company>", "create a contact from this LinkedIn URL", "this company has no contacts — add one", "I found someone on LinkedIn, add them to <lead>", "import these companies and qualify them", "import this list and run AI qualification".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "show me new leads / discovery" → \`leadbay_pull_leads\`; "deep dive on a single lead I already picked" → \`leadbay_research_lead_by_id\`; "get email/phone for a contact already on the company" → \`leadbay_enrich_titles\`.
+
+Prefer when: user wants to attach a known person (esp. a LinkedIn URL) to an already-identified company — pass one \`records[]\` row with \`CONTACT_*\` fields keyed by the parent \`LEADBAY_ID\` (else \`LEAD_NAME\`/\`LEAD_WEBSITE\`)
+
+Examples that SHOULD invoke this tool:
+- "Acme has no suggested contacts — add Jane Doe, VP Eng, here's her LinkedIn."
+- "Add this person I found on LinkedIn to that company."
+- "Import these 40 domains from my CRM and qualify them."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Show me today's leads."
+- "Tell me everything about that lead I just picked."
+- "Get me the email for the contact already on this company."
+
+## RENDER (quick)
+
+Use the import-result layout: summarize imported/qualified vs not-imported
+counts, then per-lead qualification answers. For a single added contact,
+confirm the person now sits on the parent company.
+
+---
+
+Import + qualify leads in one call. Pass either \`domains: [{domain, name?}]\` (Mode A) OR \`records[]\` with \`mappings\` (Mode B). At least one mapped field must be LEADBAY_ID, CRM_ID, SIREN, LEAD_NAME, or LEAD_WEBSITE. Discover the org's mappable surface via \`leadbay_list_mappable_fields\`. For messy files, prefer the \`leadbay_import_file\` prompt which walks an agent through scan → resolve → preserve → commit phases.
+
+**Add a single contact to a known company** (the "create_contact" path): this is just Mode B with one record. Map the parent company + \`CONTACT_*\` fields — the import **creates an org contact** on that company. **\`LEAD_NAME\` is required even when you pass \`LEADBAY_ID\`** — the import rejects the row with \`missing LEAD_NAME field\` otherwise. So always send both: \`LEADBAY_ID\` (the exact match key) AND \`LEAD_NAME\` (the company's display name). Minimal call:
+
+\`\`\`
+records: [{
+  LEADBAY_ID: "<lead uuid>",        // exact match key for the existing company
+  LEAD_NAME:  "SHOWROOM AUTO, LLC", // REQUIRED — send alongside LEADBAY_ID
+  CONTACT_FIRST_NAME: "Jane",
+  CONTACT_LAST_NAME:  "Doe",
+  CONTACT_TITLE:      "VP Eng",     // optional
+  CONTACT_LINKEDIN:   "https://www.linkedin.com/in/janedoe",  // optional
+  CONTACT_EMAIL:      "jane@acme.com",   // optional
+  CONTACT_PHONE_NUMBER: "+1...",         // optional
+}]
+mappings: { fields: { LEADBAY_ID: "LEADBAY_ID", LEAD_NAME: "LEAD_NAME", CONTACT_FIRST_NAME: "CONTACT_FIRST_NAME", /* … */ } }
+\`\`\`
+
+If you don't have the \`LEADBAY_ID\`, key on \`LEAD_NAME\` (+ optional \`LEAD_WEBSITE\`) alone and the import fuzzy-matches to the existing company. Repeating the same parent across rows adds multiple contacts to that one company. After the contact lands, enrich its email/phone via \`leadbay_enrich_titles\`. Use this when a rep found a person (often just a LinkedIn URL) and wants them on an already-identified Leadbay company without leaving the conversation.
 
 WHEN TO USE: agent has a list of companies (domains, or CSV-shaped rows from the user's CRM) and wants the full AI qualification — qualification answers, web-research signals — without orchestrating import + bulk_qualify_leads + lead_profile chains by hand.
 
@@ -2457,6 +2503,46 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_refine_prompt
 
+// region: leadbay_remove_contact
+export const leadbay_remove_contact: string = `## WHEN TO USE
+
+Trigger phrases: "remove this contact", "delete this contact", "take this person off the company", "that contact is wrong — get rid of it", "undo the contact I just added".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "add a contact to this company" → \`leadbay_import_and_qualify\`; "stop showing me this lead / not interested" → \`leadbay_dislike_lead\`.
+
+Prefer when: user wants a specific PERSON gone from a company — pass that contact's own \`contact_id\` (from a contacts list), not the lead id
+
+Examples that SHOULD invoke this tool:
+- "Remove Jane Doe from that company — I added her by mistake."
+- "Delete this contact, it's the wrong person."
+- "Undo the contact I just added to Acme."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Stop showing me this lead."
+- "Add a contact to this company."
+- "Show me today's leads."
+
+## RENDER (quick)
+
+One-line confirmation: name the contact (or id) and that it was removed
+from the company. No table.
+
+---
+
+Remove a single contact from a company by archiving it. This is the **undo** for the add-a-contact path (\`leadbay_import_and_qualify\` with \`CONTACT_*\` fields) — when a rep adds the wrong person, or finds a stale contact, this takes them off the company.
+
+Pass the contact's **own** \`contact_id\` — the \`id\` field on a contact object returned by \`leadbay_research_lead_by_id\` or the contacts list. **Not** the parent lead id; the archive endpoint is keyed by the contact directly.
+
+Backend: \`POST /contacts/{contact_id}/archive\` → 204. Archive is a **soft-delete** — the contact leaves the company's active contact list (the same action the Leadbay web UI's contact "delete" fires). Idempotent: archiving an already-archived contact is a no-op.
+
+Returns \`{ archived: true, contact_id, action: "archived" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_remove_contact
+
 // region: leadbay_remove_epilogue
 export const leadbay_remove_epilogue: string = `Bulk-clear the epilogue status from a set of leads.
 
@@ -2601,7 +2687,7 @@ Trigger phrases: "tell me about this lead", "deep dive on the lead I just picked
 
 **Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
 
-Do NOT use for: "company name without lead id" → \`leadbay_research_lead_by_name_fuzzy\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`.
+Do NOT use for: "company name without lead id" → \`leadbay_research_lead_by_name_fuzzy\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`; "add a contact to this company" → \`leadbay_import_and_qualify\`.
 
 Prefer when: user picked a row and you have its UUID; pass \`leadId\`
 
@@ -3340,6 +3426,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_qualify_status,
   leadbay_recall_ordered_titles,
   leadbay_refine_prompt,
+  leadbay_remove_contact,
   leadbay_remove_epilogue,
   leadbay_remove_leads_from_campaign,
   leadbay_remove_pushback,

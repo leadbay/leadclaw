@@ -54,6 +54,8 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_new_lens",
   "leadbay_adjust_audience",
   "leadbay_refine_prompt",
+  "leadbay_import_and_qualify",
+  "leadbay_remove_contact",
 ]);
 
 const ALL_TOOLS: Tool[] = [
