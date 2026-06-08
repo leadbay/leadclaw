@@ -2324,6 +2324,27 @@ WHEN NOT TO USE: for NEW leads — that's \`leadbay_pull_leads\` (Discover).
 
 **Anti-confusion guardrail.** Iterating \`pull_leads\` pages looking for \`prospecting_actions_count > 0\` or \`notes_count > 0\` rows is the wrong entry point — the two read different tables. Leads with follow-up history live in \`pull_followups\`.
 
+**This view carries NO signal content.** Monitor leads expose engagement metadata and freshness flags only — never the web-research signals themselves. When the user asks "which of these leads have an M&A / funding / hiring signal", do NOT loop \`leadbay_research_lead_by_id\` per row and do NOT infer the answer from freshness fields. Route to \`leadbay_scan_portfolio_signals\`, which bulk-reads the cached signals across the whole portfolio in one call.
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` and \`web_insights_fetched_at\` are
+FRESHNESS markers, not signal indicators. A fresh timestamp does **not** mean a
+given signal (M&A, funding, a new hire, a CEO change) is present; a stale or
+missing one does **not** mean it's absent. The presence of a signal is
+determined ONLY by reading the actual \`signals[]\` / \`web_fetch.content\`
+entries.
+
+To answer "which of my leads have signal X" across a portfolio, call
+**\`leadbay_scan_portfolio_signals\`** — it bulk-reads the cached signals and
+filters them for you. Do NOT loop \`leadbay_research_lead_by_id\` one lead at a
+time, and do NOT guess from list-level freshness flags.
+
+If a lead has no cached signal content, say so honestly — "not yet researched,
+want me to qualify it?" — and surface it as \`not_researched\`. Never fabricate
+or imply a scan you didn't actually run, and never report a confident
+signal-presence verdict for a lead whose signals you never read.
+
+
 ---
 
 ## RENDERING — follow-ups table, status-badge driven
@@ -2878,9 +2899,30 @@ leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
 act on it.
 
 WHEN NOT TO USE: across many leads at once — that's
-leadbay_pull_leads' job. (This composite supersedes the lower-level
-leadbay_get_lead_profile in agent flow; the granular tool stays available for
-fine-grained access.)
+leadbay_pull_leads' job. **In particular, to answer "which of my leads have
+signal X" across a portfolio, do NOT loop this tool per lead — use
+leadbay_scan_portfolio_signals, which bulk-reads the cached signals in one
+call.** (This composite supersedes the lower-level leadbay_get_lead_profile in
+agent flow; the granular tool stays available for fine-grained access.)
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` and \`web_insights_fetched_at\` are
+FRESHNESS markers, not signal indicators. A fresh timestamp does **not** mean a
+given signal (M&A, funding, a new hire, a CEO change) is present; a stale or
+missing one does **not** mean it's absent. The presence of a signal is
+determined ONLY by reading the actual \`signals[]\` / \`web_fetch.content\`
+entries.
+
+To answer "which of my leads have signal X" across a portfolio, call
+**\`leadbay_scan_portfolio_signals\`** — it bulk-reads the cached signals and
+filters them for you. Do NOT loop \`leadbay_research_lead_by_id\` one lead at a
+time, and do NOT guess from list-level freshness flags.
+
+If a lead has no cached signal content, say so honestly — "not yet researched,
+want me to qualify it?" — and surface it as \`not_researched\`. Never fabricate
+or imply a scan you didn't actually run, and never report a confident
+signal-presence verdict for a lead whose signals you never read.
+
 
 **Concurrency note**: this is a composite that reads many sub-resources per
 call. Call it **sequentially** or in small batches (≤3 parallel) when
@@ -3273,6 +3315,198 @@ Below the table, a one-liner: \`"Ready: K rows · Ambiguous: A rows · Unmatched
 `;
 // endregion: leadbay_resolve_import_rows
 
+// region: leadbay_scan_portfolio_signals
+export const leadbay_scan_portfolio_signals: string = `## WHEN TO USE
+
+Trigger phrases: "which of my leads <did X>", "find leads that <raised / acquired / hired / moved / changed CEO>", "scan my portfolio for <signal>", "identify all the ones that <event> since <date>", "who in Monitor has a <funding / M&A / hiring> signal", "build a campaign from leads with <signal>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "research one named company" → \`leadbay_research_lead_by_name_fuzzy\`; "everything about lead <UUID>" → \`leadbay_research_lead_by_id\`; "qualify my next N leads (they aren't researched yet)" → \`leadbay_bulk_qualify_leads\`; "just list my follow-ups" → \`leadbay_pull_followups\`.
+
+Prefer when: user wants to FILTER a known portfolio by a web-research signal in bulk — pass \`query\`, optionally \`since\`, \`city\`/\`set_filter\`, or \`leadIds\`
+
+Examples that SHOULD invoke this tool:
+- "Which of my leads acquired a company since 2025?"
+- "Scan my Lyon portfolio for funding signals."
+- "Find everyone in Monitor who changed CEO and build a campaign."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Look up Acme Corp for me."
+- "Show me my follow-ups."
+- "Qualify my next 10 leads."
+
+## RENDER (quick)
+
+Cohort grouped by lead: one block per matched lead (name · location +
+its matched signal entries, hot first, source-linked). Open with
+"N match <query> (M scanned)"; ALWAYS close with an honesty footer —
+"scanned N · matched M · K not yet researched". Never present
+not_researched leads as "no signal". Full layout below.
+
+---
+
+Scan a known portfolio for a specific web-research signal in one call. This is
+the bulk, read-only answer to "which of my leads have signal X" — the question
+that otherwise forces a per-lead \`leadbay_research_lead_by_id\` loop (one full
+profile call per lead, slow and quota-heavy).
+
+**Reads CACHED signals only — does not trigger new research.** For each lead in
+scope it reads \`GET /leads/{id}/web_fetch\` (the already-computed web-research
+signals) and filters the entries against \`query\`. It issues NO web_fetch POST,
+so it does not consume AI qualification credits and does not re-crawl. Leads
+that have no cached content (never qualified, or still in progress) are
+reported in \`not_researched\` — they are **NOT** silently treated as "no
+match". Qualify them with \`leadbay_bulk_qualify_leads\`, then re-scan.
+
+**Scope.** Pass \`leadIds\` for an explicit cohort, or omit it to scan the
+Monitor portfolio. Narrow the Monitor scope with \`city\` / \`set_filter\` exactly
+as \`leadbay_pull_followups\` does (store-then-apply server-side filter). The
+scan is bounded by \`max_leads\` (default 200, hard cap 300); when the portfolio
+is larger, \`truncated_at\` is set and coverage is partial — say so.
+
+**Query.** \`query\` is matched case- and accent-insensitively against each
+signal entry's description, source, and section label. Comma- or
+space-separated terms are OR'd ("M&A, acquisition, racheté" matches any). Use
+\`since\` (ISO date) to keep only entries dated on/after it — entries with no
+date are kept (a missing date is not evidence the event is old).
+
+**Result is campaign-ready.** \`matched[]\` carries \`lead_id\`, \`name\`,
+\`location\`, and the matching \`matched_signals[]\` (section + hot + source +
+date + description). Feed the matched \`lead_id\`s straight into
+\`leadbay_add_leads_to_campaign\` / \`leadbay_create_campaign\`.
+
+On a 429 mid-scan, partial \`matched\` is returned with \`quota_exceeded: true\` —
+offer the user wait-for-reset OR a top-up link (both unblock; a top-up clears
+the throttle immediately).
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` and \`web_insights_fetched_at\` are
+FRESHNESS markers, not signal indicators. A fresh timestamp does **not** mean a
+given signal (M&A, funding, a new hire, a CEO change) is present; a stale or
+missing one does **not** mean it's absent. The presence of a signal is
+determined ONLY by reading the actual \`signals[]\` / \`web_fetch.content\`
+entries.
+
+To answer "which of my leads have signal X" across a portfolio, call
+**\`leadbay_scan_portfolio_signals\`** — it bulk-reads the cached signals and
+filters them for you. Do NOT loop \`leadbay_research_lead_by_id\` one lead at a
+time, and do NOT guess from list-level freshness flags.
+
+If a lead has no cached signal content, say so honestly — "not yet researched,
+want me to qualify it?" — and surface it as \`not_researched\`. Never fabricate
+or imply a scan you didn't actually run, and never report a confident
+signal-presence verdict for a lead whose signals you never read.
+
+
+WHEN TO USE: when the user wants to filter a known
+portfolio by a web-research signal across many leads at once — discovering a
+cohort to act on, not inspecting a single lead.
+
+WHEN NOT TO USE: for a single named company
+(leadbay_research_lead_by_name_fuzzy) or one lead by UUID
+(leadbay_research_lead_by_id); to qualify leads that have no signals yet
+(leadbay_bulk_qualify_leads); or to just list follow-ups with no signal filter
+(leadbay_pull_followups).
+
+---
+
+## RENDERING — bulk signal-scan results
+
+The output is a cohort, grouped by lead. Lead with the matches, end with an
+honesty footer — never hide what wasn't scanned.
+
+### Matched leads
+
+Open with a one-line headline: \`**N leads match "<query>"** (M scanned).\`
+
+Then one block per \`matched[]\` lead, ordered with \`hot\` matches first. Emit
+each as a host-parseable per-lead block so the chat host's place-card
+auto-detector can render it (per the repo "feed the address auto-detector"
+convention):
+
+\`\`\`
+### <name> · <location>
+
+<for each matched_signal, one bullet>
+- **<section_emoji> <section_label>** — <description> <🔥 if hot> ([source](<source>), <date>)
+\`\`\`
+
+- **Bold** the description of \`hot: true\` entries; leave cold entries plain.
+- Render \`source\` as a markdown link \`([source](url), date)\`; omit the date
+  when null, omit the link when \`source\` is empty.
+- Cap to the 3 strongest signals per lead (hot first, then by date desc); if a
+  lead has more, end its block with \`_+K more signals_\`.
+- When \`name\` is null (the scan was scoped by \`leadIds\` and the read failed to
+  carry firmographics), fall back to \`### Lead <lead_id>\` — but prefer to enrich
+  the name via the matched lead's own data when available.
+
+### Honesty footer (ALWAYS print)
+
+A single italic line summarising coverage:
+
+\`_Scanned N · matched M · K had no cached signals (not yet researched)._\`
+
+- When \`not_researched\` is non-empty, this is load-bearing: state plainly that
+  those K leads were NOT searched and were NOT counted as "no match". Offer to
+  qualify them and re-scan (see NEXT STEPS).
+- When \`truncated_at\` is set, add: \`_Coverage partial — only the first <truncated_at>
+  leads were scanned; narrow the scope or raise max_leads._\`
+- When \`quota_exceeded\` is true, add the wait-or-top-up offer.
+
+**Hide:** raw \`lead_id\` in prose (use it only for the campaign call), \`_meta\`,
+empty arrays, any freshness field. NEVER present \`not_researched\` leads as
+"no signal found".
+
+
+---
+
+## NEXT STEPS — after the signal scan
+
+**RENDER NEXT STEPS via \`ask_user_input_v0\` when the host exposes it.**
+
+The (Observation, Suggest, Calls) table below is the source of truth for which moves are valid. Pick the 2–4 most relevant rows based on what the response actually contains, then surface them as a \`single_select\` quick-select widget:
+
+\`\`\`
+ask_user_input_v0({
+  questions: [{
+    question: "What next?",
+    type: "single_select",
+    options: [
+      "<Suggest column from row 1>",
+      "<Suggest column from row 2>",
+      "<Suggest column from row 3>"
+    ]
+  }]
+})
+\`\`\`
+
+When the user picks an option, you call the matching tool from the \`Calls\` column. Constraints carried over from the widget contract: 2–4 mutually-exclusive options per question, button-sized labels (≤6 words), max 3 questions per call.
+
+**Fallback prose mode** — when the host doesn't expose \`ask_user_input_v0\` (or it returned an error): surface the same 2–3 picks as a short bulleted list of "Suggest" phrasings. The table itself stays internal; never recite the whole table to the user.
+
+---
+
+
+
+The scan exists to BUILD A COHORT, not just to list. The default next move is
+almost always "turn the matched leads into a campaign."
+
+| Observation                                       | Suggest                                                      | Calls                                                                                  |
+|---------------------------------------------------|--------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| \`matched\` non-empty (top of menu)                 | "Build a campaign from the N matched leads"                  | leadbay_create_campaign / leadbay_add_leads_to_campaign(matched lead_ids)              |
+| \`not_researched\` non-empty                        | "K leads aren't researched yet — qualify them, then re-scan" | leadbay_bulk_qualify_leads(not_researched lead_ids) → re-run leadbay_scan_portfolio_signals |
+| Zero matches but leads were researched            | "Widen the query (synonyms) or relax \`since\`"                | leadbay_scan_portfolio_signals(query: "<broader terms>", since: omit-or-earlier)      |
+| \`truncated_at\` set                                | "Scan only covered N — narrow scope or raise the cap"        | leadbay_scan_portfolio_signals({city / set_filter}) or raise \`max_leads\`              |
+| One standout matched lead                          | "Open that lead's full brief"                                | leadbay_research_lead_by_id(leadId)                                                    |
+| \`quota_exceeded\`                                  | "Wait for reset OR top up to finish the scan"                | leadbay_create_topup_link                                                              |
+
+NEVER report leads in \`not_researched\` as if they had no matching signal — they
+were never read. Distinguish "no signal X found" (researched, no match) from
+"not yet researched" (no data to search) every time.
+`;
+// endregion: leadbay_scan_portfolio_signals
+
 // region: leadbay_seed_candidates
 export const leadbay_seed_candidates: string = `## WHEN TO USE
 
@@ -3585,6 +3819,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_research_lead_by_id,
   leadbay_research_lead_by_name_fuzzy,
   leadbay_resolve_import_rows,
+  leadbay_scan_portfolio_signals,
   leadbay_seed_candidates,
   leadbay_select_leads,
   leadbay_set_active_lens,

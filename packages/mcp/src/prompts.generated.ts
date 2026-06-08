@@ -370,6 +370,29 @@ Unlike \`leadbay_daily_check_in\` which deep-dives on every promising lead in Ph
 
 When the user picks a row, call \`leadbay_research_lead_by_id\` on that single lead (or \`leadbay_research_lead_by_name_fuzzy\` if they only have the name) and offer to \`leadbay_prepare_outreach\` once they say "let's reach out".
 
+# PHASE 3b — BULK SIGNAL SCAN (when the user asks "which of these have signal X")
+
+If the user wants to filter the whole portfolio by a web-research signal — "which of my leads acquired a company since 2025", "find everyone with a funding signal", "who changed CEO" — do NOT loop \`leadbay_research_lead_by_id\` per row, and do NOT guess from freshness fields. Call \`leadbay_scan_portfolio_signals({query, since?})\` once: it bulk-reads the cached signals across the portfolio and returns only the matches, campaign-ready. Report any \`not_researched\` leads honestly ("K aren't researched yet — want me to qualify them and re-scan?"), and offer to build a campaign from the matches.
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` and \`web_insights_fetched_at\` are
+FRESHNESS markers, not signal indicators. A fresh timestamp does **not** mean a
+given signal (M&A, funding, a new hire, a CEO change) is present; a stale or
+missing one does **not** mean it's absent. The presence of a signal is
+determined ONLY by reading the actual \`signals[]\` / \`web_fetch.content\`
+entries.
+
+To answer "which of my leads have signal X" across a portfolio, call
+**\`leadbay_scan_portfolio_signals\`** — it bulk-reads the cached signals and
+filters them for you. Do NOT loop \`leadbay_research_lead_by_id\` one lead at a
+time, and do NOT guess from list-level freshness flags.
+
+If a lead has no cached signal content, say so honestly — "not yet researched,
+want me to qualify it?" — and surface it as \`not_researched\`. Never fabricate
+or imply a scan you didn't actually run, and never report a confident
+signal-presence verdict for a lead whose signals you never read.
+
+
 # CROSS-MODE PIVOT
 
 Below the table, offer the cross-mode pivot in one short line so the user can redirect if you guessed wrong on entry-point routing: "Want to see NEW leads from your wishlist instead?" — that routes back to \`leadbay_daily_check_in\` (Discovery via \`leadbay_pull_leads\`).

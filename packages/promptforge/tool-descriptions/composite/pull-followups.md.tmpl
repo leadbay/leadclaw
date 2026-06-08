@@ -78,6 +78,10 @@ Geo filtering needs `admin_area_id` resolution — backend rejects free-text in 
 
 **Anti-confusion guardrail.** Iterating `pull_leads` pages looking for `prospecting_actions_count > 0` or `notes_count > 0` rows is the wrong entry point — the two read different tables. Leads with follow-up history live in `pull_followups`.
 
+**This view carries NO signal content.** Monitor leads expose engagement metadata and freshness flags only — never the web-research signals themselves. When the user asks "which of these leads have an M&A / funding / hiring signal", do NOT loop `leadbay_research_lead_by_id` per row and do NOT infer the answer from freshness fields. Route to `leadbay_scan_portfolio_signals`, which bulk-reads the cached signals across the whole portfolio in one call.
+
+{{include:gates/signal-honesty}}
+
 ---
 
 {{include:rendering/pull-followups-table}}

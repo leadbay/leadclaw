@@ -92,6 +92,7 @@ import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
 import { researchLeadById } from "./composite/research-lead-by-id.js";
 import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
 import { accountHistory } from "./composite/account-history.js";
+import { scanPortfolioSignals } from "./composite/scan-portfolio-signals.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
 import { accountStatus } from "./composite/account-status.js";
 import { bulkQualifyLeads } from "./composite/bulk-qualify-leads.js";
@@ -156,7 +157,7 @@ export {
   pullLeads, pullFollowups, followupsMap, tourPlan, listCampaigns,
   campaignProgression, campaignCallSheet, researchLeadById, researchLeadByNameFuzzy,
   accountHistory,
-  recallOrderedTitles, accountStatus,
+  recallOrderedTitles, accountStatus, scanPortfolioSignals,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
   // new composite writes
   bulkQualifyLeads, enrichTitles, adjustAudience, refinePrompt,
@@ -258,6 +259,10 @@ export const compositeReadTools: Tool[] = [
   // reprioritize-a-neglected-account workflow (#3630 GAP C) must work in a
   // default deployment without LEADBAY_MCP_ADVANCED=1.
   accountHistory,
+  // Bulk portfolio signal scan — read-only, no quota burn. The single-call
+  // answer to "which of my leads have signal X" that previously forced a
+  // per-lead research_lead_by_id loop (issue #3704).
+  scanPortfolioSignals,
   recallOrderedTitles,
   accountStatus,
   bulkEnrichStatus,

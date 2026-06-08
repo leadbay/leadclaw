@@ -60,9 +60,13 @@ leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
 act on it.
 
 {{include:headers/tool-when-not-to-use}} across many leads at once — that's
-leadbay_pull_leads' job. (This composite supersedes the lower-level
-leadbay_get_lead_profile in agent flow; the granular tool stays available for
-fine-grained access.)
+leadbay_pull_leads' job. **In particular, to answer "which of my leads have
+signal X" across a portfolio, do NOT loop this tool per lead — use
+leadbay_scan_portfolio_signals, which bulk-reads the cached signals in one
+call.** (This composite supersedes the lower-level leadbay_get_lead_profile in
+agent flow; the granular tool stays available for fine-grained access.)
+
+{{include:gates/signal-honesty}}
 
 **Concurrency note**: this is a composite that reads many sub-resources per
 call. Call it **sequentially** or in small batches (≤3 parallel) when

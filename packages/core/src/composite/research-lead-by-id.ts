@@ -5,12 +5,12 @@ import type {
   AiAgentResponse,
   LeadPayload,
   LeadWebFetchPayload,
-  WebFetchSignalsSection,
   PaidContactPayload,
   ContactPayload,
   PaginatedActivities,
 } from "../types.js";
 import { withAgentMemoryMeta } from "../agent-memory/index.js";
+import { reshapeWebFetchContent } from "./_web-fetch-helpers.js";
 
 import { leadbay_research_lead_by_id as RESEARCH_LEAD_BY_ID_DESCRIPTION } from "../tool-descriptions.generated.js";
 
@@ -169,43 +169,8 @@ export function renderResearchLeadMarkdown(
   return out.join("\n");
 }
 
-// Map an emoji-prefixed section label like "🏢 company profile" to
-// {section_emoji: "🏢", section_label: "company profile"}. If no emoji, label
-// stays as-is. Stable section ordering: profile → signals → clues → others.
-const SECTION_PRIORITY = ["profile", "signals", "clues"];
-
-function splitEmojiSection(key: string): { emoji: string | null; label: string } {
-  // Match a leading non-letter/non-digit character (typically emoji) followed by space.
-  const m = key.match(/^([^\p{L}\p{N}\s]+)\s+(.+)$/u);
-  if (m) return { emoji: m[1], label: m[2] };
-  return { emoji: null, label: key };
-}
-
-function reshapeWebFetchContent(
-  content: Record<string, unknown> | null
-): WebFetchSignalsSection[] {
-  if (!content) return [];
-  const sections: WebFetchSignalsSection[] = [];
-  for (const [key, val] of Object.entries(content)) {
-    if (!Array.isArray(val)) continue;
-    const { emoji, label } = splitEmojiSection(key);
-    sections.push({
-      section_label: label,
-      section_emoji: emoji,
-      entries: val as WebFetchSignalsSection["entries"],
-    });
-  }
-  // Sort: known section labels first (in priority order), then alphabetical.
-  sections.sort((a, b) => {
-    const ai = SECTION_PRIORITY.findIndex((p) => a.section_label.toLowerCase().includes(p));
-    const bi = SECTION_PRIORITY.findIndex((p) => b.section_label.toLowerCase().includes(p));
-    const aN = ai < 0 ? SECTION_PRIORITY.length : ai;
-    const bN = bi < 0 ? SECTION_PRIORITY.length : bi;
-    if (aN !== bN) return aN - bN;
-    return a.section_label.localeCompare(b.section_label);
-  });
-  return sections;
-}
+// Section reshaping (splitEmojiSection / reshapeWebFetchContent / SECTION_PRIORITY)
+// moved to ./_web-fetch-helpers.js — shared with leadbay_scan_portfolio_signals.
 
 // Hashable contact summary used by hasReachableContact. A contact is
 // "reachable" iff it has at least one of: non-empty email, non-empty
