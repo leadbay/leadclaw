@@ -1,5 +1,13 @@
 # Changelog — @leadbay/mcp
 
+## 0.19.0 — 2026-06-09
+
+NEXT STEPS, artifact, and scheduled-task offers now fire reliably as host widgets across Claude chat, Claude cowork/Desktop, and ChatGPT.
+
+- **Deterministic `next_steps` on `leadbay_pull_leads`** — the server now returns a ready-made `{question, options[]}` object with the "Build an interactive lead triage board" artifact offer pinned at `options[0]` whenever the batch is non-empty (`null` when empty). The model renders it verbatim into the host widget instead of re-deriving options from prose, which is where the artifact offer kept getting dropped.
+- **Dual host-widget schema documented** — the next-step / choice widget differs by host: `ask_user_input_v0` (Claude chat / ChatGPT) takes plain-string options with `type:"single_select"`; `AskUserQuestion` (Claude cowork / Claude Code) takes `{label, description}` objects with a required short `header` and `multiSelect`, no `type`. Both are now documented (full forms in `host-widgets.ts`, compact form in the shared next-steps snippet) and made widget-mandatory-when-available.
+- **WORKFLOWS.md** — added WF#16 (artifact proposal gate), WF#17 (recurrence routing gate — recurrence language runs the daily discovery check-in, not follow-ups), WF#18 (widget overdelivery guard).
+
 ## 0.18.2 — 2026-06-09
 
 - **Release-pipeline fix**: align `packages/mcp/server.json` with `package.json`. `server.json` had been stuck at `0.17.2` since the 0.17.2 release, so the MCP-Registry publish step (`Verify server.json version matches package.json`) failed on every release from 0.17.3 through 0.18.1 — npm and the GitHub `.mcpb` shipped, but the registry listing silently went stale. Both `server.json` version fields (top-level + `packages[0].version`) now track `package.json`, and a new audit test (`test/audit/server-json-version.test.ts`) fails the build on any future drift instead of letting it surface only at release time.
