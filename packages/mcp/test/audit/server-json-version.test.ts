@@ -43,4 +43,16 @@ describe("audit: server.json aligns with package.json", () => {
     );
     expect(npmPkg?.identifier).toBe(pkg.name);
   });
+
+  it("every @leadbay/mcp@<major.minor> npx pin tracks the current version line", () => {
+    // Pins appear in packages[].runtimeArguments AND in env-var description
+    // prose; scan the raw file so neither can silently lag (the registry would
+    // otherwise install an older line — exactly the 0.17 staleness this fixes).
+    const raw = readFileSync(join(MCP_DIR, "server.json"), "utf8");
+    const [major, minor] = pkg.version.split(".");
+    const line = `${major}.${minor}`;
+    const pins = [...raw.matchAll(/@leadbay\/mcp@(\d+\.\d+)/g)].map((m) => m[1]);
+    expect(pins.length).toBeGreaterThan(0);
+    for (const p of pins) expect(p).toBe(line);
+  });
 });
