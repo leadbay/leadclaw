@@ -18,3 +18,6 @@ coverage/
 !vitest.config.ts
 packages/mcp/dist-native/
 docs/superpowers/
+
+# Python bytecode cache (gen-dashboard.py)
+__pycache__/
