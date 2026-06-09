@@ -19,5 +19,5 @@ coverage/
 packages/mcp/dist-native/
 docs/superpowers/
 
-# Python bytecode cache (gen-dashboard.py)
+# Python bytecode cache for helper scripts.
 __pycache__/
