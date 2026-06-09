@@ -1,9 +1,18 @@
 # Changelog — @leadbay/mcp
 
-## 0.18.3 — 2026-06-09
+## 0.19.1 — 2026-06-09
 
 - **New tool `leadbay_scan_portfolio_signals`**: read-only bulk scan of a Monitor portfolio (or an explicit lead-id list) for a web-research signal. Ask "which of my leads have an M&A / funding / hiring signal since 2025" and get the matched cohort back in one call — a `GET`-only fan-out over cached `web_fetch` signals (no per-lead research loop, no AI-qualification quota burn), with a case- and accent-folded query and optional `since` date. The matched cohort is campaign-ready (feeds straight into `leadbay_add_leads_to_campaign`).
 - **Signal-honesty guardrail**: the scan separates `not_researched[]` (no cached content) from "no match", so the agent can never claim coverage for leads it never read. Reinforced in `leadbay_pull_followups`, `leadbay_research_lead_by_id`, and the `followup_check_in` prompt: freshness fields (`stale_at`, `web_fetch_in_progress`, `fetch_at`) are not signal indicators, and portfolio-wide signal questions route to the bulk tool. Every error path stays honest — a 429 while paging the portfolio, a non-quota read failure, and a failed filter-store all surface partial coverage rather than reporting a confident empty result.
+- **Agent-side gap-fill in the follow-up check-in**: PHASE 3b turns the coverage gap into a refinement loop — the agent names the gap, runs a targeted live web pass on only the `not_researched` / thin-signal leads, and folds findings back in clearly labelled as agent-sourced (not Leadbay-verified), with `leadbay_bulk_qualify_leads` offered as the durable path that writes the signal into the portfolio.
+
+## 0.19.0 — 2026-06-09
+
+NEXT STEPS, artifact, and scheduled-task offers now fire reliably as host widgets across Claude chat, Claude cowork/Desktop, and ChatGPT.
+
+- **Deterministic `next_steps` on `leadbay_pull_leads`** — the server now returns a ready-made `{question, options[]}` object with the "Build an interactive lead triage board" artifact offer pinned at `options[0]` whenever the batch is non-empty (`null` when empty). The model renders it verbatim into the host widget instead of re-deriving options from prose, which is where the artifact offer kept getting dropped.
+- **Dual host-widget schema documented** — the next-step / choice widget differs by host: `ask_user_input_v0` (Claude chat / ChatGPT) takes plain-string options with `type:"single_select"`; `AskUserQuestion` (Claude cowork / Claude Code) takes `{label, description}` objects with a required short `header` and `multiSelect`, no `type`. Both are now documented (full forms in `host-widgets.ts`, compact form in the shared next-steps snippet) and made widget-mandatory-when-available.
+- **WORKFLOWS.md** — added WF#16 (artifact proposal gate), WF#17 (recurrence routing gate — recurrence language runs the daily discovery check-in, not follow-ups), WF#18 (widget overdelivery guard).
 
 ## 0.18.2 — 2026-06-09
 

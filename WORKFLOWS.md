@@ -27,7 +27,10 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 13 | **Lens management — list / switch audiences** — "show me my lenses", "which audiences do I have", "switch to my Joinery lens" | `leadbay_my_lenses` | "Show me my lenses and switch to the Joinery one" |
 | 14 | **Lens creation — make a named audience** — "create a lens called X for sector Y", "set up a new audience" | `leadbay_new_lens` | "Create a lens called Joinery for the fintech sector" |
 | 15 | **Reprioritize a neglected account** — "what's the history on this account", "why did it resurface", "summarize everything we've done with Acme" — current AI signals + full notes + interaction timeline in one call | `leadbay_account_history` *(no dedicated prompt)* | "What's the full history on this account — is it worth another visit?" |
-| 16 | **Bulk portfolio signal scan** — "which of my leads acquired a company since 2025", "scan my portfolio for funding signals", "find everyone who changed CEO" — filters a known portfolio by a web-research signal in ONE call instead of looping `leadbay_research_lead_by_id` per lead | `leadbay_scan_portfolio_signals` | "Which of my leads acquired a company since 2025?" |
+| 16 | **Artifact proposal gate** — after a lead batch, agent must offer to build a named artifact | `leadbay_daily_check_in` | "Show me today's leads." |
+| 17 | **Recurrence routing gate** — recurrence language ("I do this every day") must run the daily DISCOVERY check-in, not misroute to follow-ups | `leadbay_daily_check_in` | "Run my morning check-in — I do this every day." |
+| 18 | **Widget overdelivery guard** — when user pre-states full action chain, no "what next?" widget | `leadbay_daily_check_in` | "Show me today's leads and then research the top one for me." |
+| 19 | **Bulk portfolio signal scan** — "which of my leads acquired a company since 2025", "scan my portfolio for funding signals", "find everyone who changed CEO" — filters a known portfolio by a web-research signal in ONE call instead of looping `leadbay_research_lead_by_id` per lead | `leadbay_scan_portfolio_signals` | "Which of my leads acquired a company since 2025?" |
 
 ---
 
@@ -39,22 +42,20 @@ prompt_name: leadbay_daily_check_in
 required_calls:
   - leadbay_account_status
   - leadbay_pull_leads
-  - leadbay_research_lead_by_id
 forbidden_calls:
   - leadbay_report_outreach
 required_order:
   - leadbay_account_status
   - leadbay_pull_leads
-  - leadbay_research_lead_by_id
 required_byproducts:
   - "STOP — awaiting user decision"
 success_criteria:
   - "called leadbay_account_status exactly once"
   - "called leadbay_pull_leads exactly once"
-  - "called leadbay_research_lead_by_id at least once on the top-scoring lead"
   - "emitted STOP — awaiting user decision byproduct"
   - "did NOT call leadbay_report_outreach"
   - "did NOT call leadbay_enrich_contacts without explicit user confirmation"
+  - "offered to build a named artifact (interactive lead triage board) as the FIRST next-step option"
 ```
 
 ```yaml scenario
@@ -235,6 +236,65 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Set up a prospecting campaign for my team"
+```
+
+```yaml expected
+workflow_name: Artifact proposal gate
+prompt_name: leadbay_daily_check_in
+required_calls:
+  - leadbay_account_status
+  - leadbay_pull_leads
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_account_status and leadbay_pull_leads"
+  - "proposed building a named artifact as the FIRST option in the ask_user_input_v0 widget options array — check widget_calls[0].options[0], not just prose"
+  - "artifact label is concrete (e.g. 'interactive lead triage board'), NOT generic ('artifact')"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Show me today's leads."
+```
+
+```yaml expected
+workflow_name: Scheduled task proposal gate
+prompt_name: leadbay_daily_check_in
+routing_mode: true
+required_calls:
+  - leadbay_account_status
+  - leadbay_pull_leads
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "routed to leadbay_daily_check_in (not leadbay_followup_check_in) — recurrence language must not misroute"
+  - "called leadbay_account_status and leadbay_pull_leads"
+  - "ran the daily check-in (rendered today's leads) rather than treating the request as a one-off lookup"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Run my morning check-in — I do this every day."
+```
+
+```yaml expected
+workflow_name: Widget overdelivery guard
+prompt_name: leadbay_daily_check_in
+required_calls:
+  - leadbay_account_status
+  - leadbay_pull_leads
+  - leadbay_research_lead_by_id
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_account_status, leadbay_pull_leads, AND leadbay_research_lead_by_id (user pre-stated the research action)"
+  - "did NOT emit ask_user_input_v0 after completing the research — user already named the next action so the widget is not needed"
+  - "completed the research on the top lead (surfaced contacts, qualification signals, or company details)"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Show me today's leads and then research the top one for me."
 ```
 
 ---

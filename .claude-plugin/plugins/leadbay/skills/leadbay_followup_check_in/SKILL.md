@@ -1,12 +1,12 @@
 ---
 name: leadbay_followup_check_in
-description: "Run the canonical follow-up check-in: surface KNOWN leads from the Monitor view that need re-engagement today, ranked by AI urgency, with the canonical pull_followups table layout. Trigger when the user asks \"follow up\", \"already known leads\", \"leads I haven't contacted\", \"leads in [city]\", \"before my trip\", \"this week\", \"this month\", \"what's overdue\", \"who should I re-engage\", or anything that implies pre-existing pipeline context."
+description: "Follow-up check-in: surface KNOWN leads from the Monitor view needing re-engagement. Trigger on \"follow up\", \"already known leads\", \"what's overdue\", \"before my trip\", \"who should I re-engage\". Do NOT trigger on \"show me today's leads\", \"my morning check-in\", \"run my check-in\", \"I do this every day\", \"every morning\" — those go to `leadbay_daily_check_in`."
 ---
 
 
 ## MEMORY
 
-Before responding, glance at any `_meta.agent_memory.summary` returned by tool calls earlier in this session and reflect its top signals in your reasoning ("Filtering by your stated preference for healthcare"). After any material new taste signal from the user this conversation (sector, region, deal size, communication style, qualification rule, explicit retraction), call `leadbay_agent_memory_capture` to persist it: `source:"user_stated"` if literal, `source:"inferred"` with confidence <=6 if inferred.
+Before responding, glance at any `_meta.agent_memory.summary` returned by tool calls earlier in this session and reflect its top signals in your reasoning ("Filtering by your stated preference for healthcare"). After any material new signal from the user this conversation (sector, region, deal size, communication style, qualification rule, explicit retraction, or recurrence / scheduling preference such as "I do this every day" or "remind me every morning"), call `leadbay_agent_memory_capture` to persist it: `source:"user_stated"` if literal, `source:"inferred"` with confidence <=6 if inferred.
 
 
 Run the Leadbay follow-up check-in for me. Treat this prompt the same way for any equivalent ask: "leads I should follow up with", "already known leads", "what's overdue", "before my trip to [city]", "leads I haven't contacted", "who should I re-engage today".
@@ -180,22 +180,13 @@ If the user wants to filter the whole portfolio by a web-research signal — "wh
 This keeps the honesty guarantee intact (Leadbay's cached `signals[]` stay the source of truth) while still answering the user's question for the leads Leadbay hasn't researched yet.
 
 **SIGNAL HONESTY — never infer signals from freshness.** `stale_at`,
-`web_fetch_in_progress`, `fetch_at` and `web_insights_fetched_at` are
-FRESHNESS markers, not signal indicators. A fresh timestamp does **not** mean a
-given signal (M&A, funding, a new hire, a CEO change) is present; a stale or
-missing one does **not** mean it's absent. The presence of a signal is
-determined ONLY by reading the actual `signals[]` / `web_fetch.content`
-entries.
-
-To answer "which of my leads have signal X" across a portfolio, call
-**`leadbay_scan_portfolio_signals`** — it bulk-reads the cached signals and
-filters them for you. Do NOT loop `leadbay_research_lead_by_id` one lead at a
-time, and do NOT guess from list-level freshness flags.
-
-If a lead has no cached signal content, say so honestly — "not yet researched,
-want me to qualify it?" — and surface it as `not_researched`. Never fabricate
-or imply a scan you didn't actually run, and never report a confident
-signal-presence verdict for a lead whose signals you never read.
+`web_fetch_in_progress`, `fetch_at` are freshness markers, not signal
+indicators — signal presence is read ONLY from the actual `signals[]` /
+`web_fetch.content` entries. For "which of my leads have signal X" across a
+portfolio, call **`leadbay_scan_portfolio_signals`** (bulk-reads cached
+signals); don't loop `leadbay_research_lead_by_id` per lead or guess from
+freshness. A lead with no cached content is `not_researched`, not "no match";
+never report a signal verdict for a lead you never read.
 
 
 # CROSS-MODE PIVOT
