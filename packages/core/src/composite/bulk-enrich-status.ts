@@ -276,6 +276,14 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
         ctx?.logger?.info?.(
           `bulk.status_checked_via_notification bulk_id=${record.bulk_id} notification_id=${notifId} done=${bp.success_count}/${bp.total_count} in_progress=${inProgress} wall_ms=${Date.now() - startMs}`
         );
+        // Cost surfacing (AFTER), same contract as the legacy fan-out path:
+        // once terminal, re-read the post-spend AI-credit balance (force=true).
+        // We do NOT sum per-contact spend — getContacts can't scope cost to
+        // this bulk. Skipped while still running to avoid an extra /me call
+        // on every interim poll. Null when billing is unavailable.
+        const creditsRemaining: number | null = !inProgress
+          ? await readCreditsRemaining(client, true)
+          : null;
         return {
           bulk_id: record.bulk_id,
           notification_id: notifId,
@@ -299,6 +307,7 @@ export const bulkEnrichStatus: Tool<BulkEnrichStatusParams> = {
           bulk_progress: bp,
           in_progress: inProgress,
           all_done: !inProgress,
+          ...(!inProgress ? { credits_remaining: creditsRemaining } : {}),
           ...(bp.quota_hit_count > 0
             ? {
                 quota_hit_hint:
