@@ -244,10 +244,10 @@ describe("tools/call — error envelopes", () => {
     });
     expect(result.isError).toBe(true);
     const content = result.content as any[];
-    // A 401 no longer claims the token expired (tokens don't time out); it
-    // surfaces as a transient rejection with a retry-first instruction.
-    expect(content[0].text).toMatch(/rejected with 401/i);
-    expect(content[0].text).toMatch(/retry/i);
+    // A 401 (after the client's auto-retry) no longer claims the token expired;
+    // it surfaces as a Leadbay-side problem the user should retry later.
+    expect(content[0].text).toMatch(/rejected.*401|401/i);
+    expect(content[0].text).toMatch(/leadbay's side/i);
     expect(content[0].text).not.toMatch(/token expired/i);
   });
 
@@ -521,7 +521,7 @@ describe("resolveClientFromEnv — region auto-probe", () => {
       });
       expect(
         stderrSpy.mock.calls.some(([m]) =>
-          /rejected with 401/i.test(String(m))
+          /rejected this request \(401\)/i.test(String(m))
         )
       ).toBe(true);
     } finally {

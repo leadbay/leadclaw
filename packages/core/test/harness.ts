@@ -83,9 +83,23 @@ function fakeHttpsRequest(options: any, callback?: (res: any) => void): any {
   req.end = () => {
     captured.body = bodyBuffer || undefined;
 
-    const entry = mockHttpState.scripts.find(
+    let entry = mockHttpState.scripts.find(
       (s) => !s.consumed && s.script.method === method && pathMatches(s.script.path, path)
     );
+
+    // Retry tolerance: the client now auto-retries a 401 once, so the same
+    // (method, path) can be requested twice while only one script was declared.
+    // If no UNCONSUMED script matches, replay the most recent CONSUMED script
+    // for the same (method, path) rather than erroring. A request with no
+    // matching script at all still errors (catches genuinely missing mocks).
+    if (!entry) {
+      const replay = [...mockHttpState.scripts]
+        .reverse()
+        .find(
+          (s) => s.consumed && s.script.method === method && pathMatches(s.script.path, path)
+        );
+      if (replay) entry = replay;
+    }
 
     if (!entry) {
       const registered = mockHttpState.scripts.map(
