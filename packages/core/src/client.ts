@@ -613,10 +613,20 @@ export class LeadbayClient {
     const retryAfter = parseRetryAfter(headers["retry-after"]);
 
     if (status === 401) {
+      // Leadbay OAuth tokens DO NOT expire on a timer — they stay valid until
+      // the user explicitly logs out (the server revokes them). So a 401 here
+      // is almost never "your token expired"; it is usually transient (an auth
+      // service blip, a request racing ahead of session attach, a momentary
+      // upstream hiccup). The old copy asserted "token expired / regenerate it",
+      // which made the agent hallucinate a dead session and tell the user to
+      // re-login when the token was in fact still good. Keep using the token and
+      // retry; only re-auth if 401s persist across retries. (product: auth-401
+      // mislabel.) The code stays AUTH_EXPIRED for backward compat with the
+      // MCP auth-probe handlers that branch on it.
       return this.makeError(
         "AUTH_EXPIRED",
-        "Authentication token expired or invalid",
-        "Your LEADBAY_TOKEN is no longer valid. Regenerate it: npx -y @leadbay/mcp login --email <you> --region <us|fr>, then restart your MCP client.",
+        "Request was rejected with 401 (auth not accepted for this call)",
+        "This is usually transient — Leadbay tokens don't expire on a timer, so your LEADBAY_TOKEN is probably still valid. RETRY the call. Only if 401s persist across several retries should you re-authenticate: npx -y @leadbay/mcp login --email <you> --region <us|fr>, then restart your MCP client. Do NOT claim the session is dead or the user must re-login on a single 401.",
         endpoint,
         null,
         status
