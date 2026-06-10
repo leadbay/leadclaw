@@ -1,0 +1,48 @@
+---
+name: leadbay_remove_contact
+kind: tool-description
+short_description: |
+  Remove (archive) a single contact from a company — the undo for the
+  add-a-contact path. Use when the user wants to delete a person off a
+  lead. Don't use it to remove a whole lead, or to skip/dislike a lead.
+annotations:
+  readOnlyHint: false
+  destructiveHint: true
+  idempotentHint: true
+  openWorldHint: true
+routing:
+  triggers:
+    - "remove this contact"
+    - "delete this contact"
+    - "take this person off the company"
+    - "that contact is wrong — get rid of it"
+    - "undo the contact I just added"
+  anti_triggers:
+    - phrase: "add a contact to this company"
+      route_to: leadbay_add_contact
+    - phrase: "stop showing me this lead / not interested"
+      route_to: leadbay_dislike_lead
+  prefer_when: "user wants a specific PERSON gone from a company — pass that contact's own `contact_id` (from a contacts list), not the lead id"
+  examples:
+    positive:
+      - "Remove Jane Doe from that company — I added her by mistake."
+      - "Delete this contact, it's the wrong person."
+      - "Undo the contact I just added to Acme."
+    negative:
+      - "Stop showing me this lead."
+      - "Add a contact to this company."
+      - "Show me today's leads."
+rendering_hint: |
+  One-line confirmation: name the contact (or id) and that it was removed
+  from the company. No table.
+---
+
+Remove a single contact from a company by archiving it. This is the **undo** for the add-a-contact path (`leadbay_add_contact`) — when a rep adds the wrong person, or finds a stale contact, this takes them off the company.
+
+Pass the contact's **own** `contact_id` — the `id` field on a contact object returned by `leadbay_research_lead_by_id` or the contacts list. **Not** the parent lead id; the archive endpoint is keyed by the contact directly.
+
+Backend: `POST /contacts/{contact_id}/archive` → 204. Archive is a **soft-delete** — the contact leaves the company's active contact list (the same action the Leadbay web UI's contact "delete" fires). Idempotent: archiving an already-archived contact is a no-op.
+
+Returns `{ archived: true, contact_id, action: "archived" }`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).

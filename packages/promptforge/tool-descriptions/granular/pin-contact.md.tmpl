@@ -1,0 +1,48 @@
+---
+name: leadbay_pin_contact
+kind: tool-description
+short_description: |
+  Pin a contact on a company so it surfaces first as a priority/favourite.
+  Use when the user wants to mark a specific person as the one to focus on.
+  Don't use it to add a contact, remove one, or skip a whole lead.
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+routing:
+  triggers:
+    - "pin this contact"
+    - "mark this person as priority"
+    - "make this the main contact"
+    - "favourite this contact"
+  anti_triggers:
+    - phrase: "unpin / remove the pin"
+      route_to: leadbay_unpin_contact
+    - phrase: "add a contact to this company"
+      route_to: leadbay_add_contact
+    - phrase: "remove / delete this contact"
+      route_to: leadbay_remove_contact
+  prefer_when: "user wants ONE person flagged as the priority on a company — pass that contact's own `contact_id`"
+  examples:
+    positive:
+      - "Pin Jane Doe as the main contact on this company."
+      - "Mark this person as the priority contact."
+      - "Favourite that contact so it shows first."
+    negative:
+      - "Add a contact to this company."
+      - "Remove that contact, wrong person."
+      - "Stop showing me this lead."
+rendering_hint: |
+  One-line confirmation that the named contact (or id) is now pinned. No table.
+---
+
+Pin a single contact on a company so it surfaces first as a priority / favourite. Use when the user wants to flag a specific person as the one to focus on.
+
+Pass the contact's **own** `contact_id` (the `id` field on a contact object from `leadbay_research_lead_by_id` or a contacts list) — **not** the parent lead id.
+
+Backend: `POST /contacts/{contact_id}/pin` → 204. Idempotent. The inverse is `leadbay_unpin_contact`.
+
+Returns `{ pinned: true, contact_id, action: "pinned" }`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).

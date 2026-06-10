@@ -26,11 +26,16 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 12 | **Lens extension — on-demand fill for bigger appetite** — "I want more leads on this lens / I need a bigger batch today" | `leadbay_extend_my_lens` | "I want more leads on this lens — bigger batch today" |
 | 13 | **Lens management — list / switch audiences** — "show me my lenses", "which audiences do I have", "switch to my Joinery lens" | `leadbay_my_lenses` | "Show me my lenses and switch to the Joinery one" |
 | 14 | **Lens creation — make a named audience** — "create a lens called X for sector Y", "set up a new audience" | `leadbay_new_lens` | "Create a lens called Joinery for the fintech sector" |
-| 15 | **Reprioritize a neglected account** — "what's the history on this account", "why did it resurface", "summarize everything we've done with Acme" — current AI signals + full notes + interaction timeline in one call | `leadbay_account_history` *(no dedicated prompt)* | "What's the full history on this account — is it worth another visit?" |
-| 16 | **Artifact proposal gate** — after a lead batch, agent must offer to build a named artifact | `leadbay_daily_check_in` | "Show me today's leads." |
-| 17 | **Recurrence routing gate** — recurrence language ("I do this every day") must run the daily DISCOVERY check-in, not misroute to follow-ups | `leadbay_daily_check_in` | "Run my morning check-in — I do this every day." |
-| 18 | **Widget overdelivery guard** — when user pre-states full action chain, no "what next?" widget | `leadbay_daily_check_in` | "Show me today's leads and then research the top one for me." |
-| 19 | **Bulk portfolio signal scan** — "which of my leads acquired a company since 2025", "scan my portfolio for funding signals", "find everyone who changed CEO" — filters a known portfolio by a web-research signal in ONE call instead of looping `leadbay_research_lead_by_id` per lead | `leadbay_scan_portfolio_signals` | "Which of my leads acquired a company since 2025?" |
+| 15 | **Add a contact to a known company** — "this company has no contacts — add Jane Doe, here's her LinkedIn", "add this person I found to that lead" | `leadbay_add_contact` (direct `POST /leads/{id}/contacts`; pass `lead_id` + name + optional linkedin/title/email/phone) | "Acme has no contacts — add Jane Doe, VP Eng, here's her LinkedIn" |
+| 16 | **Remove a contact from a company** — "remove this contact", "delete that person, wrong one", "undo the contact I just added" | `leadbay_remove_contact` (archives by the contact's own `contact_id`) | "Remove Jane Doe from that company — I added her by mistake" |
+| 17 | **Pin a contact as priority** — "pin this contact", "mark this person as the main contact", "favourite this contact" | `leadbay_pin_contact` (by the contact's own `contact_id`) | "Pin Jane Doe as the main contact on this company" |
+| 18 | **Unpin a contact** — "unpin this contact", "remove the pin", "not the priority anymore" | `leadbay_unpin_contact` (by the contact's own `contact_id`) | "Unpin Jane Doe — she's not the priority anymore" |
+| 19 | **Update a contact's details** — "update this contact's title", "fix their email/LinkedIn", "edit this person" | `leadbay_update_contact` (by `contact_id`; first/last name required) | "Update Jane Doe's title to SVP Engineering" |
+| 20 | **Reprioritize a neglected account** — "what's the history on this account", "why did it resurface", "summarize everything we've done with Acme" — current AI signals + full notes + interaction timeline in one call | `leadbay_account_history` *(no dedicated prompt)* | "What's the full history on this account — is it worth another visit?" |
+| 21 | **Artifact proposal gate** — after a lead batch, agent must offer to build a named artifact | `leadbay_daily_check_in` | "Show me today's leads." |
+| 22 | **Recurrence routing gate** — recurrence language ("I do this every day") must run the daily DISCOVERY check-in, not misroute to follow-ups | `leadbay_daily_check_in` | "Run my morning check-in — I do this every day." |
+| 23 | **Widget overdelivery guard** — when user pre-states full action chain, no "what next?" widget | `leadbay_daily_check_in` | "Show me today's leads and then research the top one for me." |
+| 24 | **Bulk portfolio signal scan** — "which of my leads acquired a company since 2025", "scan my portfolio for funding signals", "find everyone who changed CEO" — filters a known portfolio by a web-research signal in ONE call instead of looping `leadbay_research_lead_by_id` per lead | `leadbay_scan_portfolio_signals` | "Which of my leads acquired a company since 2025?" |
 
 ---
 
@@ -239,6 +244,23 @@ prompt: "Set up a prospecting campaign for my team"
 ```
 
 ```yaml expected
+workflow_name: Add a contact to a known company
+prompt_name: ~
+required_calls:
+  - leadbay_add_contact
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_add_contact with the parent company lead_id plus the person's name (and any linkedin/title given)"
+  - "did NOT switch to an external CRM or claim Leadbay can't add contacts"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Acme (lead id 11111111-1111-1111-1111-111111111111) has no suggested contacts — add Jane Doe, VP Eng, https://www.linkedin.com/in/janedoe"
+```
+
+```yaml expected
 workflow_name: Artifact proposal gate
 prompt_name: leadbay_daily_check_in
 required_calls:
@@ -255,6 +277,73 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Show me today's leads."
+```
+
+```yaml expected
+workflow_name: Remove a contact from a company
+prompt_name: ~
+required_calls:
+  - leadbay_remove_contact
+forbidden_calls:
+  - leadbay_dislike_lead
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_remove_contact with the target contact's own contact_id"
+  - "did NOT dislike/skip the whole lead (leadbay_dislike_lead) — only the contact was removed"
+  - "confirmed the contact was removed"
+```
+
+```yaml scenario
+prompt: "Remove the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) from that company — I added her by mistake"
+```
+
+```yaml expected
+workflow_name: Pin a contact as priority
+prompt_name: ~
+required_calls:
+  - leadbay_pin_contact
+forbidden_calls:
+  - leadbay_remove_contact
+success_criteria:
+  - "called leadbay_pin_contact with the target contact's own contact_id"
+  - "did NOT remove the contact (leadbay_remove_contact) — only pinned it"
+```
+
+```yaml scenario
+prompt: "Pin the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) as the main contact on that company"
+```
+
+```yaml expected
+workflow_name: Unpin a contact
+prompt_name: ~
+required_calls:
+  - leadbay_unpin_contact
+forbidden_calls:
+  - leadbay_remove_contact
+success_criteria:
+  - "called leadbay_unpin_contact with the target contact's own contact_id"
+  - "did NOT remove the contact — only cleared the pin"
+```
+
+```yaml scenario
+prompt: "Unpin the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) — she's not the priority anymore"
+```
+
+```yaml expected
+workflow_name: Update a contact's details
+prompt_name: ~
+required_calls:
+  - leadbay_update_contact
+forbidden_calls:
+  - leadbay_remove_contact
+  - leadbay_add_contact
+success_criteria:
+  - "called leadbay_update_contact with the contact's own contact_id plus first_name + last_name and the changed field"
+  - "did NOT add a new contact or remove the existing one — edited in place"
+```
+
+```yaml scenario
+prompt: "Update the contact Jane Doe (contact id 9124b221-281e-413d-8839-84b6f05085a4) — change her title to SVP Engineering"
 ```
 
 ```yaml expected

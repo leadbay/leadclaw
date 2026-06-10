@@ -18,6 +18,8 @@ routing:
       route_to: leadbay_research_lead_by_name_fuzzy
     - phrase: "draft outreach for <Contact>"
       route_to: leadbay_prepare_outreach
+    - phrase: "add a contact to this company"
+      route_to: leadbay_add_contact
   prefer_when: "user picked a row and you have its UUID; pass `leadId`"
   examples:
     positive:
@@ -46,9 +48,9 @@ each daily batch, and on-demand (via leadbay_bulk_qualify_leads) below that.
 Combine both when judging a lead.
 
 The companion **leadbay_research_lead_by_name_fuzzy** wraps this one when the
-user names a company in prose without a UUID: it fuzzy-resolves the name
-against the active lens's wishlist, then delegates here. Same shape, plus
-`_meta.resolved_from` / `_meta.match_candidates`.
+user names a company without a UUID: it fuzzy-resolves against the active
+lens's wishlist, then delegates here. Same shape, plus `_meta.resolved_from` /
+`_meta.match_candidates`.
 
 {{include:headers/tool-when-to-use}} when picking up a single lead from
 leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
@@ -57,8 +59,7 @@ act on it.
 {{include:headers/tool-when-not-to-use}} across many leads at once — that's
 leadbay_pull_leads' job (portfolio-wide signal questions go to
 leadbay_scan_portfolio_signals; see below). This composite supersedes the
-lower-level leadbay_get_lead_profile; the granular tool stays available for
-fine-grained access.
+lower-level leadbay_get_lead_profile.
 
 {{include:gates/signal-honesty}}
 

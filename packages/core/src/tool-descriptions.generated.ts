@@ -244,6 +244,48 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_acknowledge_notification
 
+// region: leadbay_add_contact
+export const leadbay_add_contact: string = `## WHEN TO USE
+
+Trigger phrases: "add a contact to this company", "add this person to <company>", "create a contact from this LinkedIn URL", "this company has no contacts — add one", "I found someone on LinkedIn, add them to <lead>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "import these companies / a CSV of leads and qualify them" → \`leadbay_import_and_qualify\`; "get email/phone for a contact already on the company" → \`leadbay_enrich_titles\`; "remove / delete this contact" → \`leadbay_remove_contact\`.
+
+Prefer when: user wants to attach ONE known person to an already-identified company — pass the company's \`lead_id\` plus the person's name (+ optional linkedin_page/title/email/phone)
+
+Examples that SHOULD invoke this tool:
+- "Acme has no suggested contacts — add Jane Doe, VP Eng, here's her LinkedIn."
+- "Add this person I found on LinkedIn to that company."
+- "Create a contact for John Smith, CFO, on this lead."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Import these 40 domains from my CRM and qualify them."
+- "Get me the email for the contact already on this company."
+- "Remove that contact, it's the wrong person."
+
+## RENDER (quick)
+
+One-line confirmation: the contact's name + title now sits on the company.
+No table. If the contact has no email/phone yet, note it can be enriched.
+
+---
+
+Add a single contact (a person) to a known company — the in-conversation "create a contact" path. Use it when a rep has found someone (often just a LinkedIn URL) and wants them on an already-identified Leadbay company without leaving the chat.
+
+Pass the parent company's \`lead_id\` plus the person's \`first_name\` + \`last_name\`. Everything else is optional: \`job_title\`, \`linkedin_page\`, \`email\`, \`phone_number\`.
+
+Backend: \`POST /leads/{lead_id}/contacts\` → returns the created contact with its new \`id\`. This is the same direct endpoint the Leadbay web UI uses — one call, no import/qualify quota. (Distinct from \`leadbay_import_and_qualify\`, which is for importing *lists of companies*, not attaching a single person.)
+
+The created contact starts unenriched — if it has no email/phone, enrich it via \`leadbay_enrich_titles\`. The undo is \`leadbay_remove_contact\` (pass the returned \`contact.id\`).
+
+Returns \`{ added: true, lead_id, contact: { id, first_name, last_name, job_title, linkedin_page, email, phone_number, … } }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_add_contact
+
 // region: leadbay_add_leads_to_campaign
 export const leadbay_add_leads_to_campaign: string = `## WHEN TO USE
 
@@ -1976,6 +2018,45 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_pick_clarification
 
+// region: leadbay_pin_contact
+export const leadbay_pin_contact: string = `## WHEN TO USE
+
+Trigger phrases: "pin this contact", "mark this person as priority", "make this the main contact", "favourite this contact".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "unpin / remove the pin" → \`leadbay_unpin_contact\`; "add a contact to this company" → \`leadbay_add_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`.
+
+Prefer when: user wants ONE person flagged as the priority on a company — pass that contact's own \`contact_id\`
+
+Examples that SHOULD invoke this tool:
+- "Pin Jane Doe as the main contact on this company."
+- "Mark this person as the priority contact."
+- "Favourite that contact so it shows first."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add a contact to this company."
+- "Remove that contact, wrong person."
+- "Stop showing me this lead."
+
+## RENDER (quick)
+
+One-line confirmation that the named contact (or id) is now pinned. No table.
+
+---
+
+Pin a single contact on a company so it surfaces first as a priority / favourite. Use when the user wants to flag a specific person as the one to focus on.
+
+Pass the contact's **own** \`contact_id\` (the \`id\` field on a contact object from \`leadbay_research_lead_by_id\` or a contacts list) — **not** the parent lead id.
+
+Backend: \`POST /contacts/{contact_id}/pin\` → 204. Idempotent. The inverse is \`leadbay_unpin_contact\`.
+
+Returns \`{ pinned: true, contact_id, action: "pinned" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_pin_contact
+
 // region: leadbay_prepare_outreach
 export const leadbay_prepare_outreach: string = `## WHEN TO USE
 
@@ -2598,6 +2679,46 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_refine_prompt
 
+// region: leadbay_remove_contact
+export const leadbay_remove_contact: string = `## WHEN TO USE
+
+Trigger phrases: "remove this contact", "delete this contact", "take this person off the company", "that contact is wrong — get rid of it", "undo the contact I just added".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "add a contact to this company" → \`leadbay_add_contact\`; "stop showing me this lead / not interested" → \`leadbay_dislike_lead\`.
+
+Prefer when: user wants a specific PERSON gone from a company — pass that contact's own \`contact_id\` (from a contacts list), not the lead id
+
+Examples that SHOULD invoke this tool:
+- "Remove Jane Doe from that company — I added her by mistake."
+- "Delete this contact, it's the wrong person."
+- "Undo the contact I just added to Acme."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Stop showing me this lead."
+- "Add a contact to this company."
+- "Show me today's leads."
+
+## RENDER (quick)
+
+One-line confirmation: name the contact (or id) and that it was removed
+from the company. No table.
+
+---
+
+Remove a single contact from a company by archiving it. This is the **undo** for the add-a-contact path (\`leadbay_add_contact\`) — when a rep adds the wrong person, or finds a stale contact, this takes them off the company.
+
+Pass the contact's **own** \`contact_id\` — the \`id\` field on a contact object returned by \`leadbay_research_lead_by_id\` or the contacts list. **Not** the parent lead id; the archive endpoint is keyed by the contact directly.
+
+Backend: \`POST /contacts/{contact_id}/archive\` → 204. Archive is a **soft-delete** — the contact leaves the company's active contact list (the same action the Leadbay web UI's contact "delete" fires). Idempotent: archiving an already-archived contact is a no-op.
+
+Returns \`{ archived: true, contact_id, action: "archived" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_remove_contact
+
 // region: leadbay_remove_epilogue
 export const leadbay_remove_epilogue: string = `Bulk-clear the epilogue status from a set of leads.
 
@@ -2742,7 +2863,7 @@ Trigger phrases: "tell me about this lead", "deep dive on the lead I just picked
 
 **Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
 
-Do NOT use for: "company name without lead id" → \`leadbay_research_lead_by_name_fuzzy\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`.
+Do NOT use for: "company name without lead id" → \`leadbay_research_lead_by_name_fuzzy\`; "draft outreach for <Contact>" → \`leadbay_prepare_outreach\`; "add a contact to this company" → \`leadbay_add_contact\`.
 
 Prefer when: user picked a row and you have its UUID; pass \`leadId\`
 
@@ -2770,9 +2891,9 @@ each daily batch, and on-demand (via leadbay_bulk_qualify_leads) below that.
 Combine both when judging a lead.
 
 The companion **leadbay_research_lead_by_name_fuzzy** wraps this one when the
-user names a company in prose without a UUID: it fuzzy-resolves the name
-against the active lens's wishlist, then delegates here. Same shape, plus
-\`_meta.resolved_from\` / \`_meta.match_candidates\`.
+user names a company without a UUID: it fuzzy-resolves against the active
+lens's wishlist, then delegates here. Same shape, plus \`_meta.resolved_from\` /
+\`_meta.match_candidates\`.
 
 WHEN TO USE: when picking up a single lead from
 leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
@@ -2781,8 +2902,7 @@ act on it.
 WHEN NOT TO USE: across many leads at once — that's
 leadbay_pull_leads' job (portfolio-wide signal questions go to
 leadbay_scan_portfolio_signals; see below). This composite supersedes the
-lower-level leadbay_get_lead_profile; the granular tool stays available for
-fine-grained access.
+lower-level leadbay_get_lead_profile.
 
 **SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
 \`web_fetch_in_progress\`, \`fetch_at\` are freshness markers, not signal
@@ -3559,6 +3679,87 @@ WHEN NOT TO USE: if the user only wants follow-ups (use \`leadbay_followups_map\
 `;
 // endregion: leadbay_tour_plan
 
+// region: leadbay_unpin_contact
+export const leadbay_unpin_contact: string = `## WHEN TO USE
+
+Trigger phrases: "unpin this contact", "remove the pin from this contact", "this person isn't the priority anymore", "unfavourite this contact".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "pin / mark as priority" → \`leadbay_pin_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`.
+
+Prefer when: user wants to clear the pinned flag on a contact (but keep the contact) — pass that contact's own \`contact_id\`
+
+Examples that SHOULD invoke this tool:
+- "Unpin Jane Doe — she's not the priority anymore."
+- "Remove the pin from that contact."
+- "Unfavourite this person."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Pin this contact as priority."
+- "Remove that contact entirely."
+- "Add a new contact to this company."
+
+## RENDER (quick)
+
+One-line confirmation that the named contact (or id) is no longer pinned.
+No table.
+
+---
+
+Unpin a single contact on a company — clears its priority / favourite flag. The contact stays on the company; only the pin is removed (to remove the contact entirely, use \`leadbay_remove_contact\`).
+
+Pass the contact's **own** \`contact_id\` — not the parent lead id.
+
+Backend: \`POST /contacts/{contact_id}/unpin\` → 204. Idempotent. The inverse is \`leadbay_pin_contact\`.
+
+Returns \`{ pinned: false, contact_id, action: "unpinned" }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_unpin_contact
+
+// region: leadbay_update_contact
+export const leadbay_update_contact: string = `## WHEN TO USE
+
+Trigger phrases: "update this contact", "fix this contact's title", "change their email / phone / LinkedIn", "edit this person's details", "correct the contact's name".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "add a new contact to this company" → \`leadbay_add_contact\`; "remove / delete this contact" → \`leadbay_remove_contact\`; "get email/phone for a contact (enrichment)" → \`leadbay_enrich_titles\`.
+
+Prefer when: user wants to change details on an EXISTING contact — pass that contact's own \`contact_id\` plus first_name + last_name (required) and the fields to change
+
+Examples that SHOULD invoke this tool:
+- "Update Jane's title to SVP Engineering."
+- "Fix this contact's LinkedIn URL."
+- "Change John's email to john@acme.com."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Add a new contact to this company."
+- "Remove that contact, wrong person."
+- "Get me the email for this contact."
+
+## RENDER (quick)
+
+One-line confirmation naming the contact and what changed. No table.
+
+---
+
+Edit an existing contact in place — change their \`job_title\`, \`linkedin_page\`, \`email\`, \`phone_number\`, or name.
+
+Pass the contact's **own** \`contact_id\` (the \`id\` field from \`leadbay_research_lead_by_id\` or a contacts list) — **not** the parent lead id.
+
+**\`first_name\` + \`last_name\` are required even on an edit.** The backend validates the full contact identity and rejects a partial body (\`invalid contact\`). So pass the contact's *current* first/last name even when you're only changing the title — read the current values via \`leadbay_research_lead_by_id\` first if you don't have them.
+
+Backend: \`POST /contacts/{contact_id}/update\` (snake_case body) → 200 with the updated contact. Edits in place (same id). Camel-case bodies are rejected.
+
+Returns \`{ updated: true, contact_id, contact: { id, first_name, last_name, job_title, linkedin_page, email, phone_number } }\`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
+`;
+// endregion: leadbay_update_contact
+
 // region: leadbay_update_lens
 export const leadbay_update_lens: string = `Update lens metadata (name, description, mode flags). Does NOT change the audience filter — use leadbay_update_lens_filter for that.
 
@@ -3586,6 +3787,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_account_history,
   leadbay_account_status,
   leadbay_acknowledge_notification,
+  leadbay_add_contact,
   leadbay_add_leads_to_campaign,
   leadbay_add_note,
   leadbay_adjust_audience,
@@ -3642,6 +3844,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_new_lens,
   leadbay_open_billing_portal,
   leadbay_pick_clarification,
+  leadbay_pin_contact,
   leadbay_prepare_outreach,
   leadbay_preview_bulk_enrichment,
   leadbay_promote_lens,
@@ -3651,6 +3854,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_qualify_status,
   leadbay_recall_ordered_titles,
   leadbay_refine_prompt,
+  leadbay_remove_contact,
   leadbay_remove_epilogue,
   leadbay_remove_leads_from_campaign,
   leadbay_remove_pushback,
@@ -3667,6 +3871,8 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_set_pushback,
   leadbay_set_user_prompt,
   leadbay_tour_plan,
+  leadbay_unpin_contact,
+  leadbay_update_contact,
   leadbay_update_lens,
   leadbay_update_lens_filter,
 } as const;

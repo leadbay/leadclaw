@@ -72,6 +72,13 @@ import { launchBulkEnrichment } from "./tools/launch-bulk-enrichment.js";
 import { createCustomField } from "./tools/create-custom-field.js";
 import { likeLead } from "./tools/like-lead.js";
 import { dislikeLead } from "./tools/dislike-lead.js";
+// Contact management — single-call relay tools (granular-shaped); registered
+// in compositeWriteTools below so they stay on the default surface.
+import { addContact } from "./tools/add-contact.js";
+import { removeContact } from "./tools/remove-contact.js";
+import { pinContact } from "./tools/pin-contact.js";
+import { unpinContact } from "./tools/unpin-contact.js";
+import { updateContact } from "./tools/update-contact.js";
 
 // ─── Composite workflow tools — agent-facing surface ─────────────────────
 
@@ -315,6 +322,18 @@ export const compositeWriteTools: Tool[] = [
   reportOutreach,
   importLeads,
   importAndQualify,
+  // Contact management (product#3703) — each is a single-call relay, so
+  // granular-shaped and living in tools/; registered HERE (not granular-gated)
+  // so reps can manage contacts in-conversation without LEADBAY_MCP_ADVANCED.
+  // Same pattern as likeLead/dislikeLead below. Endpoints (all direct, the
+  // ones the web UI uses — NOT the import pipeline, which 401s on some
+  // accounts): add → POST /leads/{id}/contacts; remove → archive;
+  // pin/unpin → /pin|/unpin; update → /update (snake_case, first/last required).
+  addContact,
+  removeContact,
+  pinContact,
+  unpinContact,
+  updateContact,
   // createCustomField is granular-shaped but file-import prompts depend on it
   // to preserve source-system links without requiring advanced-tool exposure.
   createCustomField,
