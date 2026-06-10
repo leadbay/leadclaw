@@ -626,7 +626,7 @@ export class LeadbayClient {
       return this.makeError(
         "AUTH_EXPIRED",
         "Request was rejected with 401 (auth not accepted for this call)",
-        "This is usually transient — Leadbay tokens don't expire on a timer, so your LEADBAY_TOKEN is probably still valid. RETRY the call. Only if 401s persist across several retries should you re-authenticate: npx -y @leadbay/mcp login --email <you> --region <us|fr>, then restart your MCP client. Do NOT claim the session is dead or the user must re-login on a single 401.",
+        "Leadbay tokens don't expire on a timer, so your LEADBAY_TOKEN is probably still valid — a single 401 is usually transient. RETRY the call first. If 401s PERSIST across several retries, re-authenticating most likely WON'T help (the token doesn't time out): this is most likely a problem on Leadbay's side (a backend/auth hiccup), not your login — so report it as a Leadbay-side issue and suggest trying again later or contacting support. The ONE exception where re-login helps is if the user explicitly logged out (token revoked); only then run: npx -y @leadbay/mcp login --email <you> --region <us|fr>, then restart your MCP client. Do NOT tell the user their login is dead or push re-authentication as the default fix.",
         endpoint,
         null,
         status
