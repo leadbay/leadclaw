@@ -1,0 +1,104 @@
+---
+name: leadbay_scan_portfolio_signals
+kind: tool-description
+short_description: |
+  Scan a KNOWN portfolio (Monitor view, or an explicit lead-id list) for a
+  specific web-research signal in bulk — e.g. "which of my leads acquired a
+  company since 2025". Reads CACHED signals across many leads in one call and
+  returns only the matches, campaign-ready. Use instead of looping
+  leadbay_research_lead_by_id per lead. Don't use it to research one named
+  company (that's leadbay_research_lead_by_name_fuzzy) or to qualify
+  unresearched leads (that's leadbay_bulk_qualify_leads).
+routing:
+  triggers:
+    - "which of my leads <did X>"
+    - "find leads that <raised / acquired / hired / moved / changed CEO>"
+    - "scan my portfolio for <signal>"
+    - "identify all the ones that <event> since <date>"
+    - "who in Monitor has a <funding / M&A / hiring> signal"
+    - "build a campaign from leads with <signal>"
+  anti_triggers:
+    - phrase: "research one named company"
+      route_to: leadbay_research_lead_by_name_fuzzy
+    - phrase: "everything about lead <UUID>"
+      route_to: leadbay_research_lead_by_id
+    - phrase: "qualify my next N leads (they aren't researched yet)"
+      route_to: leadbay_bulk_qualify_leads
+    - phrase: "just list my follow-ups"
+      route_to: leadbay_pull_followups
+  prefer_when: "user wants to FILTER a known portfolio by a web-research signal in bulk — pass `query`, optionally `since`, `city`/`set_filter`, or `leadIds`"
+  examples:
+    positive:
+      - "Which of my leads acquired a company since 2025?"
+      - "Scan my Lyon portfolio for funding signals."
+      - "Find everyone in Monitor who changed CEO and build a campaign."
+    negative:
+      - "Look up Acme Corp for me."
+      - "Show me my follow-ups."
+      - "Qualify my next 10 leads."
+rendering_hint: |
+  Cohort grouped by lead: one block per matched lead (name · location +
+  its matched signal entries, hot first, source-linked). Open with
+  "N match <query> (M scanned)"; ALWAYS close with an honesty footer —
+  "scanned N · matched M · K not yet researched". Never present
+  not_researched leads as "no signal". Full layout below.
+next_steps: scan-portfolio-signals
+annotations:
+  readOnlyHint: true
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+---
+Scan a known portfolio for a specific web-research signal in one call. This is
+the bulk, read-only answer to "which of my leads have signal X" — the question
+that otherwise forces a per-lead `leadbay_research_lead_by_id` loop (one full
+profile call per lead, slow and quota-heavy).
+
+**Reads CACHED signals only — does not trigger new research.** For each lead in
+scope it reads `GET /leads/{id}/web_fetch` (the already-computed web-research
+signals) and filters the entries against `query`. It issues NO web_fetch POST,
+so it does not consume AI qualification credits and does not re-crawl. Leads
+that have no cached content (never qualified, or still in progress) are
+reported in `not_researched` — they are **NOT** silently treated as "no
+match". Qualify them with `leadbay_bulk_qualify_leads`, then re-scan.
+
+**Scope.** Pass `leadIds` for an explicit cohort, or omit it to scan the
+Monitor portfolio. Narrow the Monitor scope with `city` / `set_filter` exactly
+as `leadbay_pull_followups` does (store-then-apply server-side filter). The
+scan is bounded by `max_leads` (default 200, hard cap 300); when the portfolio
+is larger, `truncated_at` is set and coverage is partial — say so.
+
+**Query.** `query` is matched case- and accent-insensitively against each
+signal entry's description, source, and section label. Comma- or
+space-separated terms are OR'd ("M&A, acquisition, racheté" matches any). Use
+`since` (ISO date) to keep only entries dated on/after it — entries with no
+date are kept (a missing date is not evidence the event is old).
+
+**Result is campaign-ready.** `matched[]` carries `lead_id`, `name`,
+`location`, and the matching `matched_signals[]` (section + hot + source +
+date + description). Feed the matched `lead_id`s straight into
+`leadbay_add_leads_to_campaign` / `leadbay_create_campaign`.
+
+On a 429 mid-scan, partial `matched` is returned with `quota_exceeded: true` —
+offer the user wait-for-reset OR a top-up link (both unblock; a top-up clears
+the throttle immediately).
+
+{{include:gates/signal-honesty}}
+
+{{include:headers/tool-when-to-use}} when the user wants to filter a known
+portfolio by a web-research signal across many leads at once — discovering a
+cohort to act on, not inspecting a single lead.
+
+{{include:headers/tool-when-not-to-use}} for a single named company
+(leadbay_research_lead_by_name_fuzzy) or one lead by UUID
+(leadbay_research_lead_by_id); to qualify leads that have no signals yet
+(leadbay_bulk_qualify_leads); or to just list follow-ups with no signal filter
+(leadbay_pull_followups).
+
+---
+
+{{include:rendering/scan-portfolio-signals}}
+
+---
+
+{{include:next-steps/scan-portfolio-signals}}

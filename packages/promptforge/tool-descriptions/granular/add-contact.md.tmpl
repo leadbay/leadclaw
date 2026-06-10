@@ -1,0 +1,54 @@
+---
+name: leadbay_add_contact
+kind: tool-description
+short_description: |
+  Add a single contact (a person) to a known company in one call — name plus
+  optional title, LinkedIn URL, email, phone. Use when a rep found someone
+  (often just a LinkedIn URL) and wants them on an already-identified lead.
+  Don't use it to import a list of companies, or to enrich an existing
+  contact's email/phone.
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: false
+  openWorldHint: true
+routing:
+  triggers:
+    - "add a contact to this company"
+    - "add this person to <company>"
+    - "create a contact from this LinkedIn URL"
+    - "this company has no contacts — add one"
+    - "I found someone on LinkedIn, add them to <lead>"
+  anti_triggers:
+    - phrase: "import these companies / a CSV of leads and qualify them"
+      route_to: leadbay_import_and_qualify
+    - phrase: "get email/phone for a contact already on the company"
+      route_to: leadbay_enrich_titles
+    - phrase: "remove / delete this contact"
+      route_to: leadbay_remove_contact
+  prefer_when: "user wants to attach ONE known person to an already-identified company — pass the company's `lead_id` plus the person's name (+ optional linkedin_page/title/email/phone)"
+  examples:
+    positive:
+      - "Acme has no suggested contacts — add Jane Doe, VP Eng, here's her LinkedIn."
+      - "Add this person I found on LinkedIn to that company."
+      - "Create a contact for John Smith, CFO, on this lead."
+    negative:
+      - "Import these 40 domains from my CRM and qualify them."
+      - "Get me the email for the contact already on this company."
+      - "Remove that contact, it's the wrong person."
+rendering_hint: |
+  One-line confirmation: the contact's name + title now sits on the company.
+  No table. If the contact has no email/phone yet, note it can be enriched.
+---
+
+Add a single contact (a person) to a known company — the in-conversation "create a contact" path. Use it when a rep has found someone (often just a LinkedIn URL) and wants them on an already-identified Leadbay company without leaving the chat.
+
+Pass the parent company's `lead_id` plus the person's `first_name` + `last_name`. Everything else is optional: `job_title`, `linkedin_page`, `email`, `phone_number`.
+
+Backend: `POST /leads/{lead_id}/contacts` → returns the created contact with its new `id`. This is the same direct endpoint the Leadbay web UI uses — one call, no import/qualify quota. (Distinct from `leadbay_import_and_qualify`, which is for importing *lists of companies*, not attaching a single person.)
+
+The created contact starts unenriched — if it has no email/phone, enrich it via `leadbay_enrich_titles`. The undo is `leadbay_remove_contact` (pass the returned `contact.id`).
+
+Returns `{ added: true, lead_id, contact: { id, first_name, last_name, job_title, linkedin_page, email, phone_number, … } }`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).

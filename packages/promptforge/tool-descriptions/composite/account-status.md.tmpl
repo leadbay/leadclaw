@@ -24,10 +24,13 @@ routing:
       - "Show me today's leads."
       - "What should I follow up on?"
 rendering_hint: |
-  Compact markdown: org name + admin badge on line 1; active lens on
-  line 2; per-window quota usage as `(used / cap)` chips for
-  llm_completion · ai_rescore · web_fetch. Surface regeneration flag
-  prominently if mid-regen.
+  If `quota_error` is set the call FAILED — quota unreadable; on 401/403 tell
+  the user to reconnect. NEVER report zero usage or "no limits". Else render
+  `quota.org.resources` (usage lives there, NOT at quota.resources) as a
+  table, never prose: rows = resources (llm_completion · ai_rescore ·
+  web_fetch + others), cols = Daily/Weekly/Monthly used `count` (= amount
+  USED; no cap field, `plan` may be null — never invent a denominator).
+  Empty = a 0 table, not "unlimited". Above: org + admin, lens.
 annotations:
   readOnlyHint: true
   destructiveHint: false
@@ -41,6 +44,10 @@ Show the user's account state — admin rights, language, last-active lens, curr
 **Offer the top-up link via `leadbay_create_topup_link`.** When the user accepts the top-up offer, call `leadbay_create_topup_link` and surface the returned Stripe checkout URL as a clickable link. The user completes payment in their browser; nothing is charged just by generating the URL. For ongoing subscription changes (plan upgrade / payment method), use `leadbay_open_billing_portal` instead.
 
 **After a user tops up, do NOT keep refusing — RETRY.** If the user signals they topped up / bought credits / added credits, the previous QUOTA_EXCEEDED is invalidated the moment the Stripe webhook lands. RE-CALL `leadbay_account_status` to pick up the new state AND retry the originally failed call. The retry itself does not require a successful account_status check first — a topped-up user has cleared the throttle whether or not your cached snapshot reflects it yet. If the retry hits the wall again, only then re-offer top-up / wait. **A stale quota snapshot is never a reason to gate-keep a topped-up user.**
+
+**`notifications` block.** The response now includes a top-level `notifications` array listing background work the user (or agent) initiated that has since completed (`bulk_enrich`, `bulk_qualify`, `import`). These are signals to revise prior agent outputs the just-finished work might have made stale — they're NOT a pending-task list for the user. After revising (or confirming nothing is affected), call `leadbay_acknowledge_notification(notification_id)`. Full handling protocol below.
+
+{{include:gates/notifications-inbox}}
 
 {{include:headers/tool-when-to-use}} at the start of a session to know what the agent can/can't do, after a 429 to explain to the user which resource window was exhausted and when it resets (and to offer the top-up alternative), and after the user signals a top-up so the agent can resume the interrupted workflow.
 

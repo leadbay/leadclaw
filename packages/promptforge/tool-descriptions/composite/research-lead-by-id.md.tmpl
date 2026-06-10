@@ -18,6 +18,8 @@ routing:
       route_to: leadbay_research_lead_by_name_fuzzy
     - phrase: "draft outreach for <Contact>"
       route_to: leadbay_prepare_outreach
+    - phrase: "add a contact to this company"
+      route_to: leadbay_add_contact
   prefer_when: "user picked a row and you have its UUID; pass `leadId`"
   examples:
     positive:
@@ -33,42 +35,38 @@ annotations:
   openWorldHint: true
 ---
 Tell me everything decision-relevant about a single lead, identified by its
-Leadbay UUID. Bundles the lens-scoped lead profile, the AI qualification
-answers (the agent's knowledge-base food), the structured web-research signals
-(with hot flags + sources), the two-tier contact set (`enriched` + `org`), the
-unified `recent_activities` timeline, the engagement counts, and a
-`_meta.has_reachable_contact` hint that drives NEXT STEPS. Order is
-deliberate: qualification first, then signals, then firmographics, then
-contacts, then recent activity.
+Leadbay UUID. Bundles the lens-scoped profile, AI qualification answers,
+structured web-research signals (hot flags + sources), the two-tier contact set
+(`enriched` + `org`), the unified `recent_activities` timeline, engagement
+counts, and a `_meta.has_reachable_contact` hint that drives NEXT STEPS. Order
+is deliberate: qualification, signals, firmographics, contacts, recent activity.
 
-Scoring has two layers: the basic `score` (firmographic, always present,
-already decent) and the AI qualification layer (`ai_agent_lead_score` +
-per-question answers + web_fetch signals). The AI layer is pre-populated for
-roughly the top 10 of each daily batch, and on-demand (via
-leadbay_bulk_qualify_leads) for anything below that. Combine both layers when
-judging a lead.
+Scoring has two layers: the basic `score` (firmographic, always present) and
+the AI qualification layer (`ai_agent_lead_score` + per-question answers +
+web_fetch signals). The AI layer is pre-populated for roughly the top 10 of
+each daily batch, and on-demand (via leadbay_bulk_qualify_leads) below that.
+Combine both when judging a lead.
 
-The companion tool **leadbay_research_lead_by_name_fuzzy** wraps this one for
-the case where the user names a company in prose without a UUID — it
-fuzzy-resolves the name against the active lens's wishlist, then delegates
-here. Both return the same shape; the fuzzy wrapper just adds
-`_meta.resolved_from` and `_meta.match_candidates` so you can offer
-disambiguation.
+The companion **leadbay_research_lead_by_name_fuzzy** wraps this one when the
+user names a company without a UUID: it fuzzy-resolves against the active
+lens's wishlist, then delegates here. Same shape, plus `_meta.resolved_from` /
+`_meta.match_candidates`.
 
 {{include:headers/tool-when-to-use}} when picking up a single lead from
 leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
 act on it.
 
 {{include:headers/tool-when-not-to-use}} across many leads at once — that's
-leadbay_pull_leads' job. (This composite supersedes the lower-level
-leadbay_get_lead_profile in agent flow; the granular tool stays available for
-fine-grained access.)
+leadbay_pull_leads' job (portfolio-wide signal questions go to
+leadbay_scan_portfolio_signals; see below). This composite supersedes the
+lower-level leadbay_get_lead_profile.
 
-**Concurrency note**: this is a composite that reads many sub-resources per
-call. Call it **sequentially** or in small batches (≤3 parallel) when
-researching multiple leads. Firing 10+ in parallel can saturate the transport
-and produce misleading `"Tool permission stream closed"` errors that look like
-permission failures but are really backpressure. On a transient
+{{include:gates/signal-honesty}}
+
+**Concurrency note**: this composite reads many sub-resources per call. Call
+it **sequentially or in small batches (≤3 parallel)**. Firing 10+ in parallel
+saturates the transport and produces misleading `"Tool permission stream
+closed"` errors — that's backpressure, not a permission failure. On a transient
 stream/timeout failure, retry the same lead once before moving on.
 
 ---

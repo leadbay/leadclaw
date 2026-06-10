@@ -1,5 +1,42 @@
 # Changelog — @leadbay/mcp
 
+## 0.19.1 — 2026-06-09
+
+- **New tool `leadbay_scan_portfolio_signals`**: read-only bulk scan of a Monitor portfolio (or an explicit lead-id list) for a web-research signal. Ask "which of my leads have an M&A / funding / hiring signal since 2025" and get the matched cohort back in one call — a `GET`-only fan-out over cached `web_fetch` signals (no per-lead research loop, no AI-qualification quota burn), with a case- and accent-folded query and optional `since` date. The matched cohort is campaign-ready (feeds straight into `leadbay_add_leads_to_campaign`).
+- **Signal-honesty guardrail**: the scan separates `not_researched[]` (no cached content) from "no match", so the agent can never claim coverage for leads it never read. Reinforced in `leadbay_pull_followups`, `leadbay_research_lead_by_id`, and the `followup_check_in` prompt: freshness fields (`stale_at`, `web_fetch_in_progress`, `fetch_at`) are not signal indicators, and portfolio-wide signal questions route to the bulk tool. Every error path stays honest — a 429 while paging the portfolio, a non-quota read failure, and a failed filter-store all surface partial coverage rather than reporting a confident empty result.
+- **Agent-side gap-fill in the follow-up check-in**: PHASE 3b turns the coverage gap into a refinement loop — the agent names the gap, runs a targeted live web pass on only the `not_researched` / thin-signal leads, and folds findings back in clearly labelled as agent-sourced (not Leadbay-verified), with `leadbay_bulk_qualify_leads` offered as the durable path that writes the signal into the portfolio.
+
+## 0.19.0 — 2026-06-09
+
+NEXT STEPS, artifact, and scheduled-task offers now fire reliably as host widgets across Claude chat, Claude cowork/Desktop, and ChatGPT.
+
+- **Deterministic `next_steps` on `leadbay_pull_leads`** — the server now returns a ready-made `{question, options[]}` object with the "Build an interactive lead triage board" artifact offer pinned at `options[0]` whenever the batch is non-empty (`null` when empty). The model renders it verbatim into the host widget instead of re-deriving options from prose, which is where the artifact offer kept getting dropped.
+- **Dual host-widget schema documented** — the next-step / choice widget differs by host: `ask_user_input_v0` (Claude chat / ChatGPT) takes plain-string options with `type:"single_select"`; `AskUserQuestion` (Claude cowork / Claude Code) takes `{label, description}` objects with a required short `header` and `multiSelect`, no `type`. Both are now documented (full forms in `host-widgets.ts`, compact form in the shared next-steps snippet) and made widget-mandatory-when-available.
+- **WORKFLOWS.md** — added WF#16 (artifact proposal gate), WF#17 (recurrence routing gate — recurrence language runs the daily discovery check-in, not follow-ups), WF#18 (widget overdelivery guard).
+
+## 0.18.2 — 2026-06-09
+
+- **Release-pipeline fix**: align `packages/mcp/server.json` with `package.json`. `server.json` had been stuck at `0.17.2` since the 0.17.2 release, so the MCP-Registry publish step (`Verify server.json version matches package.json`) failed on every release from 0.17.3 through 0.18.1 — npm and the GitHub `.mcpb` shipped, but the registry listing silently went stale. Both `server.json` version fields (top-level + `packages[0].version`) now track `package.json`, and a new audit test (`test/audit/server-json-version.test.ts`) fails the build on any future drift instead of letting it surface only at release time.
+
+## 0.18.1 — 2026-06-09
+
+- **Quota rendering fix**: `leadbay_account_status` now renders the per-resource Daily / Weekly / Monthly **usage** table the API actually returns, instead of collapsing to "quota: null / no limits". Root cause: `quota_status` returns `count` (amount **used**) per resource per window with no cap field and a possibly-`null` `plan`; the old render hint tried to draw `used / cap` and gave up when there was no cap. The hint is now usage-only and explicitly warns that a missing cap / `null` plan is **not** "unlimited" or "no quota". `get-quota.ts` `outputSchema` corrected to the real `org` / `user.resources[]` shape (`{resource_type, count, window_type, resets_at}`, `count` = used), and a failed quota fetch is now distinguished from an empty quota.
+- **Enrichment credit spend**: `leadbay_enrich_titles` surfaces the credit balance before and the actual spend after a run, reported discreetly rather than as a callout. Dropped the per-run "credits used" figure that conflated prior enrichments.
+
+## 0.18.0 — 2026-06-08
+
+Backend long-task notifications are now consumed by the MCP. When the user (or agent) initiates a bulk operation — contact enrichment, lead qualification, CSV / CRM import — the MCP listens to the backend WebSocket for the completion event and surfaces it on the agent's next tool call so prior outputs that depended on the now-finished data can be revised.
+
+- **WS listener** — `wss://api-*.leadbay.app/ws/1.0?t=<ticket>` (ticketed via `GET /auth/ws?v=1.0`), reconnects with exponential backoff, REST catch-up via `GET /notifications` on every (re)connect and on cold start. Opt-out: `LEADBAY_NOTIFICATIONS_WS_DISABLED=1`.
+- **`_meta.notifications` on every tool response** — terminal bulk-progress notifications appear on every successful tool call until the agent acknowledges them. Auto-expires after 24h locally to prevent unbounded growth in unattended automation.
+- **`leadbay_account_status.notifications`** — same entries surfaced as a top-level field so the agent's daily-rhythm check-in sees them without reading `_meta`.
+- **`leadbay_acknowledge_notification(notification_id, archive?)`** — new always-exposed tool. Posts `/notifications/{id}/seen` (default) or `/archive`, removes the entry from the local inbox. The agent calls this *after* it has revised prior outputs the just-finished work might have made stale.
+- **Launch endpoints return `notification_id`** — `leadbay_enrich_titles`, `leadbay_bulk_qualify_leads`, `leadbay_import_leads`, and `leadbay_import_and_qualify` now read the canonical `notification_id` from `BulkLaunchResponse` / `BulkWebFetchResponsePayload` and persist it on the bulk tracker record.
+- **`bulk_qualify_leads` now uses the selection-based bulk endpoint** — replaces per-lead fan-out so the backend creates a single progress notification per call. Per-lead error attribution is coarser at launch (leads outside `queued_ids ∪ skipped_ids` are tagged `not_queued`); the polling phase still pulls concrete per-lead state.
+- **`bulk_enrich_status` fast path** — reads `bulk_progress` from the notification in a single REST call instead of fanning out `get_contacts` per lead. Falls back to the legacy per-lead path for records minted before this PR.
+- **`qualify_status` surfaces `bulk_progress`** — bulk counters (success / failure / quota_hit) appear alongside the existing per-lead refresh. `quota_hit_count > 0` triggers an upgrade-or-wait hint.
+- **Vocabulary**: "notifications" everywhere. Not "pending actions", not "tasks", not "async results" — matches the backend ADR (`docs/adr/notifications.md`).
+
 ## 0.17.3 — 2026-06-01
 
 - **Lens management on the default surface**: lenses are now fully manageable from chat, no `LEADBAY_MCP_ADVANCED` needed.
