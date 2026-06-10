@@ -54,6 +54,11 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_new_lens",
   "leadbay_adjust_audience",
   "leadbay_refine_prompt",
+  "leadbay_add_contact",
+  "leadbay_remove_contact",
+  "leadbay_pin_contact",
+  "leadbay_unpin_contact",
+  "leadbay_update_contact",
   "leadbay_account_history",
 ]);
 

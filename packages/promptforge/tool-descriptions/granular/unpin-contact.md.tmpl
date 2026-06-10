@@ -1,0 +1,47 @@
+---
+name: leadbay_unpin_contact
+kind: tool-description
+short_description: |
+  Unpin a contact on a company — the inverse of pinning. Use when the user
+  wants to clear a contact's priority/favourite flag. Don't use it to remove
+  the contact entirely (that's leadbay_remove_contact).
+annotations:
+  readOnlyHint: false
+  destructiveHint: false
+  idempotentHint: true
+  openWorldHint: true
+routing:
+  triggers:
+    - "unpin this contact"
+    - "remove the pin from this contact"
+    - "this person isn't the priority anymore"
+    - "unfavourite this contact"
+  anti_triggers:
+    - phrase: "pin / mark as priority"
+      route_to: leadbay_pin_contact
+    - phrase: "remove / delete this contact"
+      route_to: leadbay_remove_contact
+  prefer_when: "user wants to clear the pinned flag on a contact (but keep the contact) — pass that contact's own `contact_id`"
+  examples:
+    positive:
+      - "Unpin Jane Doe — she's not the priority anymore."
+      - "Remove the pin from that contact."
+      - "Unfavourite this person."
+    negative:
+      - "Pin this contact as priority."
+      - "Remove that contact entirely."
+      - "Add a new contact to this company."
+rendering_hint: |
+  One-line confirmation that the named contact (or id) is no longer pinned.
+  No table.
+---
+
+Unpin a single contact on a company — clears its priority / favourite flag. The contact stays on the company; only the pin is removed (to remove the contact entirely, use `leadbay_remove_contact`).
+
+Pass the contact's **own** `contact_id` — not the parent lead id.
+
+Backend: `POST /contacts/{contact_id}/unpin` → 204. Idempotent. The inverse is `leadbay_pin_contact`.
+
+Returns `{ pinned: false, contact_id, action: "unpinned" }`.
+
+Requires: LEADBAY_MCP_WRITE=1 (MCP) or exposeWrite=true (OpenClaw).
