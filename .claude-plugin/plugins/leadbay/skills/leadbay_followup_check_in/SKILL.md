@@ -166,6 +166,29 @@ Unlike `leadbay_daily_check_in` which deep-dives on every promising lead in Phas
 
 When the user picks a row, call `leadbay_research_lead_by_id` on that single lead (or `leadbay_research_lead_by_name_fuzzy` if they only have the name) and offer to `leadbay_prepare_outreach` once they say "let's reach out".
 
+# PHASE 3b — BULK SIGNAL SCAN (when the user asks "which of these have signal X")
+
+If the user wants to filter the whole portfolio by a web-research signal — "which of my leads acquired a company since 2025", "find everyone with a funding signal", "who changed CEO" — do NOT loop `leadbay_research_lead_by_id` per row, and do NOT guess from freshness fields. Call `leadbay_scan_portfolio_signals({query, since?})` once: it bulk-reads the cached signals across the portfolio and returns only the matches, campaign-ready. Offer to build a campaign from the matches.
+
+**Close the gap — don't just report it.** The scan returns `not_researched[]` (leads with no cached Leadbay signal) and may surface matches whose cached signal is thin or undated. These are the leads where the answer is genuinely unknown, not absent. Rather than stopping at "K aren't researched yet", offer to fill the gap and refine:
+
+1. **Name the gap precisely** — "N of your M leads matched; K have no cached signal and J more have only a thin/undated mention, so I can't yet confirm signal X for those."
+2. **Run a targeted live pass** — if you have web-search tools, research the specific `not_researched` / thin-signal leads for the exact signal the user asked about (company name + the query terms, e.g. "<Company> acquisition 2025"). Do this only for the gap leads, not the whole portfolio — the cached matches are already answered.
+3. **Fold the findings back in, clearly labelled** — present live results as **agent-sourced (not Leadbay-verified)**, in a section separate from the cached `matched` cohort, and cite the source URL/date you found. Never silently merge a web-found signal into the campaign-ready cohort as if Leadbay had verified it.
+4. **Offer the durable path too** — for gap leads worth persisting, offer `leadbay_bulk_qualify_leads` so Leadbay runs its own `web_fetch` and the signal lands in the portfolio's cached `signals[]` on the next scan.
+
+This keeps the honesty guarantee intact (Leadbay's cached `signals[]` stay the source of truth) while still answering the user's question for the leads Leadbay hasn't researched yet.
+
+**SIGNAL HONESTY — never infer signals from freshness.** `stale_at`,
+`web_fetch_in_progress`, `fetch_at` are freshness markers, not signal
+indicators — signal presence is read ONLY from the actual `signals[]` /
+`web_fetch.content` entries. For "which of my leads have signal X" across a
+portfolio, call **`leadbay_scan_portfolio_signals`** (bulk-reads cached
+signals); don't loop `leadbay_research_lead_by_id` per lead or guess from
+freshness. A lead with no cached content is `not_researched`, not "no match";
+never report a signal verdict for a lead you never read.
+
+
 # CROSS-MODE PIVOT
 
 Below the table, offer the cross-mode pivot in one short line so the user can redirect if you guessed wrong on entry-point routing: "Want to see NEW leads from your wishlist instead?" — that routes back to `leadbay_daily_check_in` (Discovery via `leadbay_pull_leads`).

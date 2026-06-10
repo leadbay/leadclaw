@@ -44,6 +44,7 @@ const TOOLS_WITH_ROUTING = new Set([
   "leadbay_report_friction",
   "leadbay_research_lead_by_id",
   "leadbay_research_lead_by_name_fuzzy",
+  "leadbay_scan_portfolio_signals",
   "leadbay_tour_plan",
   // leadbay_seed_candidates is INTERNAL scaffolding for leadbay_extend_lens —
   // users never invoke it directly. Routing frontmatter still exists to help

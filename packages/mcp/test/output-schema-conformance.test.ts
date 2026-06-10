@@ -405,6 +405,35 @@ const CASES: ConformanceCase[] = [
     },
   },
   {
+    toolName: "leadbay_scan_portfolio_signals",
+    arguments: { query: "acquired, M&A", leadIds: ["lead-1"] },
+    setupMocks: () => {
+      mockHttp([
+        // Read-only fan-out: a single cached web_fetch read, no POST.
+        {
+          method: "GET",
+          path: "/1.5/leads/lead-1/web_fetch",
+          status: 200,
+          body: {
+            lead_id: "lead-1",
+            in_progress: false,
+            fetch_at: "2025-06-01T00:00:00Z",
+            content: {
+              "📈 business signals": [
+                {
+                  description: "Acme acquired BetaCorp",
+                  source: "techcrunch.com",
+                  date: "2025-03-01",
+                  hot: true,
+                },
+              ],
+            },
+          },
+        },
+      ]);
+    },
+  },
+  {
     toolName: "leadbay_bulk_qualify_leads",
     arguments: { leadIds: ["lead-1"] },
     setupMocks: () => {

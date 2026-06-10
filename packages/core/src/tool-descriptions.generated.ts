@@ -2290,9 +2290,9 @@ table. Detail + status priority below.
 
 Pull KNOWN leads from the user's Monitor view — the re-engagement entry point. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", or any phrasing implying pre-existing pipeline context. For NEW leads from Discover, use \`leadbay_pull_leads\`.
 
-Backend: wraps \`GET /1.5/monitor?personal=&liked=&filtered=&count=&page=\` plus, when \`set_filter\` is supplied, a preceding \`POST /1.5/monitor/filter\` to persist the filter server-side. The Monitor filter is a single \`FilterItem\` per user — refreshing the page restores it.
+Backend: wraps \`GET /1.5/monitor?personal=&liked=&filtered=&count=&page=\` plus, when \`set_filter\` is supplied, a preceding \`POST /1.5/monitor/filter\`. The Monitor filter is a single \`FilterItem\` per user — refreshing restores it.
 
-**Filter mechanism — store-then-apply.** Pass \`set_filter: { criteria: FilterCriterion[] }\` to overwrite the server-stored filter, then the composite re-fetches with \`filtered:true\`. \`FilterCriterion\` is the backend's \`anyOf\` over 10 typed criteria: \`size\`, \`keywords\`, \`sector_ids\`, \`location_ids\`, \`custom_field\`, \`custom_field_comparison\`, \`yc\`, \`liked\`, \`last_action\` (filters by MonitorActionType enum), \`last_action_date\` (with \`last_days\` for "last N days").
+**Filter mechanism — store-then-apply.** Pass \`set_filter: { criteria: FilterCriterion[] }\` to overwrite the server-stored filter, then the composite re-fetches with \`filtered:true\`. \`FilterCriterion\` is the backend's \`anyOf\` over 10 typed criteria: \`size\`, \`keywords\`, \`sector_ids\`, \`location_ids\`, \`custom_field\`(\`_comparison\`), \`yc\`, \`liked\`, \`last_action\` (MonitorActionType enum), \`last_action_date\` (with \`last_days\`).
 
 Practical mapping from user phrasing to criterion:
 
@@ -2305,17 +2305,27 @@ Practical mapping from user phrasing to criterion:
 | "leads 50–200 employees"             | \`{type: "size", sizes: [{min: 50, max: 200}]}\`                       |
 | "Y Combinator companies"             | \`{type: "yc"}\`                                                       |
 
-Geo filtering needs \`admin_area_id\` resolution — backend rejects free-text in \`location_ids\`. Pass \`city: "<free-text>"\` and the composite calls \`/geo/search\` internally, picks the best match, merges its id into \`set_filter\`. Ambiguous matches return \`status: "ambiguous_locations"\` + \`location_ambiguities[]\` — pick an id and re-call with \`city_id\`. For multi-city cases, call \`leadbay_list_locations\` then pass \`set_filter.criteria\` with \`{type: "location_ids", is_excluded: false, locations: [...]}\`.
+Geo filtering needs \`admin_area_id\` resolution — backend rejects free-text in \`location_ids\`. Pass \`city: "<free-text>"\` and the composite calls \`/geo/search\` internally, picks the best match, merges its id into \`set_filter\`. Ambiguous matches return \`status: "ambiguous_locations"\` + \`location_ambiguities[]\` — pick an id and re-call with \`city_id\`.
 
-**Place names go through \`city\`, NEVER \`keywords\`.** This includes any geographic token the user names — cities (\`"Berlin"\`, \`"NYC"\`), states / provinces / regions (\`"Texas"\`, \`"California"\`, \`"Bavaria"\`), countries (\`"France"\`, \`"United States"\`), neighborhoods (\`"Brooklyn"\`, \`"SoHo"\`). The \`/geo/search\` resolver handles all admin levels — level 4 (state) and level 2 (country) resolve just as well as level 5 (city). If you put \`"Texas"\` in \`keywords\` you get a TEXT-MATCH against company descriptions (≈0 hits) instead of a real state filter. If a place name resolves ambiguously, surface the choices to the user — do NOT silently fall back to keyword search or to the unfiltered Monitor view. If \`keywords: ["Texas"]\` returned empty, the next call is \`city: "Texas"\`, not \`keywords: []\`.
+**Place names go through \`city\`, NEVER \`keywords\`.** Any geographic token the user names — cities (\`"Berlin"\`), states/regions (\`"Texas"\`, \`"Bavaria"\`), countries (\`"France"\`), neighborhoods (\`"Brooklyn"\`) — resolves via \`/geo/search\` (all admin levels). A place name in \`keywords\` becomes a TEXT-MATCH against company descriptions (≈0 hits), not a real filter. If a place resolves ambiguously, surface the choices — never silently fall back to keyword search or the unfiltered view.
 
-**Pushback exclusion.** Leads with active pushback (\`pushback_status\` set and \`pushback_until > today\`) are excluded from the response. The composite enforces this client-side; \`total_excluded_by_pushback\` in the output reports how many rows were dropped.
+**Pushback exclusion.** Leads with active pushback (\`pushback_status\` set, \`pushback_until > today\`) are excluded client-side; \`total_excluded_by_pushback\` reports how many rows were dropped.
 
 WHEN TO USE: re-engaging pipeline ("what should I follow up on", "stale leads"), filtering monitored leads by city / sector / recency / action type / liked. The canonical orchestrator is the \`leadbay_followup_check_in\` prompt.
 
 WHEN NOT TO USE: for NEW leads — that's \`leadbay_pull_leads\` (Discover).
 
 **Anti-confusion guardrail.** Iterating \`pull_leads\` pages looking for \`prospecting_actions_count > 0\` or \`notes_count > 0\` rows is the wrong entry point — the two read different tables. Leads with follow-up history live in \`pull_followups\`.
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` are freshness markers, not signal
+indicators — signal presence is read ONLY from the actual \`signals[]\` /
+\`web_fetch.content\` entries. For "which of my leads have signal X" across a
+portfolio, call **\`leadbay_scan_portfolio_signals\`** (bulk-reads cached
+signals); don't loop \`leadbay_research_lead_by_id\` per lead or guess from
+freshness. A lead with no cached content is \`not_researched\`, not "no match";
+never report a signal verdict for a lead you never read.
+
 
 ---
 
@@ -2868,42 +2878,46 @@ Examples that should NOT invoke this tool (sound similar, route elsewhere):
 ---
 
 Tell me everything decision-relevant about a single lead, identified by its
-Leadbay UUID. Bundles the lens-scoped lead profile, the AI qualification
-answers (the agent's knowledge-base food), the structured web-research signals
-(with hot flags + sources), the two-tier contact set (\`enriched\` + \`org\`), the
-unified \`recent_activities\` timeline, the engagement counts, and a
-\`_meta.has_reachable_contact\` hint that drives NEXT STEPS. Order is
-deliberate: qualification first, then signals, then firmographics, then
-contacts, then recent activity.
+Leadbay UUID. Bundles the lens-scoped profile, AI qualification answers,
+structured web-research signals (hot flags + sources), the two-tier contact set
+(\`enriched\` + \`org\`), the unified \`recent_activities\` timeline, engagement
+counts, and a \`_meta.has_reachable_contact\` hint that drives NEXT STEPS. Order
+is deliberate: qualification, signals, firmographics, contacts, recent activity.
 
-Scoring has two layers: the basic \`score\` (firmographic, always present,
-already decent) and the AI qualification layer (\`ai_agent_lead_score\` +
-per-question answers + web_fetch signals). The AI layer is pre-populated for
-roughly the top 10 of each daily batch, and on-demand (via
-leadbay_bulk_qualify_leads) for anything below that. Combine both layers when
-judging a lead.
+Scoring has two layers: the basic \`score\` (firmographic, always present) and
+the AI qualification layer (\`ai_agent_lead_score\` + per-question answers +
+web_fetch signals). The AI layer is pre-populated for roughly the top 10 of
+each daily batch, and on-demand (via leadbay_bulk_qualify_leads) below that.
+Combine both when judging a lead.
 
-The companion tool **leadbay_research_lead_by_name_fuzzy** wraps this one for
-the case where the user names a company in prose without a UUID — it
-fuzzy-resolves the name against the active lens's wishlist, then delegates
-here. Both return the same shape; the fuzzy wrapper just adds
-\`_meta.resolved_from\` and \`_meta.match_candidates\` so you can offer
-disambiguation.
+The companion **leadbay_research_lead_by_name_fuzzy** wraps this one when the
+user names a company without a UUID: it fuzzy-resolves against the active
+lens's wishlist, then delegates here. Same shape, plus \`_meta.resolved_from\` /
+\`_meta.match_candidates\`.
 
 WHEN TO USE: when picking up a single lead from
 leadbay_pull_leads (or any list that exposed a leadId) to decide whether to
 act on it.
 
 WHEN NOT TO USE: across many leads at once — that's
-leadbay_pull_leads' job. (This composite supersedes the lower-level
-leadbay_get_lead_profile in agent flow; the granular tool stays available for
-fine-grained access.)
+leadbay_pull_leads' job (portfolio-wide signal questions go to
+leadbay_scan_portfolio_signals; see below). This composite supersedes the
+lower-level leadbay_get_lead_profile.
 
-**Concurrency note**: this is a composite that reads many sub-resources per
-call. Call it **sequentially** or in small batches (≤3 parallel) when
-researching multiple leads. Firing 10+ in parallel can saturate the transport
-and produce misleading \`"Tool permission stream closed"\` errors that look like
-permission failures but are really backpressure. On a transient
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` are freshness markers, not signal
+indicators — signal presence is read ONLY from the actual \`signals[]\` /
+\`web_fetch.content\` entries. For "which of my leads have signal X" across a
+portfolio, call **\`leadbay_scan_portfolio_signals\`** (bulk-reads cached
+signals); don't loop \`leadbay_research_lead_by_id\` per lead or guess from
+freshness. A lead with no cached content is \`not_researched\`, not "no match";
+never report a signal verdict for a lead you never read.
+
+
+**Concurrency note**: this composite reads many sub-resources per call. Call
+it **sequentially or in small batches (≤3 parallel)**. Firing 10+ in parallel
+saturates the transport and produces misleading \`"Tool permission stream
+closed"\` errors — that's backpressure, not a permission failure. On a transient
 stream/timeout failure, retry the same lead once before moving on.
 
 ---
@@ -3275,6 +3289,181 @@ Below the table, a one-liner: \`"Ready: K rows · Ambiguous: A rows · Unmatched
 | User wants to skip rows they can't ID  | "Drop unmatched rows and import the rest"                   | leadbay_import_leads (with filtered records)           |
 `;
 // endregion: leadbay_resolve_import_rows
+
+// region: leadbay_scan_portfolio_signals
+export const leadbay_scan_portfolio_signals: string = `## WHEN TO USE
+
+Trigger phrases: "which of my leads <did X>", "find leads that <raised / acquired / hired / moved / changed CEO>", "scan my portfolio for <signal>", "identify all the ones that <event> since <date>", "who in Monitor has a <funding / M&A / hiring> signal", "build a campaign from leads with <signal>".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "research one named company" → \`leadbay_research_lead_by_name_fuzzy\`; "everything about lead <UUID>" → \`leadbay_research_lead_by_id\`; "qualify my next N leads (they aren't researched yet)" → \`leadbay_bulk_qualify_leads\`; "just list my follow-ups" → \`leadbay_pull_followups\`.
+
+Prefer when: user wants to FILTER a known portfolio by a web-research signal in bulk — pass \`query\`, optionally \`since\`, \`city\`/\`set_filter\`, or \`leadIds\`
+
+Examples that SHOULD invoke this tool:
+- "Which of my leads acquired a company since 2025?"
+- "Scan my Lyon portfolio for funding signals."
+- "Find everyone in Monitor who changed CEO and build a campaign."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "Look up Acme Corp for me."
+- "Show me my follow-ups."
+- "Qualify my next 10 leads."
+
+## RENDER (quick)
+
+Cohort grouped by lead: one block per matched lead (name · location +
+its matched signal entries, hot first, source-linked). Open with
+"N match <query> (M scanned)"; ALWAYS close with an honesty footer —
+"scanned N · matched M · K not yet researched". Never present
+not_researched leads as "no signal". Full layout below.
+
+---
+
+Scan a known portfolio for a specific web-research signal in one call. This is
+the bulk, read-only answer to "which of my leads have signal X" — the question
+that otherwise forces a per-lead \`leadbay_research_lead_by_id\` loop (one full
+profile call per lead, slow and quota-heavy).
+
+**Reads CACHED signals only — does not trigger new research.** For each lead in
+scope it reads \`GET /leads/{id}/web_fetch\` (the already-computed web-research
+signals) and filters the entries against \`query\`. It issues NO web_fetch POST,
+so it does not consume AI qualification credits and does not re-crawl. Leads
+that have no cached content (never qualified, or still in progress) are
+reported in \`not_researched\` — they are **NOT** silently treated as "no
+match". Qualify them with \`leadbay_bulk_qualify_leads\`, then re-scan.
+
+**Scope.** Pass \`leadIds\` for an explicit cohort, or omit it to scan the
+Monitor portfolio. Narrow the Monitor scope with \`city\` / \`set_filter\` exactly
+as \`leadbay_pull_followups\` does (store-then-apply server-side filter). The
+scan is bounded by \`max_leads\` (default 200, hard cap 300); when the portfolio
+is larger, \`truncated_at\` is set and coverage is partial — say so.
+
+**Query.** \`query\` is matched case- and accent-insensitively against each
+signal entry's description, source, and section label. Comma- or
+space-separated terms are OR'd ("M&A, acquisition, racheté" matches any). Use
+\`since\` (ISO date) to keep only entries dated on/after it — entries with no
+date are kept (a missing date is not evidence the event is old).
+
+**Result is campaign-ready.** \`matched[]\` carries \`lead_id\`, \`name\`,
+\`location\`, and the matching \`matched_signals[]\` (section + hot + source +
+date + description). Feed the matched \`lead_id\`s straight into
+\`leadbay_add_leads_to_campaign\` / \`leadbay_create_campaign\`.
+
+On a 429 mid-scan, partial \`matched\` is returned with \`quota_exceeded: true\` —
+offer the user wait-for-reset OR a top-up link (both unblock; a top-up clears
+the throttle immediately).
+
+**SIGNAL HONESTY — never infer signals from freshness.** \`stale_at\`,
+\`web_fetch_in_progress\`, \`fetch_at\` are freshness markers, not signal
+indicators — signal presence is read ONLY from the actual \`signals[]\` /
+\`web_fetch.content\` entries. For "which of my leads have signal X" across a
+portfolio, call **\`leadbay_scan_portfolio_signals\`** (bulk-reads cached
+signals); don't loop \`leadbay_research_lead_by_id\` per lead or guess from
+freshness. A lead with no cached content is \`not_researched\`, not "no match";
+never report a signal verdict for a lead you never read.
+
+
+WHEN TO USE: when the user wants to filter a known
+portfolio by a web-research signal across many leads at once — discovering a
+cohort to act on, not inspecting a single lead.
+
+WHEN NOT TO USE: for a single named company
+(leadbay_research_lead_by_name_fuzzy) or one lead by UUID
+(leadbay_research_lead_by_id); to qualify leads that have no signals yet
+(leadbay_bulk_qualify_leads); or to just list follow-ups with no signal filter
+(leadbay_pull_followups).
+
+---
+
+## RENDERING — bulk signal-scan results
+
+The output is a cohort, grouped by lead. Lead with the matches, end with an
+honesty footer — never hide what wasn't scanned.
+
+### Matched leads
+
+Open with a one-line headline: \`**N leads match "<query>"** (M scanned).\`
+
+Then one block per \`matched[]\` lead, ordered with \`hot\` matches first. Emit
+each as a host-parseable per-lead block so the chat host's place-card
+auto-detector can render it (per the repo "feed the address auto-detector"
+convention):
+
+\`\`\`
+### <name> · <location>
+
+<for each matched_signal, one bullet>
+- **<section_emoji> <section_label>** — <description> <🔥 if hot> ([source](<source>), <date>)
+\`\`\`
+
+- **Bold** the description of \`hot: true\` entries; leave cold entries plain.
+- Render \`source\` as a markdown link \`([source](url), date)\`; omit the date
+  when null, omit the link when \`source\` is empty.
+- Cap to the 3 strongest signals per lead (hot first, then by date desc); if a
+  lead has more, end its block with \`_+K more signals_\`.
+- When \`name\` is null (the scan was scoped by \`leadIds\` and the read failed to
+  carry firmographics), fall back to \`### Lead <lead_id>\` — but prefer to enrich
+  the name via the matched lead's own data when available.
+
+### Honesty footer (ALWAYS print)
+
+A single italic line summarising coverage:
+
+\`_Scanned N · matched M · K had no cached signals (not yet researched)._\`
+
+- When \`not_researched\` is non-empty, this is load-bearing: state plainly that
+  those K leads were NOT searched and were NOT counted as "no match". Offer to
+  qualify them and re-scan (see NEXT STEPS).
+- When \`truncated_at\` is set, add: \`_Coverage partial — only the first <truncated_at>
+  leads were scanned; narrow the scope or raise max_leads._\`
+- When \`quota_exceeded\` is true, add the wait-or-top-up offer.
+
+**Hide:** raw \`lead_id\` in prose (use it only for the campaign call), \`_meta\`,
+empty arrays, any freshness field. NEVER present \`not_researched\` leads as
+"no signal found".
+
+
+---
+
+## NEXT STEPS — after the signal scan
+
+**ALWAYS render NEXT STEPS via your host's next-step widget.** Use whichever is in your tool set — the NAME and SCHEMA differ: **\`ask_user_input_v0\`** (Claude chat / ChatGPT) takes plain-string options with \`type:"single_select"\`; **\`AskUserQuestion\`** (Claude cowork / Claude Code) takes object options \`{label, description}\` plus a required short \`header\` (≤12 chars) and \`multiSelect\`, NO \`type\` field, and never add an "Other" option (the host adds it). Match the schema to the tool you actually have — the wrong schema fails silently and you fall back to prose. Prose bullets are the fallback ONLY when NEITHER widget exists. Any turn that would end with a choice must be the widget — the widget IS the question.
+
+**If the tool result carries a \`next_steps\` object, that is the source of truth — use it directly.** Each option has a short \`.label\` (≤5 words) and a full \`.description\`. Map \`next_steps.options[]\` into your host widget VERBATIM and in order: for \`AskUserQuestion\` (cowork / Claude Code) pass each as \`{label, description}\`; for \`ask_user_input_v0\` (Claude chat / ChatGPT, string options only) pass each option's \`.description\` as the string (it's the full sentence). Do NOT reword, reorder, drop, or prose-ify them — they're built deterministically by the server so the offer (incl. the artifact option at position 0) fires every time. Fall back to the table below only when there is NO \`next_steps\` field.
+
+**One exception — skip the widget** when the user's original message contained a complete sequential instruction chain ("show me X and then do Y") AND all stated steps have been completed. In that case, end with STOP directly — the user stated their full plan and does not need a "what next?" prompt.
+- Skip example: "Show me today's leads and then research the top one for me." → after research completes, emit STOP without the widget.
+- Do NOT skip for: plain requests ("show me today's leads", "run my check-in"), recurring-language requests ("I do this every day"), or requests where only one action was stated.
+
+Pick 2–4 rows from the (Observation, Suggest, Calls) table below most relevant to the response, then call your host's widget with ITS schema (per the schema rules above — wrong schema fails silently):
+- \`ask_user_input_v0\`: \`{questions:[{question,type:"single_select",options:["<Suggest 1>","<Suggest 2>"]}]}\`
+- \`AskUserQuestion\`: \`{questions:[{question,header:"Next step",multiSelect:false,options:[{label:"<≤5 words>",description:"<Suggest 1>"}]}]}\`
+
+User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exclusive options, AskUserQuestion labels ≤5 words (full text in \`description\`), max 3 questions. Table stays internal; never recite it.
+
+---
+
+
+
+The scan exists to BUILD A COHORT, not just to list. The default next move is
+almost always "turn the matched leads into a campaign."
+
+| Observation                                       | Suggest                                                      | Calls                                                                                  |
+|---------------------------------------------------|--------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| \`matched\` non-empty (top of menu)                 | "Build a campaign from the N matched leads"                  | leadbay_create_campaign / leadbay_add_leads_to_campaign(matched lead_ids)              |
+| \`not_researched\` non-empty                        | "K leads aren't researched yet — qualify them, then re-scan" | leadbay_bulk_qualify_leads(not_researched lead_ids) → re-run leadbay_scan_portfolio_signals |
+| Zero matches but leads were researched            | "Widen the query (synonyms) or relax \`since\`"                | leadbay_scan_portfolio_signals(query: "<broader terms>", since: omit-or-earlier)      |
+| \`truncated_at\` set                                | "Scan only covered N — narrow scope or raise the cap"        | leadbay_scan_portfolio_signals({city / set_filter}) or raise \`max_leads\`              |
+| One standout matched lead                          | "Open that lead's full brief"                                | leadbay_research_lead_by_id(leadId)                                                    |
+| \`quota_exceeded\`                                  | "Wait for reset OR top up to finish the scan"                | leadbay_create_topup_link                                                              |
+
+NEVER report leads in \`not_researched\` as if they had no matching signal — they
+were never read. Distinguish "no signal X found" (researched, no match) from
+"not yet researched" (no data to search) every time.
+`;
+// endregion: leadbay_scan_portfolio_signals
 
 // region: leadbay_seed_candidates
 export const leadbay_seed_candidates: string = `## WHEN TO USE
@@ -3674,6 +3863,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_research_lead_by_id,
   leadbay_research_lead_by_name_fuzzy,
   leadbay_resolve_import_rows,
+  leadbay_scan_portfolio_signals,
   leadbay_seed_candidates,
   leadbay_select_leads,
   leadbay_set_active_lens,
