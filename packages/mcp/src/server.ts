@@ -1209,6 +1209,11 @@ export function buildServer(
             endpoint: err._meta?.endpoint,
           });
         }
+        // Upstream HTTP status (set by client.ts mapErrorResponse at
+        // _meta.http_status). Forward it onto the product-analytics events
+        // so catch-all codes like API_ERROR can be disambiguated by status
+        // on the dashboard. Absent for codes that never hit the HTTP layer.
+        const httpStatus: number | undefined = err._meta?.http_status;
         telemetry.captureToolCall({
           tool: name,
           ok: false,
@@ -1216,6 +1221,7 @@ export function buildServer(
           format: "error-envelope",
           bytes: errText.length,
           error_code: code,
+          ...(typeof httpStatus === "number" ? { http_status: httpStatus } : {}),
           triggered_by,
         });
         if (COMPOSITE_FILE_TOOL_NAMES.has(name)) {
@@ -1225,6 +1231,7 @@ export function buildServer(
             ok: false,
             duration_ms: errDur,
             error_code: code,
+            ...(typeof httpStatus === "number" ? { http_status: httpStatus } : {}),
           });
         }
         telemetry.captureException(err, buildBusinessCtx(name, err, triggered_by));
