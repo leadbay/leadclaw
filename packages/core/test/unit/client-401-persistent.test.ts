@@ -26,6 +26,8 @@ describe("LeadbayClient — persistent 401 blames Leadbay-side, stays short", ()
       const hint = err.hint.toLowerCase();
       expect(hint).toContain("leadbay's side");
       expect(hint).toContain("try again");
+      // Offers to report the persistent failure to the team (handoff to feedback).
+      expect(hint).toContain("report it");
       // Stays concise (no multi-paragraph lecture, no login instructions).
       expect(err.hint.length).toBeLessThan(220);
       // No re-login instruction (mentioning "your login is fine" is allowed).

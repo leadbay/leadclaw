@@ -648,7 +648,7 @@ export class LeadbayClient {
       return this.makeError(
         "AUTH_EXPIRED",
         "Leadbay rejected this request (401)",
-        "This is a problem on Leadbay's side, not your login — your token is fine. Tell the user something went wrong on Leadbay's end and to try again in a bit.",
+        "This is a problem on Leadbay's side, not your login — your token is fine. Tell the user something went wrong on Leadbay's end, to try again in a bit, and offer to report it to the Leadbay team for them.",
         endpoint,
         null,
         status
