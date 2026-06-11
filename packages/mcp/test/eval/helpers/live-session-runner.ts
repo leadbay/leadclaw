@@ -442,12 +442,20 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
     let lastFinishTs = startedAt;
     let finalText = "";
     let lastAssistantText = "";
+    // Whole-session stop flag. Set when the assistant-turn budget (max_turns) is
+    // exhausted or a turn reports an SDK error — both mean we must NOT keep
+    // feeding later user turns. `turn` accumulates across user turns, so the
+    // max_turns budget is intentionally whole-session, not per-turn.
+    let sessionAborted = false;
 
     // userTurn is the 1-based index of the user message currently being
     // processed. Tool calls and prose are tagged with it so per-turn invariants
     // (expect_calls/forbid_calls) and carry-over judging can attribute evidence
     // to the right turn — independent of how many assistant messages a turn took.
     for (let userTurnIdx = 0; userTurnIdx < userMessages.length; userTurnIdx++) {
+      // A prior turn exhausted the budget or errored — stop the conversation
+      // rather than firing --resume against a dead/over-budget session.
+      if (sessionAborted) break;
       const userTurn = userTurnIdx + 1;
       const userMessage = userMessages[userTurnIdx];
 
@@ -607,6 +615,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
 
             if (turn >= max_turns) {
               terminal_reason = "max_turns";
+              sessionAborted = true; // whole-session budget hit — don't start later user turns
               proc.stdin.end();
             }
           }
@@ -615,6 +624,7 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
             const ev = event as StreamResultEvent;
             if (ev.is_error) {
               terminal_reason = "sdk_error";
+              sessionAborted = true; // a failed turn means --resume on the next turn is unsafe
             } else {
               terminal_reason = "agent_stopped";
               finalText = (ev.result && ev.result.length > 0) ? ev.result : lastAssistantText;
@@ -632,9 +642,13 @@ export async function runSessionLive(opts: LiveSessionOpts): Promise<LiveSession
         }
       });
 
+      // Note: stdout "end" only marks the stream drained — it does NOT mean the
+      // process has exited and flushed its session file. Resolving here would let
+      // the next turn's `--resume` race a not-yet-written session. So we resolve
+      // ONLY on "close" (process fully exited) below; "end" just records the
+      // fallback terminal reason.
       proc.stdout.on("end", () => {
         if (!done) terminal_reason = "agent_stopped";
-        resolveP();
       });
 
       proc.on("error", (err) => rejectP(err));
