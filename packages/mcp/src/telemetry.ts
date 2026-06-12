@@ -419,6 +419,22 @@ export function initTelemetry(opts: InitOpts): TelemetryHandle {
       if (!sentryReady) return false;
       const trimmed = (message ?? "").trim();
       if (!trimmed) return false;
+      // Wait (bounded) for /users/me so name/email attach — otherwise feedback
+      // sent in the first second of a session (e.g. "report a bug" as the very
+      // first message) lands ANONYMOUS and the team can't attribute or reply.
+      // identify() is idempotent and fire-and-forget elsewhere; awaiting its
+      // promise here doesn't re-trigger it. Cap at 2s so a hung /users/me can't
+      // block the feedback — better an anonymous report than a dropped one.
+      if (identityPromise) {
+        try {
+          await Promise.race([
+            identityPromise,
+            new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } catch {
+          // identify() already swallows its own errors; ignore and proceed.
+        }
+      }
       try {
         Sentry.captureFeedback({
           message: trimmed,

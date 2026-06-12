@@ -76,7 +76,10 @@ export const sendFeedback: Tool<SendFeedbackParams> = {
         hint: "Ask the user what they'd like to tell the Leadbay team, then call again with their words in `message`.",
       };
     }
-    const message = text.length > MESSAGE_MAX ? `${text.slice(0, MESSAGE_MAX)}…` : text;
+    // Slice to MESSAGE_MAX-1 so the appended ellipsis keeps the payload at the
+    // advertised 4000-char cap (not 4001). The ellipsis signals truncation.
+    const message =
+      text.length > MESSAGE_MAX ? `${text.slice(0, MESSAGE_MAX - 1)}…` : text;
 
     // The transport is wired by the MCP server. If it's absent (telemetry off,
     // OpenClaw, tests) we must NOT claim success.
@@ -89,17 +92,30 @@ export const sendFeedback: Tool<SendFeedbackParams> = {
       };
     }
 
+    // associated_error_id is untrusted (agent-supplied) and crosses into a
+    // backend (Sentry). Allow only a conservative id charset so injection-shaped
+    // junk ("...; drop tables", whitespace, huge blobs) can't ride through as an
+    // associatedEventId; drop anything else rather than forward it. Kept lenient
+    // (not strict 32-hex) since the agent has no first-class source for a real
+    // Sentry event id today — it's a best-effort attach, not a trusted key.
+    const errorId =
+      typeof params.associated_error_id === "string" &&
+      /^[A-Za-z0-9_-]{1,64}$/.test(params.associated_error_id)
+        ? params.associated_error_id
+        : undefined;
+
     const sent = await ctx.sendFeedback(message, {
-      ...(params.associated_error_id
-        ? { associatedEventId: params.associated_error_id }
-        : {}),
+      ...(errorId ? { associatedEventId: errorId } : {}),
     });
 
     return {
       sent,
       message: sent
         ? "Sent to the Leadbay team — thanks for the feedback."
-        : "Feedback could not be delivered right now. Let the user know it wasn't sent.",
+        : // `sent:false` means the bounded flush didn't confirm within the
+          // window — the envelope may still drain on shutdown. Don't assert it
+          // failed (that trains users to re-send and spam the inbox).
+          "Delivery not confirmed — it may still reach the Leadbay team. Avoid re-sending unless the user wants to.",
       _meta: { region: client.region },
     };
   },
