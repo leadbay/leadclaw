@@ -229,7 +229,11 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pin to a release tag, not @master — a third-party action on a moving
+      # ref runs with FLY_DEPLOY_TOKEN in scope, so any push to its default
+      # branch would execute in our pipeline. Matches the @v* pinning used
+      # by every other action in this file.
+      - uses: superfly/flyctl-actions/setup-flyctl@v1
       - name: Deploy to Fly
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_DEPLOY_TOKEN }}
@@ -237,21 +241,31 @@ jobs:
         # runner. fly.toml at repo root pins app 'leadbay-mcp-prod'.
         run: flyctl deploy --remote-only
       - name: Verify live version matches tag
+        # The deploy command already returned success above; this only confirms
+        # the new machine is actually serving. Uses jq (preinstalled on the
+        # runner) rather than node, so no setup-node step is needed in this job.
         run: |
           set -euo pipefail
           REF="${GITHUB_REF#refs/tags/}"
           TAG="${REF#mcp-v}"; TAG="${TAG#v}"
-          # Fly health checks gate the rollout, but the new machine may need a
-          # few seconds to serve. Poll /healthz until the version flips.
-          for i in $(seq 1 30); do
-            LIVE=$(curl -fsS https://leadbay-mcp-prod.fly.dev/healthz | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" 2>/dev/null || echo "")
-            if [ "$LIVE" = "$TAG" ]; then
-              echo "Live endpoint serving $LIVE — matches tag."
-              exit 0
+          # Fly's rolling deploy may serve the old machine's /healthz for a few
+          # seconds while the new one boots. Poll until the version flips.
+          # Distinguish "endpoint unreachable" from "version not flipped yet" so
+          # a red run points at the real cause instead of a generic timeout.
+          for i in $(seq 1 40); do
+            if BODY=$(curl -fsS --max-time 10 https://leadbay-mcp-prod.fly.dev/healthz 2>/dev/null); then
+              LIVE=$(printf '%s' "$BODY" | jq -r '.version // empty' 2>/dev/null || echo "")
+              if [ "$LIVE" = "$TAG" ]; then
+                echo "Live endpoint serving $LIVE — matches tag."
+                exit 0
+              fi
+              echo "Attempt $i/40: live=${LIVE:-<unparseable>} expected=$TAG — retrying in 5s"
+            else
+              echo "Attempt $i/40: /healthz unreachable (curl failed) — retrying in 5s"
             fi
-            echo "Attempt $i: live=$LIVE expected=$TAG — retrying in 5s"
             sleep 5
           done
-          echo "Live version did not reach $TAG after deploy" >&2
+          echo "Deploy command succeeded, but /healthz never reported $TAG after ~200s." >&2
+          echo "Prod may still be fine — check https://fly.io/apps/leadbay-mcp-prod/monitoring" >&2
           exit 1
 
