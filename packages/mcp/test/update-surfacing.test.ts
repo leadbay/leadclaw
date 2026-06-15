@@ -28,6 +28,7 @@ import { buildServer } from "../src/server.js";
 import { UpdateStateStore } from "../src/update-state.js";
 import {
   checkForUpdate,
+  getCachedUpdateInfo,
   __resetUpdateCacheForTests,
 } from "../src/update-check.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -264,5 +265,50 @@ describe("update surfacing — account_status keeps top-level field", () => {
     // re-surface a version account_status already prompted.
     const ping = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
     expect((ping.structuredContent as any)._meta?.update_available).toBeUndefined();
+  });
+});
+
+describe("proactive update surfacing — first-call race (product#3742 review)", () => {
+  // A store whose read() is artificially slow, so the per-call checkForUpdate
+  // is STILL IN FLIGHT when the (fast) tool returns and maybeAttachUpdate runs.
+  // This is the deterministic stand-in for the production race: the boot-time /
+  // per-call GitHub check hasn't populated the in-memory cache yet when the
+  // first tool result is being assembled. The ONLY way the proposal surfaces is
+  // if maybeAttachUpdate awaits the in-flight check rather than reading a cold
+  // cache and giving up — which is exactly the fix under test.
+  class SlowReadStore extends UpdateStateStore {
+    constructor(private readonly delayMs: number) {
+      super({ backend: "memory" });
+    }
+    async read() {
+      await new Promise((r) => setTimeout(r, this.delayMs));
+      return super.read();
+    }
+  }
+
+  it("surfaces on the first tool call even when the check is still in flight", async () => {
+    const store = new SlowReadStore(80);
+    await store.write({
+      // Recent check → checkForUpdate takes the throttle/disk path (no network),
+      // but the slow read() keeps it in flight past the tool's return.
+      last_check_time: Date.now(),
+      latest_known_version: LATEST,
+      latest_known_install_url: DXT_URL,
+      latest_known_release_url: RELEASE_URL,
+      suppressed_versions: [],
+    });
+    // Cache is cold at connect time — nothing has read the store into it yet.
+    expect(getCachedUpdateInfo()).toBeNull();
+
+    const { mcpClient } = await connectWithUpdates(store);
+
+    // First (and only) call is an ordinary tool. ping returns instantly while
+    // the slow store read is still resolving; maybeAttachUpdate must await the
+    // in-flight check before concluding there's nothing to show.
+    const result = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
+    expect((result.structuredContent as any)._meta?.update_available).toMatchObject({
+      latest_version: LATEST,
+      install_url: DXT_URL,
+    });
   });
 });

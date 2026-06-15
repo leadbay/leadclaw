@@ -717,10 +717,16 @@ export function buildServer(
   // current call: the freshest result is what the NEXT account_status
   // call sees, not this one. Opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
   const UPDATE_CHECK_DISABLED = process.env.LEADBAY_UPDATE_CHECK_DISABLED === "1";
-  const maybeRefreshUpdate = (): void => {
-    if (UPDATE_CHECK_DISABLED) return;
-    if (!opts.updateStateStore) return;
-    void checkForUpdate({
+  // Returns the in-flight check promise so the caller can OPTIONALLY await it
+  // before deciding a response carries no update (see the first-call race
+  // below). Resolves to null when the check is disabled / no store. Never
+  // rejects — failures are logged and swallowed. checkForUpdate has its own
+  // 24h throttle + 5s fetch timeout + concurrent-call in-flight guard, so
+  // awaiting this is cheap in steady state and bounded in the worst case.
+  const maybeRefreshUpdate = (): Promise<UpdateInfo | null> => {
+    if (UPDATE_CHECK_DISABLED) return Promise.resolve(null);
+    if (!opts.updateStateStore) return Promise.resolve(null);
+    return checkForUpdate({
       currentVersion: serverVersion,
       stateStore: opts.updateStateStore,
       telemetry,
@@ -729,6 +735,7 @@ export function buildServer(
       opts.logger?.warn?.(
         `update_check.unexpected ${err?.message ?? err}`
       );
+      return null;
     });
   };
 
@@ -748,7 +755,11 @@ export function buildServer(
   // The once-per-version gate is shared across both channels: account_status
   // sets it too, so an early account_status call won't double-prompt via the
   // next ordinary tool call, and vice-versa.
-  const maybeAttachUpdate = (toolName: string, result: unknown): void => {
+  const maybeAttachUpdate = async (
+    toolName: string,
+    result: unknown,
+    updateCheck: Promise<UpdateInfo | null>
+  ): Promise<void> => {
     if (!opts.updateStateStore) return; // gate symmetric with tool registration
     if (
       result === null ||
@@ -757,10 +768,6 @@ export function buildServer(
     ) {
       return;
     }
-    const info: UpdateInfo | null = getCachedUpdateInfo();
-    if (!info) return;
-
-    const isAccountStatus = toolName === "leadbay_account_status";
     // Error envelopes ({ error: true, ... }) are serialized by the CallTool
     // handler as a bare { content, isError } — they carry NO _meta or
     // structuredContent through to the client. Attaching here would write the
@@ -770,12 +777,29 @@ export function buildServer(
     // missing _triggered_by, any 4xx). Skip those entirely — the next
     // non-error tool result carries the proposal instead. (account_status
     // never returns this envelope shape in practice, but the guard is general.)
+    // Checked BEFORE awaiting the check so an erroring call neither blocks nor
+    // burns the gate.
     if (
       (result as Record<string, unknown>).error === true
     ) {
       return;
     }
 
+    // First-call race (product#3742 review): the boot-time check is
+    // fire-and-forget, so a fast first tool call can reach here before the
+    // cache is populated — and if that's the only call of the session, the
+    // proposal never surfaces. When the cache is still cold, await the
+    // in-flight check ONCE before concluding there's nothing to show. This
+    // overlaps the tool's own I/O that already elapsed, is bounded by
+    // checkForUpdate's internal 5s fetch timeout, and is skipped entirely in
+    // the steady state where the cache is already warm (the common case).
+    let info: UpdateInfo | null = getCachedUpdateInfo();
+    if (!info) {
+      info = await updateCheck;
+    }
+    if (!info) return;
+
+    const isAccountStatus = toolName === "leadbay_account_status";
     const alreadyPrompted = promptedVersionsThisSession.has(info.latest_version);
     // account_status always reflects the cache (its schema promises the
     // field); other tools only piggy-back the first time per version so we
@@ -948,11 +972,15 @@ export function buildServer(
     // gating moves to the stderr-write step.
     const callStart = Date.now();
     const name = req.params.name;
-    // Fire-and-forget update re-check on every tool call. checkForUpdate
-    // itself returns immediately if last_check_time is within 24h, so
-    // the steady-state cost is one disk read. When stale, one GitHub
-    // roundtrip — never awaited, never blocks the tool.
-    maybeRefreshUpdate();
+    // Kick off the update re-check at the TOP of the handler so it runs
+    // concurrently with tool.execute() below. checkForUpdate throttles to 24h
+    // (steady-state cost = one disk read) and never blocks the tool itself.
+    // We keep the promise so maybeAttachUpdate can OPTIONALLY await it before
+    // concluding "no update to show" — closes the fresh-session race where the
+    // first tool call would otherwise beat the boot-time check to the cache
+    // (product#3742 review). The await only happens when the cache is still
+    // cold, and overlaps the tool's own I/O that already elapsed.
+    const updateCheckPromise = maybeRefreshUpdate();
     const tool = toolByName.get(name);
     if (!tool) {
       return {
@@ -1090,8 +1118,10 @@ export function buildServer(
       // Inject `update_available` into account_status returns when an
       // upgrade is cached. Other tools pass through untouched. Done
       // BEFORE the error/markdown/json branching so the field appears
-      // in either the JSON serialization OR structuredContent.
-      maybeAttachUpdate(name, result);
+      // in either the JSON serialization OR structuredContent. Awaited so a
+      // cold cache on the first call can settle the in-flight check before we
+      // conclude there's no update to show (no-op once the cache is warm).
+      await maybeAttachUpdate(name, result, updateCheckPromise);
       // Inject `_meta.notifications` into ANY tool result when the inbox
       // is non-empty. Same timing as maybeAttachUpdate so the field rides
       // along regardless of whether the response is markdown or JSON.
