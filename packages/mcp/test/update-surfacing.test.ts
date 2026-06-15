@@ -79,6 +79,23 @@ const pingTool: Tool = {
   execute: async () => ({ pong: true }),
 };
 
+// Returns a Leadbay error envelope — the CallTool handler serializes these as
+// a bare { content, isError } with NO _meta / structuredContent. The update
+// proposal must NOT be consumed by such a result (regression guard for the
+// "first call errors → proposal invisible all session" bug).
+const errorTool: Tool = {
+  name: "leadbay_error_test",
+  description: "test-only error",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  annotations: { readOnlyHint: true },
+  execute: async () => ({
+    error: true as const,
+    code: "QUOTA_EXCEEDED",
+    message: "quota hit",
+    hint: "retry later",
+  }),
+};
+
 async function seedUpdateCache(stateStore: UpdateStateStore) {
   await checkForUpdate({
     currentVersion: CURRENT,
@@ -96,7 +113,7 @@ async function connectWithUpdates(stateStore: UpdateStateStore) {
     includeWrite: true,
     version: CURRENT,
     updateStateStore: stateStore,
-    extraTools: [pingTool],
+    extraTools: [pingTool, errorTool],
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const mcpClient = new Client({ name: "test", version: "0.0.1" }, {});
@@ -155,6 +172,27 @@ describe("proactive update surfacing — non-account_status tools (product#3742)
 
     const result = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
     expect((result.structuredContent as any)._meta?.update_available).toBeUndefined();
+  });
+
+  // Regression: an error envelope is serialized as a bare { content, isError }
+  // with no _meta — so attaching there would burn the once-per-version gate
+  // while dropping the field, making the proposal invisible for the rest of
+  // the session. The proposal must survive a first-call error and surface on
+  // the next non-error tool result instead.
+  it("does NOT consume the proposal when the first tool call errors", async () => {
+    const store = newStore();
+    await seedUpdateCache(store);
+    const { mcpClient } = await connectWithUpdates(store);
+
+    const errored = await mcpClient.callTool({ name: "leadbay_error_test", arguments: {} });
+    expect(errored.isError).toBe(true);
+
+    // The next successful tool call must still carry the proposal.
+    const ok = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
+    expect((ok.structuredContent as any)._meta?.update_available).toMatchObject({
+      latest_version: LATEST,
+      install_url: DXT_URL,
+    });
   });
 });
 

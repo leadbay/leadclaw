@@ -761,6 +761,21 @@ export function buildServer(
     if (!info) return;
 
     const isAccountStatus = toolName === "leadbay_account_status";
+    // Error envelopes ({ error: true, ... }) are serialized by the CallTool
+    // handler as a bare { content, isError } — they carry NO _meta or
+    // structuredContent through to the client. Attaching here would write the
+    // field onto an object that's about to be dropped AND burn the
+    // once-per-version gate, making the proposal invisible for the rest of the
+    // session if the first ordinary tool call happens to error (a quota hit, a
+    // missing _triggered_by, any 4xx). Skip those entirely — the next
+    // non-error tool result carries the proposal instead. (account_status
+    // never returns this envelope shape in practice, but the guard is general.)
+    if (
+      (result as Record<string, unknown>).error === true
+    ) {
+      return;
+    }
+
     const alreadyPrompted = promptedVersionsThisSession.has(info.latest_version);
     // account_status always reflects the cache (its schema promises the
     // field); other tools only piggy-back the first time per version so we
