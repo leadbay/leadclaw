@@ -41,6 +41,7 @@ import type { UpdateStateStore } from "./update-state.js";
 import {
   checkForUpdate,
   getCachedUpdateInfo,
+  getInFlightCheck,
   type UpdateInfo,
 } from "./update-check.js";
 import { buildAcknowledgeUpdateTool } from "./update-tool.js";
@@ -709,24 +710,18 @@ export function buildServer(
   const promptedVersionsThisSession = new Set<string>();
   const serverVersion = opts.version ?? "0.0.0-dev";
 
-  // Fire-and-forget background re-check on every tool call. The
-  // checkForUpdate() itself throttles to 24h via state.last_check_time,
-  // so the cost when state is fresh is one disk read; when stale, one
-  // GitHub roundtrip. The in-flight guard inside update-check.ts
-  // prevents concurrent tool calls from racing. Never blocks the
-  // current call: the freshest result is what the NEXT account_status
-  // call sees, not this one. Opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
+  // Fire-and-forget background re-check on every tool call. checkForUpdate
+  // throttles to 24h via state.last_check_time (steady-state cost = one disk
+  // read; stale = one GitHub roundtrip) and de-dupes concurrent callers onto a
+  // single shared in-flight promise. NEVER awaited here — it must not block the
+  // tool. The surfacing path (maybeAttachUpdate) separately, and with a tight
+  // timeout, peeks at any already-running check via getInFlightCheck().
+  // Opt-out: LEADBAY_UPDATE_CHECK_DISABLED=1.
   const UPDATE_CHECK_DISABLED = process.env.LEADBAY_UPDATE_CHECK_DISABLED === "1";
-  // Returns the in-flight check promise so the caller can OPTIONALLY await it
-  // before deciding a response carries no update (see the first-call race
-  // below). Resolves to null when the check is disabled / no store. Never
-  // rejects — failures are logged and swallowed. checkForUpdate has its own
-  // 24h throttle + 5s fetch timeout + concurrent-call in-flight guard, so
-  // awaiting this is cheap in steady state and bounded in the worst case.
-  const maybeRefreshUpdate = (): Promise<UpdateInfo | null> => {
-    if (UPDATE_CHECK_DISABLED) return Promise.resolve(null);
-    if (!opts.updateStateStore) return Promise.resolve(null);
-    return checkForUpdate({
+  const maybeRefreshUpdate = (): void => {
+    if (UPDATE_CHECK_DISABLED) return;
+    if (!opts.updateStateStore) return;
+    void checkForUpdate({
       currentVersion: serverVersion,
       stateStore: opts.updateStateStore,
       telemetry,
@@ -735,9 +730,14 @@ export function buildServer(
       opts.logger?.warn?.(
         `update_check.unexpected ${err?.message ?? err}`
       );
-      return null;
     });
   };
+
+  // Max time the response path will wait on an ALREADY-RUNNING update check
+  // before giving up and attaching nothing this call (the next call carries it
+  // once the cache is warm). Bounds the worst case so a slow/blocked GitHub
+  // never holds a tool response near checkForUpdate's full 5s fetch timeout.
+  const UPDATE_SURFACE_WAIT_MS = 1500;
 
   // Surface a pending update on tool results so the user actually sees the
   // proposal on a fresh session (product#3742). Two delivery channels:
@@ -757,8 +757,7 @@ export function buildServer(
   // next ordinary tool call, and vice-versa.
   const maybeAttachUpdate = async (
     toolName: string,
-    result: unknown,
-    updateCheck: Promise<UpdateInfo | null>
+    result: unknown
   ): Promise<void> => {
     if (!opts.updateStateStore) return; // gate symmetric with tool registration
     if (
@@ -788,14 +787,32 @@ export function buildServer(
     // First-call race (product#3742 review): the boot-time check is
     // fire-and-forget, so a fast first tool call can reach here before the
     // cache is populated — and if that's the only call of the session, the
-    // proposal never surfaces. When the cache is still cold, await the
-    // in-flight check ONCE before concluding there's nothing to show. This
-    // overlaps the tool's own I/O that already elapsed, is bounded by
-    // checkForUpdate's internal 5s fetch timeout, and is skipped entirely in
-    // the steady state where the cache is already warm (the common case).
+    // proposal never surfaces. When the cache is cold, wait for an
+    // ALREADY-RUNNING check (the boot fetch or this call's own refresh) to
+    // settle — but only that, never a fresh fetch, and only up to
+    // UPDATE_SURFACE_WAIT_MS. This means:
+    //   * warm cache (steady state) → no wait at all;
+    //   * cold cache + check in flight → wait briefly for the real result,
+    //     overlapping the tool's own I/O that already elapsed;
+    //   * cold cache + offline/blocked GitHub → the bounded wait expires (or
+    //     no check is in flight at all) and we attach nothing, so an offline
+    //     user's UNRELATED tool calls never hang on a doomed fetch. The next
+    //     call carries the proposal once the cache warms.
     let info: UpdateInfo | null = getCachedUpdateInfo();
     if (!info) {
-      info = await updateCheck;
+      const inflight = getInFlightCheck();
+      if (inflight) {
+        info = await Promise.race([
+          inflight,
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), UPDATE_SURFACE_WAIT_MS)
+          ),
+        ]);
+        // The race may have resolved via timeout while the check populated the
+        // cache a beat later, or the shared promise resolved to the info
+        // directly — prefer the freshest cache read.
+        info = getCachedUpdateInfo() ?? info;
+      }
     }
     if (!info) return;
 
@@ -973,14 +990,12 @@ export function buildServer(
     const callStart = Date.now();
     const name = req.params.name;
     // Kick off the update re-check at the TOP of the handler so it runs
-    // concurrently with tool.execute() below. checkForUpdate throttles to 24h
-    // (steady-state cost = one disk read) and never blocks the tool itself.
-    // We keep the promise so maybeAttachUpdate can OPTIONALLY await it before
-    // concluding "no update to show" — closes the fresh-session race where the
-    // first tool call would otherwise beat the boot-time check to the cache
-    // (product#3742 review). The await only happens when the cache is still
-    // cold, and overlaps the tool's own I/O that already elapsed.
-    const updateCheckPromise = maybeRefreshUpdate();
+    // concurrently with tool.execute() below. Fire-and-forget — it never blocks
+    // the tool. checkForUpdate de-dupes onto a single shared in-flight promise,
+    // so this and the boot-time force-check converge; maybeAttachUpdate peeks at
+    // that shared promise (bounded) to close the fresh-session race without
+    // stalling offline callers (product#3742 review).
+    maybeRefreshUpdate();
     const tool = toolByName.get(name);
     if (!tool) {
       return {
@@ -1121,7 +1136,7 @@ export function buildServer(
       // in either the JSON serialization OR structuredContent. Awaited so a
       // cold cache on the first call can settle the in-flight check before we
       // conclude there's no update to show (no-op once the cache is warm).
-      await maybeAttachUpdate(name, result, updateCheckPromise);
+      await maybeAttachUpdate(name, result);
       // Inject `_meta.notifications` into ANY tool result when the inbox
       // is non-empty. Same timing as maybeAttachUpdate so the field rides
       // along regardless of whether the response is markdown or JSON.

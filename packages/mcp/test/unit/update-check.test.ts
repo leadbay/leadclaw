@@ -276,7 +276,7 @@ describe("checkForUpdate — 200 OK newer release", () => {
 });
 
 describe("checkForUpdate — in-flight guard", () => {
-  it("returns the cached value (no HTTP) when a check is already running", async () => {
+  it("de-dupes onto a single shared promise when a check is already running", async () => {
     const store = new UpdateStateStore({ backend: "memory" });
     const tel = makeTelemetry();
     let resolveFirst!: () => void;
@@ -297,8 +297,8 @@ describe("checkForUpdate — in-flight guard", () => {
           html_url: "https://example.com/0.10.2",
           assets: [
             {
-              name: "leadbay-0.10.2.mcpb",
-              browser_download_url: "https://example.com/0.10.2.mcpb",
+              name: "leadbay-0.10.2.dxt",
+              browser_download_url: "https://example.com/0.10.2.dxt",
             },
           ],
         }),
@@ -312,19 +312,32 @@ describe("checkForUpdate — in-flight guard", () => {
       now: () => 1,
       fetchImpl,
     });
-    // Second call lands while the first is still awaiting fetch — the
-    // guard should short-circuit and return cachedInfo without firing.
-    const second = await checkForUpdate({
+    // Second call lands while the first is still awaiting fetch. It must NOT
+    // fire a second fetch, AND it must share the SAME in-flight promise (the
+    // fix for the boot-race: a concurrent caller can now await the real result
+    // instead of getting an instant stale-null). We do NOT await it yet — that
+    // would deadlock until resolveFirst() below.
+    const second = checkForUpdate({
       currentVersion: "0.10.1",
       stateStore: store,
       telemetry: tel,
       now: () => 1,
       fetchImpl,
     });
-    expect(second).toBeNull(); // nothing cached yet — first hasn't resolved
-    expect(fetchCalls).toBe(1);
+    expect(second).toBe(first); // same shared in-flight promise — no 2nd fetch
+    // Let the first call's pre-fetch microtasks (stateStore.read) flush so the
+    // single fetch has actually been invoked before we assert the count.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchCalls).toBe(1); // de-duped — exactly one fetch in flight
+
     resolveFirst();
-    await first;
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    // Both resolve to the real upgrade once the single fetch settles.
+    expect(firstResult).toMatchObject({
+      latest_version: "0.10.2",
+      install_url: "https://example.com/0.10.2.dxt",
+    });
+    expect(secondResult).toEqual(firstResult);
     expect(fetchCalls).toBe(1);
   });
 });

@@ -42,20 +42,33 @@ export interface UpdateInfo {
 }
 
 let cachedInfo: UpdateInfo | null = null;
-// Guards against concurrent fetches. When many tool calls land within
-// the same second, all of them see "stale" — without this gate they'd
-// all kick off a GitHub fetch in parallel. With the gate, the first
-// call fires; the rest skip silently.
-let checkInFlight = false;
+// The live in-flight check, or null when none is running. Concurrent callers
+// (e.g. the boot-time force-check still fetching while the first tool call
+// lands) AWAIT this same promise instead of getting the stale `cachedInfo`.
+// That's what lets the response path actually wait for the boot fetch to
+// settle rather than concluding "no update" against a not-yet-populated cache.
+// Before this, a boolean guard returned cachedInfo immediately to the second
+// caller — defeating the await and re-opening the fresh-session race.
+let inFlightCheck: Promise<UpdateInfo | null> | null = null;
 
 export function getCachedUpdateInfo(): UpdateInfo | null {
   return cachedInfo;
 }
 
+/**
+ * The check currently in flight, or null if none. The server's response path
+ * awaits THIS (never kicks off a new fetch) so it only ever blocks on work
+ * that's already happening — an offline/cold caller with no running check gets
+ * null synchronously and never stalls a tool response on a doomed fetch.
+ */
+export function getInFlightCheck(): Promise<UpdateInfo | null> | null {
+  return inFlightCheck;
+}
+
 /** Test-only — reset the module singleton between test cases. */
 export function __resetUpdateCacheForTests(): void {
   cachedInfo = null;
-  checkInFlight = false;
+  inFlightCheck = null;
 }
 
 const RELEASES_LATEST_URL =
@@ -169,16 +182,18 @@ export interface CheckForUpdateOpts {
  *
  * Returns the resulting UpdateInfo (or null if no update / suppressed).
  */
-export async function checkForUpdate(
+export function checkForUpdate(
   opts: CheckForUpdateOpts
 ): Promise<UpdateInfo | null> {
-  if (checkInFlight) return cachedInfo;
-  checkInFlight = true;
-  try {
-    return await doCheck(opts);
-  } finally {
-    checkInFlight = false;
-  }
+  // A check is already running — share its promise so the caller can await the
+  // actual result (e.g. a per-call refresh awaiting the boot fetch), instead
+  // of resolving instantly to a possibly-stale cachedInfo.
+  if (inFlightCheck) return inFlightCheck;
+  const p = doCheck(opts).finally(() => {
+    if (inFlightCheck === p) inFlightCheck = null;
+  });
+  inFlightCheck = p;
+  return p;
 }
 
 async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {

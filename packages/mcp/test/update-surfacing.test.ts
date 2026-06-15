@@ -311,4 +311,98 @@ describe("proactive update surfacing — first-call race (product#3742 review)",
       install_url: DXT_URL,
     });
   });
+
+  it("shares the boot check's in-flight promise — first call awaits the real result", async () => {
+    const store = newStore();
+    await store.write({
+      last_check_time: Date.now(),
+      latest_known_version: LATEST,
+      latest_known_install_url: DXT_URL,
+      latest_known_release_url: RELEASE_URL,
+      suppressed_versions: [],
+    });
+
+    // Simulate the boot-time force-check that's STILL FETCHING when the first
+    // tool call lands. A slow fetchImpl keeps it in flight; force:true bypasses
+    // the throttle so it genuinely awaits the wire. The server's per-call
+    // refresh must de-dupe onto THIS promise (not start its own / not get an
+    // instant stale-null), and maybeAttachUpdate awaits it.
+    let releaseFetch!: () => void;
+    const fetchGate = new Promise<void>((r) => (releaseFetch = r));
+    const bootCheck = checkForUpdate({
+      currentVersion: CURRENT,
+      stateStore: store,
+      telemetry: {} as any,
+      force: true,
+      releasesUrl: "https://example.test/releases/latest",
+      fetchImpl: (async () => {
+        await fetchGate;
+        const headers = new Headers();
+        headers.set("etag", '"boot"');
+        return {
+          status: 200,
+          headers,
+          json: async () => ({
+            tag_name: `mcp-v${LATEST}`,
+            html_url: RELEASE_URL,
+            assets: [{ name: "leadbay-0.20.0.dxt", browser_download_url: DXT_URL }],
+          }),
+        } as unknown as Response;
+      }) as typeof fetch,
+    });
+
+    const { mcpClient } = await connectWithUpdates(store);
+    // Cache still cold — boot fetch is gated open.
+    expect(getCachedUpdateInfo()).toBeNull();
+
+    // Release the boot fetch a beat after the call starts, so the first tool
+    // result genuinely waits on the shared in-flight promise.
+    const callP = mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
+    setTimeout(() => releaseFetch(), 20);
+    const result = await callP;
+    await bootCheck;
+
+    expect((result.structuredContent as any)._meta?.update_available).toMatchObject({
+      latest_version: LATEST,
+      install_url: DXT_URL,
+    });
+  });
+
+  it("does NOT hold a tool response past the surface-wait bound on a slow check (P2 regression)", async () => {
+    // A check that resolves far slower than the response can afford to wait
+    // (store read parked well beyond the 1500ms surface-wait). This stands in
+    // for the offline/cold case where the per-call fetch would otherwise hold
+    // the response near checkForUpdate's full 5s timeout. maybeAttachUpdate
+    // must give up at the bound, return promptly, and let a LATER call carry
+    // the proposal once the cache warms — never stall an unrelated tool.
+    class VerySlowReadStore extends UpdateStateStore {
+      constructor() {
+        super({ backend: "memory" });
+      }
+      async read() {
+        await new Promise((r) => setTimeout(r, 2200)); // > 1500ms surface-wait
+        return super.read();
+      }
+    }
+    const store = new VerySlowReadStore();
+    await store.write({
+      last_check_time: Date.now(),
+      latest_known_version: LATEST,
+      latest_known_install_url: DXT_URL,
+      latest_known_release_url: RELEASE_URL,
+      suppressed_versions: [],
+    });
+
+    const { mcpClient } = await connectWithUpdates(store);
+
+    const started = Date.now();
+    const result = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
+    const elapsed = Date.now() - started;
+
+    // The slow check didn't surface in time, so nothing is attached this call —
+    // and crucially the response was NOT held for the full 2.2s read. Ceiling
+    // is the 1500ms bound plus generous slack to stay non-flaky.
+    expect((result.structuredContent as any)._meta?.update_available).toBeUndefined();
+    expect(elapsed).toBeLessThan(3000);
+  });
 });
