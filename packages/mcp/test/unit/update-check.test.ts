@@ -118,7 +118,7 @@ describe("checkForUpdate — throttle", () => {
     await store.write({
       last_check_time: now - 60_000, // 60s ago
       latest_known_version: "0.10.2",
-      latest_known_mcpb_url: "https://example.com/leadbay-0.10.2.mcpb",
+      latest_known_install_url: "https://example.com/leadbay-0.10.2.mcpb",
       latest_known_release_url: "https://example.com/releases/0.10.2",
       suppressed_versions: [],
     });
@@ -133,7 +133,7 @@ describe("checkForUpdate — throttle", () => {
     });
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(info?.latest_version).toBe("0.10.2");
-    expect(info?.mcpb_url).toBe("https://example.com/leadbay-0.10.2.mcpb");
+    expect(info?.install_url).toBe("https://example.com/leadbay-0.10.2.mcpb");
     expect(getCachedUpdateInfo()?.latest_version).toBe("0.10.2");
   });
 
@@ -147,7 +147,7 @@ describe("checkForUpdate — throttle", () => {
     await store.write({
       last_check_time: now - 60_000, // 60s ago — well within 24h
       latest_known_version: "0.10.2",
-      latest_known_mcpb_url: "https://example.com/leadbay-0.10.2.mcpb",
+      latest_known_install_url: "https://example.com/leadbay-0.10.2.mcpb",
       latest_known_release_url: "https://example.com/releases/0.10.2",
       suppressed_versions: [],
     });
@@ -176,7 +176,7 @@ describe("checkForUpdate — throttle", () => {
       force: true,
     });
     expect(info?.latest_version).toBe("0.10.3");
-    expect(info?.mcpb_url).toBe("https://example.com/0.10.3.mcpb");
+    expect(info?.install_url).toBe("https://example.com/0.10.3.mcpb");
     const s = await store.read();
     expect(s.latest_known_version).toBe("0.10.3");
     expect(s.last_check_time).toBe(now);
@@ -184,7 +184,7 @@ describe("checkForUpdate — throttle", () => {
 });
 
 describe("checkForUpdate — 200 OK newer release", () => {
-  it("parses tag_name, picks the .mcpb asset, persists state, populates cache", async () => {
+  it("parses tag_name, prefers the .dxt asset, persists state, populates cache", async () => {
     const store = new UpdateStateStore({ backend: "memory" });
     const tel = makeTelemetry();
     const fetchImpl = fakeFetch([
@@ -212,12 +212,13 @@ describe("checkForUpdate — 200 OK newer release", () => {
     expect(info).toEqual({
       current_version: "0.10.1",
       latest_version: "0.10.2",
-      mcpb_url: "https://gh.example/0.10.2.mcpb",
+      // .dxt preferred over .mcpb when both assets are published.
+      install_url: "https://gh.example/0.10.2.dxt",
       release_url: "https://github.com/leadbay/leadclaw/releases/tag/mcp-v0.10.2",
     });
     const s = await store.read();
     expect(s.latest_known_version).toBe("0.10.2");
-    expect(s.latest_known_mcpb_url).toBe("https://gh.example/0.10.2.mcpb");
+    expect(s.latest_known_install_url).toBe("https://gh.example/0.10.2.dxt");
     expect(s.etag).toBe('W/"new-etag"');
     expect(s.last_check_time).toBe(now);
     expect(tel.checks).toEqual([
@@ -249,7 +250,7 @@ describe("checkForUpdate — 200 OK newer release", () => {
     expect(getCachedUpdateInfo()).toBeNull();
   });
 
-  it("falls back to .dxt asset when no .mcpb is published", async () => {
+  it("falls back to .mcpb asset when no .dxt is published", async () => {
     const store = new UpdateStateStore({ backend: "memory" });
     const fetchImpl = fakeFetch([
       {
@@ -258,7 +259,7 @@ describe("checkForUpdate — 200 OK newer release", () => {
           tag_name: "mcp-v0.10.2",
           html_url: "https://example.com/releases/0.10.2",
           assets: [
-            { name: "leadbay-0.10.2.dxt", browser_download_url: "https://example.com/0.10.2.dxt" },
+            { name: "leadbay-0.10.2.mcpb", browser_download_url: "https://example.com/0.10.2.mcpb" },
           ],
         },
       },
@@ -270,7 +271,7 @@ describe("checkForUpdate — 200 OK newer release", () => {
       now: () => 1,
       fetchImpl,
     });
-    expect(info?.mcpb_url).toBe("https://example.com/0.10.2.dxt");
+    expect(info?.install_url).toBe("https://example.com/0.10.2.mcpb");
   });
 });
 
@@ -334,7 +335,7 @@ describe("checkForUpdate — 304 Not Modified", () => {
     await store.write({
       last_check_time: 0,
       latest_known_version: "0.10.2",
-      latest_known_mcpb_url: "https://example.com/leadbay-0.10.2.mcpb",
+      latest_known_install_url: "https://example.com/leadbay-0.10.2.mcpb",
       latest_known_release_url: "https://example.com/releases/0.10.2",
       etag: 'W/"prev"',
       suppressed_versions: [],

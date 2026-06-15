@@ -178,13 +178,15 @@ function buildUpdateAvailableParagraph(has: (name: string) => boolean): string |
   // omits updateStateStore (offline embeds, tests).
   if (!has("leadbay_acknowledge_update")) return null;
   return (
-    "MCP auto-update: when `leadbay_account_status` returns an `update_available` field " +
-    "(`{ current_version, latest_version, mcpb_url, release_url }`), a newer MCP server release " +
-    "is published and the user has NOT suppressed it. Surface a prompt via `ask_user_input_v0` " +
+    "MCP auto-update: an `update_available` field (`{ current_version, latest_version, install_url, release_url }`) " +
+    "means a newer MCP server release is published and the user has NOT suppressed it. It appears in TWO places: " +
+    "as a top-level field on `leadbay_account_status`, AND on `_meta.update_available` of the FIRST other tool " +
+    "result in a session while an update is pending (so a fresh session surfaces the proposal even without an " +
+    "account_status call). Whenever you see it on ANY response, surface a prompt via `ask_user_input_v0` " +
     "with EXACTLY these three options: \"Install now\", \"Remind me tomorrow\", \"Skip this version\". " +
     "Map the user's choice to `leadbay_acknowledge_update({ action: 'install' | 'remind_tomorrow' | 'skip', version: latest_version })`. " +
-    "On 'install', the tool returns `mcpb_url` — render it as a clickable markdown link the user " +
-    "can open in Claude Desktop (the .mcpb extension triggers the native installer). The user does " +
+    "On 'install', the tool returns `install_url` — render it as a clickable markdown link the user " +
+    "can open in Claude Desktop (the .dxt extension triggers the native installer). The user does " +
     "NOT need to restart anything before clicking — the new server takes effect on the next MCP " +
     "session. Prompt the user ONCE per session per version — don't re-prompt within the same chat " +
     "after they've acknowledged."
@@ -730,8 +732,23 @@ export function buildServer(
     });
   };
 
+  // Surface a pending update on tool results so the user actually sees the
+  // proposal on a fresh session (product#3742). Two delivery channels:
+  //
+  //   * leadbay_account_status — ALWAYS carries `update_available` when a
+  //     newer release is cached (the tool documents the field in its
+  //     outputSchema, so a top-level write is the contract there).
+  //   * ANY other tool — carries `update_available` on `_meta` for the FIRST
+  //     response of the session that lands while an upgrade is cached, gated
+  //     by promptedVersionsThisSession so it surfaces ONCE per version. This
+  //     is what closes the issue's gap: the boot-time check populates the
+  //     cache, but a fresh session rarely calls account_status, so without
+  //     this the proposal never reached the user.
+  //
+  // The once-per-version gate is shared across both channels: account_status
+  // sets it too, so an early account_status call won't double-prompt via the
+  // next ordinary tool call, and vice-versa.
   const maybeAttachUpdate = (toolName: string, result: unknown): void => {
-    if (toolName !== "leadbay_account_status") return;
     if (!opts.updateStateStore) return; // gate symmetric with tool registration
     if (
       result === null ||
@@ -742,8 +759,38 @@ export function buildServer(
     }
     const info: UpdateInfo | null = getCachedUpdateInfo();
     if (!info) return;
-    (result as Record<string, unknown>).update_available = info;
-    if (!promptedVersionsThisSession.has(info.latest_version)) {
+
+    const isAccountStatus = toolName === "leadbay_account_status";
+    const alreadyPrompted = promptedVersionsThisSession.has(info.latest_version);
+    // account_status always reflects the cache (its schema promises the
+    // field); other tools only piggy-back the first time per version so we
+    // don't decorate every single response for the rest of the session.
+    if (!isAccountStatus && alreadyPrompted) return;
+
+    if (isAccountStatus) {
+      (result as Record<string, unknown>).update_available = info;
+    } else {
+      // Mirror maybeAttachNotifications: write to the inner structured payload
+      // when the result is a markdown envelope, else the outer object — so the
+      // field rides along whether the client reads structuredContent or JSON.
+      const envelope = result as Record<string, unknown>;
+      const target =
+        envelope.__markdown_envelope === true &&
+        envelope.structured !== null &&
+        typeof envelope.structured === "object" &&
+        !Array.isArray(envelope.structured)
+          ? (envelope.structured as Record<string, unknown>)
+          : envelope;
+      const existingMeta =
+        target._meta &&
+        typeof target._meta === "object" &&
+        !Array.isArray(target._meta)
+          ? (target._meta as Record<string, unknown>)
+          : {};
+      target._meta = { ...existingMeta, update_available: info };
+    }
+
+    if (!alreadyPrompted) {
       promptedVersionsThisSession.add(info.latest_version);
       telemetry.captureUpdatePrompted?.({
         current_version: serverVersion,

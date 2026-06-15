@@ -35,8 +35,8 @@ import type { TelemetryHandle } from "./telemetry.js";
 export interface UpdateInfo {
   current_version: string;
   latest_version: string;
-  /** Direct download URL for the .mcpb asset (Claude Desktop installer). */
-  mcpb_url: string;
+  /** Direct download URL for the installer asset (`.dxt`, falling back to `.mcpb`). */
+  install_url: string;
   /** GitHub release page (changelog). */
   release_url: string;
 }
@@ -130,17 +130,17 @@ interface GithubRelease {
   assets?: Array<{ name?: string; browser_download_url?: string }>;
 }
 
-function pickMcpbAsset(rel: GithubRelease): string | undefined {
+function pickInstallAsset(rel: GithubRelease): string | undefined {
   if (!Array.isArray(rel.assets)) return undefined;
-  // Prefer .mcpb; fall back to .dxt (older releases only had .dxt).
-  const mcpb = rel.assets.find(
-    (a) => typeof a.name === "string" && a.name.endsWith(".mcpb")
-  );
-  if (mcpb?.browser_download_url) return mcpb.browser_download_url;
+  // Prefer .dxt; fall back to .mcpb when a release only ships the latter.
   const dxt = rel.assets.find(
     (a) => typeof a.name === "string" && a.name.endsWith(".dxt")
   );
-  return dxt?.browser_download_url;
+  if (dxt?.browser_download_url) return dxt.browser_download_url;
+  const mcpb = rel.assets.find(
+    (a) => typeof a.name === "string" && a.name.endsWith(".mcpb")
+  );
+  return mcpb?.browser_download_url;
 }
 
 export interface CheckForUpdateOpts {
@@ -189,12 +189,12 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
   const state = await opts.stateStore.read();
 
   const within = now() - state.last_check_time < CHECK_THROTTLE_MS;
-  if (!opts.force && within && state.latest_known_version && state.latest_known_mcpb_url && state.latest_known_release_url) {
+  if (!opts.force && within && state.latest_known_version && state.latest_known_install_url && state.latest_known_release_url) {
     // Throttled — seed cache from disk + return.
     const cached = buildInfoIfUpgrade(
       currentVersion,
       state.latest_known_version,
-      state.latest_known_mcpb_url,
+      state.latest_known_install_url,
       state.latest_known_release_url,
       state.suppressed_versions,
       state.remind_until,
@@ -252,19 +252,19 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
   }
 
   let latestVersion: string | undefined;
-  let mcpbUrl: string | undefined;
+  let installUrl: string | undefined;
   let releaseUrl: string | undefined;
   if (status === 200 && body) {
     const parsed = body.tag_name ? parseTagName(body.tag_name) : null;
     if (parsed) {
       latestVersion = parsed;
-      mcpbUrl = pickMcpbAsset(body);
+      installUrl = pickInstallAsset(body);
       releaseUrl = body.html_url;
     }
   } else {
     // 304 — keep what we had on disk.
     latestVersion = state.latest_known_version;
-    mcpbUrl = state.latest_known_mcpb_url;
+    installUrl = state.latest_known_install_url;
     releaseUrl = state.latest_known_release_url;
   }
 
@@ -273,7 +273,7 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
     last_check_time: now(),
     etag: nextEtag,
     latest_known_version: latestVersion ?? cur.latest_known_version,
-    latest_known_mcpb_url: mcpbUrl ?? cur.latest_known_mcpb_url,
+    latest_known_install_url: installUrl ?? cur.latest_known_install_url,
     latest_known_release_url: releaseUrl ?? cur.latest_known_release_url,
   }));
 
@@ -285,7 +285,7 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
   const info = buildInfoIfUpgrade(
     currentVersion,
     persisted.latest_known_version,
-    persisted.latest_known_mcpb_url,
+    persisted.latest_known_install_url,
     persisted.latest_known_release_url,
     persisted.suppressed_versions,
     persisted.remind_until,
@@ -298,20 +298,20 @@ async function doCheck(opts: CheckForUpdateOpts): Promise<UpdateInfo | null> {
 function buildInfoIfUpgrade(
   currentVersion: string,
   latestVersion: string | undefined,
-  mcpbUrl: string | undefined,
+  installUrl: string | undefined,
   releaseUrl: string | undefined,
   suppressed: string[],
   remindUntil: number | undefined,
   nowMs: number
 ): UpdateInfo | null {
-  if (!latestVersion || !mcpbUrl || !releaseUrl) return null;
+  if (!latestVersion || !installUrl || !releaseUrl) return null;
   if (compareSemver(latestVersion, currentVersion) <= 0) return null;
   if (suppressed.includes(latestVersion)) return null;
   if (remindUntil && remindUntil > nowMs) return null;
   return {
     current_version: currentVersion,
     latest_version: latestVersion,
-    mcpb_url: mcpbUrl,
+    install_url: installUrl,
     release_url: releaseUrl,
   };
 }

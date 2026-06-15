@@ -1,5 +1,10 @@
 # Changelog — @leadbay/mcp
 
+## 0.20.0 — 2026-06-15
+
+- **Proactive update proposal on a fresh session** (product#3742): the auto-update check already ran at boot, but the resulting proposal only reached the user if the agent happened to call `leadbay_account_status` — which a fresh session rarely does, so the "newer version available" prompt was effectively invisible. The cached `update_available` block now also rides along on `_meta.update_available` of the **first ordinary tool result** of a session while an upgrade is pending, gated once-per-version so it surfaces exactly once. `leadbay_account_status` keeps carrying it as a top-level field. The server-instruction paragraph now tells the agent to surface the `ask_user_input_v0` prompt whenever it sees the field on *any* response.
+- **Installer asset is now `.dxt`, not `.mcpb`**: the release-asset picker prefers the `.dxt` bundle (falling back to `.mcpb` only when a release ships no `.dxt`). The field is renamed `mcpb_url` → `install_url` across `update_available`, the `leadbay_acknowledge_update` result, and the persisted update-state — with forward-migration of the legacy `latest_known_mcpb_url` key so existing users don't lose their cache.
+
 ## 0.19.2 — 2026-06-10
 
 - **Stop paging Sentry on a missing `_triggered_by`**: a composite tool called without `_triggered_by` is a recoverable agent mistake — the host just re-calls with the field set. The guard used to `throw` an `{error:true, code:"LAST_PROMPT_REQUIRED"}` envelope into the shared catch, where `isLeadbayBusinessError` matched it and fired `captureException`, auto-opening a top-priority Sentry/GitHub bug (product#3718) on every dropped field. The guard now returns the `isError` envelope directly. Behavior toward the LLM is unchanged (same text, same `isError`, same recovery hint), and PostHog visibility is preserved (`captureToolCall` + `captureCompositeCall` still fire `ok:false` / `LAST_PROMPT_REQUIRED`, so the mandate-ignore rate stays observable); only `captureException` is dropped.
