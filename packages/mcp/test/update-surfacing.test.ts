@@ -168,7 +168,22 @@ describe("proactive update surfacing — non-account_status tools (product#3742)
 
   it("does not attach anything when no update is cached", async () => {
     const store = newStore();
-    // No seedUpdateCache → cache stays null.
+    // Seed a RECENT check that found nothing newer than CURRENT (latest ==
+    // current). This keeps the server's per-call refresh on the throttle path
+    // (state is fresh, all latest_known_* present) so it never reaches live
+    // GitHub — buildInfoIfUpgrade then resolves to null and nothing rides on
+    // _meta. Without this seed the per-call check hits the real releases API,
+    // making the case depend on the latest published release happening to equal
+    // CURRENT — which breaks the moment any newer version ships.
+    await store.write({
+      last_check_time: Date.now(),
+      latest_known_version: CURRENT,
+      latest_known_install_url:
+        "https://github.com/leadbay/leadclaw/releases/download/mcp-v0.19.2/leadbay-0.19.2.dxt",
+      latest_known_release_url:
+        "https://github.com/leadbay/leadclaw/releases/tag/mcp-v0.19.2",
+      suppressed_versions: [],
+    });
     const { mcpClient } = await connectWithUpdates(store);
 
     const result = await mcpClient.callTool({ name: "leadbay_ping_test", arguments: {} });
