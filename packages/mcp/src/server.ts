@@ -393,6 +393,15 @@ interface BuildServerOptions {
   // next turn no matter which tool it called. Omitted in tests / embeds
   // that don't want the WS listener.
   notificationsInbox?: NotificationsInbox;
+  // OAuth-bootstrap status getter (Claude Desktop .dxt non-blocking install).
+  // When provided, the CallTool handler consults it BEFORE executing a tool:
+  //   "pending"             → browser sign-in opened, waiting on the user
+  //   "browser_open_failed" → couldn't launch a browser; tell user to restart
+  //   "done"                → token landed (or never was a bootstrap) → execute
+  // It's a getter, not a boolean, because the live client's token lands AFTER
+  // buildServer() captured its args — reading it per-call observes the flip.
+  // Omitted everywhere except bin.ts's bootstrap path.
+  bootstrapStatus?: () => "pending" | "browser_open_failed" | "done";
 }
 
 function formatErrorForLLM(err: any): string {
@@ -1094,6 +1103,54 @@ export function buildServer(
       // is what surfaces the rate of agents ignoring the mandate. We just
       // skip captureException so this expected condition stays out of
       // Sentry.
+      // OAuth-bootstrap gate (Claude Desktop .dxt non-blocking install): while
+      // the background browser sign-in hasn't produced a token yet, every tool
+      // returns a transient AUTH_PENDING (or, if the browser couldn't be
+      // opened, an AUTH_MISSING with restart guidance) instead of executing
+      // against a tokenless client and 401ing. Checked per-call so it stops
+      // gating the instant client.setToken lands. Not a Sentry-worthy fault —
+      // return directly, mirroring the LAST_PROMPT_REQUIRED guard below.
+      const bootstrapState = opts.bootstrapStatus?.() ?? "done";
+      if (bootstrapState !== "done") {
+        const envelope =
+          bootstrapState === "browser_open_failed"
+            ? {
+                error: true as const,
+                code: "AUTH_MISSING",
+                message: "Couldn't open your browser to sign in to Leadbay.",
+                hint:
+                  "The extension couldn't launch a browser automatically. " +
+                  "Restart the Leadbay extension in Claude Desktop to retry the " +
+                  "sign-in — it will open your browser to authorize.",
+              }
+            : {
+                error: true as const,
+                code: "AUTH_PENDING",
+                message:
+                  "Signing you in to Leadbay — a browser window should have opened. Authorize there, then try again.",
+                hint: "Complete the Leadbay sign-in in your browser, then re-run this tool.",
+              };
+        const pendingText = formatErrorForLLM(envelope);
+        const pendingDur = Date.now() - callStart;
+        telemetry.captureToolCall({
+          tool: name,
+          ok: false,
+          duration_ms: pendingDur,
+          format: "error-envelope",
+          bytes: pendingText.length,
+          error_code: envelope.code,
+          triggered_by,
+        });
+        if (DEBUG_ON) {
+          process.stderr.write(
+            `[leadbay-mcp debug] tool=${name} dur=${pendingDur}ms ok=false code=${envelope.code} (auth-bootstrap, no-sentry)\n`
+          );
+        }
+        return {
+          content: [{ type: "text", text: pendingText }],
+          isError: true,
+        };
+      }
       if (COMPOSITE_FILE_TOOL_NAMES.has(name) && !triggered_by) {
         const envelope = {
           error: true as const,

@@ -9,6 +9,7 @@ import {
   NotificationsInbox,
   NotificationsWsClient,
   resolveRegion,
+  REGIONS,
   type CreateClientConfig,
   LeadbayClient,
   type LeadbayError,
@@ -356,50 +357,30 @@ export async function resolveClientFromEnv(logger: ToolLogger): Promise<Resolved
   if (process.env.LEADBAY_OAUTH_BOOTSTRAP === "1") {
     hydrateEnvFromCredentialsFile();
     if (!process.env.LEADBAY_TOKEN) {
-      await bootstrapOAuthIfMissing(logger);
+      // Non-blocking: return a real tokenless client NOW with authState
+      // "pending" and let OAuth run in the background (kicked off by main()
+      // after the transport connects). Blocking here on the up-to-5-minute
+      // interactive browser flow is what made Claude Desktop time out the
+      // `initialize` handshake and show "Unable to connect to extension
+      // server" — the host gives the server only a few seconds to answer.
+      // The background flow calls client.setBaseUrl + setToken on THIS
+      // instance when it completes; the CallTool auth gate returns
+      // AUTH_PENDING until then. See main() + buildServer bootstrapStatus.
+      const regionEnv = process.env.LEADBAY_REGION;
+      const region: "us" | "fr" = regionEnv === "fr" ? "fr" : "us";
+      const config: CreateClientConfig = { region };
+      if (process.env.LEADBAY_BASE_URL) config.baseUrl = process.env.LEADBAY_BASE_URL;
+      logger.info?.("OAuth bootstrap pending — server will come up unauthenticated, OAuth runs in background");
+      return { client: createClient(config), authState: "pending" };
     }
   }
 
   const token = process.env.LEADBAY_TOKEN;
   if (!token) {
-    if (process.env.LEADBAY_OAUTH_BOOTSTRAP === "1") {
-      process.stderr.write(
-        "leadbay-mcp: OAuth authorization is required but no token is available.\n" +
-          "  Restart the Claude Desktop extension to authorize Leadbay in your browser.\n" +
-          "\n" +
-          "Run `leadbay-mcp --help` for the full config template.\n"
-      );
-      const regionEnv = process.env.LEADBAY_REGION;
-      const region: "us" | "fr" = regionEnv === "fr" ? "fr" : "us";
-      // If the browser couldn't be opened automatically, tell the user plainly
-      // and point them at restarting the extension — which reruns the flow.
-      // NOTE: we deliberately do NOT hand over the previous authorize URL: the
-      // loopback listener that minted it was torn down when bootstrap aborted,
-      // so its redirect_uri port is dead and clicking it would 404 on callback.
-      // A fresh run mints a fresh listener + URL. (A future change could keep
-      // the listener alive and surface a live link — that's the non-blocking
-      // bootstrap path, intentionally out of scope here.)
-      const envelope: LeadbayError = browserOpenFailedAtBootstrap
-        ? {
-            error: true,
-            code: "AUTH_MISSING",
-            message: "Couldn't open your browser to sign in to Leadbay.",
-            hint:
-              "The extension couldn't launch a browser automatically. " +
-              "Restart the Leadbay extension in Claude Desktop to retry the " +
-              "sign-in — it will open your browser to authorize.",
-          }
-        : {
-            error: true,
-            code: "AUTH_MISSING",
-            message: "Leadbay OAuth authorization has not completed.",
-            hint: "Restart the Claude Desktop extension and complete the Leadbay OAuth browser authorization.",
-          };
-      return {
-        client: makeBrokenClient(envelope, region),
-        authState: "missing",
-      };
-    }
+    // NB: the LEADBAY_OAUTH_BOOTSTRAP-with-no-token case returned a "pending"
+    // client above (background OAuth), so it never reaches here. This branch
+    // is the non-bootstrap "no token configured" path (e.g. a manual stdio
+    // config that forgot LEADBAY_TOKEN).
     // Don't process.exit — Claude Desktop / Cursor would surface this as
     // "Server disconnected" with no actionable info. Return a broken
     // client so the server still answers `initialize` + `tools/list`,
@@ -1445,12 +1426,22 @@ async function main(): Promise<void> {
   // LEADBAY_TELEMETRY_DISABLED=1. See packages/mcp/src/telemetry.ts.
   const telemetry = initTelemetry({ version: VERSION, logger });
   const { client, authState } = await resolveClientFromEnv(logger);
+  // True when OAuth bootstrap is running in the background and the client is
+  // still tokenless. The CallTool handler gates tools on this (see the
+  // bootstrapStatus getter passed to buildServer below), and the background
+  // flow is kicked off after the transport connects.
+  const bootstrapPending = authState === "pending";
   // Non-blocking identify — kicks off /users/me (cached if region
   // auto-probe already paid for it). Events captured before identity
   // resolves are buffered and flushed once me.email lands. With a broken
   // client (authState != "ok"), resolveMe rejects but telemetry.identify
   // has its own catch and flushes events anonymously.
-  telemetry.identify(client);
+  //
+  // Skip it while bootstrap is pending: identifying a tokenless client would
+  // 401, flush anonymously, AND latch telemetry's identityPromise so the
+  // post-auth identify() short-circuits and never re-identifies the real
+  // user. We call identify() in the background-success callback instead.
+  if (!bootstrapPending) telemetry.identify(client);
   // Bucket disconnects by auth-state in PostHog so a regression in the
   // startup-auth path is visible without reading the user's logs.
   telemetry.captureStartup({
@@ -1529,12 +1520,64 @@ async function main(): Promise<void> {
     version: VERSION,
     telemetry,
     updateStateStore,
+    // Non-blocking OAuth bootstrap gate. Read per tool call: once the
+    // background flow lands the token (client.isAuthenticated → true) this
+    // reports "done" and tools execute. While waiting it returns "pending",
+    // or "browser_open_failed" if the launcher couldn't be found.
+    bootstrapStatus: bootstrapPending
+      ? () =>
+          client.isAuthenticated
+            ? "done"
+            : browserOpenFailedAtBootstrap
+              ? "browser_open_failed"
+              : "pending"
+      : undefined,
   });
   const transport = new StdioServerTransport();
   logger.info?.(
     `Starting MCP server v${VERSION} (advanced=${includeAdvanced}, write=${includeWrite}, baseUrl=${client.baseUrl}, bulk_store=${bulkTracker.durability}, notifications_ws=${WS_DISABLED ? "disabled" : "enabled"}, auth_state=${authState})`
   );
   await server.connect(transport);
+
+  // Non-blocking OAuth bootstrap: now that `initialize` is answered, run the
+  // interactive browser flow in the background. On success, mutate the LIVE
+  // client the handler holds (setBaseUrl + setToken) so the next tool call is
+  // authenticated with no server rebuild; start the notifications WS (it needs
+  // a bearer); and identify the now-known user to telemetry. On failure the
+  // client stays tokenless and the bootstrapStatus gate keeps returning
+  // AUTH_PENDING / AUTH_MISSING.
+  if (bootstrapPending) {
+    void (async () => {
+      const ok = await bootstrapOAuthIfMissing(logger);
+      if (!ok) return; // gate already surfaces pending / open-failed to the user
+      const region: "us" | "fr" = process.env.LEADBAY_REGION === "fr" ? "fr" : "us";
+      // API base URL: a pinned LEADBAY_BASE_URL (staging/custom) wins; otherwise
+      // the regional API host — mirroring createClient({ region }).
+      const apiBaseUrl = process.env.LEADBAY_BASE_URL ?? REGIONS[region];
+      // setBaseUrl BEFORE setToken so a request can never fire with the new
+      // token against a stale baseUrl (isAuthenticated flips on setToken).
+      client.setBaseUrl(apiBaseUrl, region);
+      client.setToken(process.env.LEADBAY_TOKEN!);
+      logger.info?.(`OAuth bootstrap landed — client authenticated (region=${region})`);
+      // Identify the real user now (skipped at boot to avoid latching an
+      // anonymous identity — see the bootstrapPending guard above).
+      telemetry.identify(client);
+      // Start the notifications WS now that we have a bearer (it was disabled
+      // at boot because authState !== "ok").
+      if (process.env.LEADBAY_NOTIFICATIONS_WS_DISABLED !== "1" && !notificationsWs) {
+        notificationsWs = new NotificationsWsClient({
+          client,
+          inbox: notificationsInbox,
+          logger,
+        });
+        void notificationsWs.start().catch((err: any) => {
+          logger.warn?.(`notifications.ws start_failed (post-oauth): ${err?.message ?? err}`);
+        });
+      }
+    })().catch((err: any) => {
+      logger.warn?.(`oauth.bootstrap_bg_failed ${err?.message ?? err}`);
+    });
+  }
 
   // Shutdown hooks: flush PostHog + Sentry bounded at 2s each so a network
   // hang can't block process exit. stdio-end fires when the MCP client
