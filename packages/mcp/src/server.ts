@@ -394,14 +394,19 @@ interface BuildServerOptions {
   // that don't want the WS listener.
   notificationsInbox?: NotificationsInbox;
   // OAuth-bootstrap status getter (Claude Desktop .dxt non-blocking install).
-  // When provided, the CallTool handler consults it BEFORE executing a tool:
-  //   "pending"             → browser sign-in opened, waiting on the user
-  //   "browser_open_failed" → couldn't launch a browser; tell user to restart
-  //   "done"                → token landed (or never was a bootstrap) → execute
-  // It's a getter, not a boolean, because the live client's token lands AFTER
-  // buildServer() captured its args — reading it per-call observes the flip.
+  // When provided, the CallTool handler consults it BEFORE executing a tool and
+  // returns an AUTH_PENDING envelope (with a clickable sign-in link when known)
+  // until the background OAuth lands a token. It's a getter, not a snapshot,
+  // because the token + URL land AFTER buildServer() captured its args —
+  // reading per-call observes the flip. Returns:
+  //   { done: true }                          → execute the tool normally
+  //   { done: false, signInUrl?, openFailed } → gate; surface the link/copy
   // Omitted everywhere except bin.ts's bootstrap path.
-  bootstrapStatus?: () => "pending" | "browser_open_failed" | "done";
+  bootstrapStatus?: () => {
+    done: boolean;
+    signInUrl?: string;
+    openFailed?: boolean;
+  };
 }
 
 function formatErrorForLLM(err: any): string {
@@ -1110,26 +1115,30 @@ export function buildServer(
       // against a tokenless client and 401ing. Checked per-call so it stops
       // gating the instant client.setToken lands. Not a Sentry-worthy fault —
       // return directly, mirroring the LAST_PROMPT_REQUIRED guard below.
-      const bootstrapState = opts.bootstrapStatus?.() ?? "done";
-      if (bootstrapState !== "done") {
-        const envelope =
-          bootstrapState === "browser_open_failed"
-            ? {
-                error: true as const,
-                code: "AUTH_MISSING",
-                message: "Couldn't open your browser to sign in to Leadbay.",
-                hint:
-                  "The extension couldn't launch a browser automatically. " +
-                  "Restart the Leadbay extension in Claude Desktop to retry the " +
-                  "sign-in — it will open your browser to authorize.",
-              }
-            : {
-                error: true as const,
-                code: "AUTH_PENDING",
-                message:
-                  "Signing you in to Leadbay — a browser window should have opened. Authorize there, then try again.",
-                hint: "Complete the Leadbay sign-in in your browser, then re-run this tool.",
-              };
+      const bootstrapState = opts.bootstrapStatus?.() ?? { done: true };
+      if (!bootstrapState.done) {
+        const url = bootstrapState.signInUrl;
+        // Prefer surfacing the live sign-in URL — the spawned MCP process often
+        // can't open a GUI browser itself (no DISPLAY / sanitized env), so a
+        // clickable link the agent renders to the user is the reliable path.
+        const envelope = url
+          ? {
+              error: true as const,
+              code: "AUTH_REQUIRED",
+              message: "Sign in to Leadbay to finish connecting.",
+              hint:
+                `Open this link to authorize Leadbay, then re-run this tool:\n\n${url}\n\n` +
+                (bootstrapState.openFailed
+                  ? "(The extension couldn't open your browser automatically.)"
+                  : "(A browser may have opened automatically — if not, use the link above.)"),
+            }
+          : {
+              error: true as const,
+              code: "AUTH_PENDING",
+              message:
+                "Signing you in to Leadbay — a browser window should have opened. Authorize there, then try again.",
+              hint: "Complete the Leadbay sign-in in your browser, then re-run this tool.",
+            };
         const pendingText = formatErrorForLLM(envelope);
         const pendingDur = Date.now() - callStart;
         telemetry.captureToolCall({

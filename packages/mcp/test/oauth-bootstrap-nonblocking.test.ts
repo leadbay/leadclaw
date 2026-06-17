@@ -31,7 +31,7 @@ const BASE = "https://api-us.leadbay.app";
 
 async function connect(opts: {
   client: LeadbayClient;
-  bootstrapStatus?: () => "pending" | "browser_open_failed" | "done";
+  bootstrapStatus?: () => { done: boolean; signInUrl?: string; openFailed?: boolean };
 }) {
   const server = buildServer(opts.client, {
     includeWrite: true,
@@ -49,14 +49,14 @@ async function connect(opts: {
 beforeEach(() => resetHttpMock());
 
 describe("CallTool gate while bootstrap is pending", () => {
-  it("returns AUTH_PENDING and does NOT hit the backend", async () => {
+  it("no sign-in URL yet → AUTH_PENDING, does NOT hit the backend", async () => {
     // Declare zero endpoints — the harness throws if any HTTP is attempted,
     // so reaching the backend while pending would fail the test.
     const captured = mockHttp([]);
     const tokenless = new LeadbayClient(BASE, undefined as unknown as string);
     const { mcpClient } = await connect({
       client: tokenless,
-      bootstrapStatus: () => "pending",
+      bootstrapStatus: () => ({ done: false }), // URL not captured yet
     });
     const res: any = await mcpClient.callTool({
       name: "leadbay_account_status",
@@ -69,12 +69,13 @@ describe("CallTool gate while bootstrap is pending", () => {
     expect(captured.requests).toHaveLength(0);
   });
 
-  it("browser_open_failed → AUTH_MISSING with restart guidance", async () => {
+  it("live sign-in URL is surfaced as a clickable link in the envelope", async () => {
     const captured = mockHttp([]);
     const tokenless = new LeadbayClient(BASE, undefined as unknown as string);
+    const URL = "https://leadbay.app/oauth/authorize?client_id=42&state=abc";
     const { mcpClient } = await connect({
       client: tokenless,
-      bootstrapStatus: () => "browser_open_failed",
+      bootstrapStatus: () => ({ done: false, signInUrl: URL }),
     });
     const res: any = await mcpClient.callTool({
       name: "leadbay_account_status",
@@ -82,19 +83,36 @@ describe("CallTool gate while bootstrap is pending", () => {
     });
     expect(res.isError).toBe(true);
     const text = res.content[0].text as string;
-    expect(text).toMatch(/couldn.t open your browser/i);
-    expect(text).toMatch(/restart the leadbay extension/i);
+    expect(text).toContain(URL);
+    expect(text).toMatch(/open this link to authorize/i);
     expect(captured.requests).toHaveLength(0);
   });
 
-  it("once the token lands on the live client, the gate opens (status flips to done)", async () => {
+  it("openFailed adds the 'couldn't open your browser' note alongside the link", async () => {
+    mockHttp([]);
+    const tokenless = new LeadbayClient(BASE, undefined as unknown as string);
+    const URL = "https://leadbay.app/oauth/authorize?client_id=7";
+    const { mcpClient } = await connect({
+      client: tokenless,
+      bootstrapStatus: () => ({ done: false, signInUrl: URL, openFailed: true }),
+    });
+    const res: any = await mcpClient.callTool({
+      name: "leadbay_account_status",
+      arguments: { _triggered_by: "check" },
+    });
+    const text = res.content[0].text as string;
+    expect(text).toContain(URL);
+    expect(text).toMatch(/couldn.t open your browser automatically/i);
+  });
+
+  it("once the token lands on the live client, the gate opens (done flips true)", async () => {
     // The getter reads client.isAuthenticated live — the exact seam the
     // background OAuth uses (client.setToken on the captured instance).
     const client = new LeadbayClient(BASE, undefined as unknown as string);
     const { mcpClient } = await connect({
       client,
       bootstrapStatus: () =>
-        client.isAuthenticated ? "done" : "pending",
+        client.isAuthenticated ? { done: true } : { done: false },
     });
 
     // Before token: gated, no backend call (harness throws on undeclared HTTP).

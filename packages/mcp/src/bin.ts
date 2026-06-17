@@ -237,12 +237,19 @@ function resolveOAuthBootstrapCredentialsPath(): { path: string; legacy: boolean
   };
 }
 
-// Set when OAuth bootstrap aborted because it couldn't open a browser (Claude
-// Desktop spawns the .dxt stdio server with a sanitized PATH, so the OS
-// launcher can be unreachable). The AUTH_MISSING envelope reads this to give
-// the user an open-failure-specific message instead of the generic one —
-// bootstrap's stderr is invisible inside Claude Desktop, so the tool envelope
-// is the only channel they see.
+// The live OAuth authorize URL captured during background bootstrap. A spawned
+// .dxt stdio server frequently CAN'T open a GUI browser itself — Claude Desktop
+// strips DISPLAY/WAYLAND (and PATH) from the child env, so xdg-open/open can
+// silently no-op even when the spawn "succeeds". So we don't rely on the
+// auto-open: we surface this URL as a clickable sign-in link in the AUTH_PENDING
+// envelope (the only channel the user sees — bootstrap stderr is invisible in
+// Claude Desktop). The loopback listener stays alive in the background, so
+// clicking it completes the flow. Set when the URL is known; cleared when the
+// token lands.
+let pendingSignInUrl: string | undefined;
+// Set when the browser launcher errored outright (ENOENT). Distinct from the
+// silent-no-op case — here we still have a live URL to show, but we also note
+// the auto-open failed so the copy can say "open this yourself".
 let browserOpenFailedAtBootstrap = false;
 
 // OAuth bootstrap: when an MCPB opts in with LEADBAY_OAUTH_BOOTSTRAP=1 and no
@@ -292,10 +299,15 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       authServerBaseUrl,
       clientName: `Leadbay MCP @ ${hostname()}`,
       log: (m) => process.stderr.write(m),
-      // In Claude Desktop's sanitized launch, a failed browser-open would
-      // otherwise dangle for the full 5-min callback timeout with nothing
-      // visible to the user. Fail fast and surface the URL via the envelope.
-      failFastOnOpenError: true,
+      // Capture the live authorize URL so the AUTH_PENDING envelope can show a
+      // clickable sign-in link. This is the reliable path: the spawned process
+      // often can't open a browser itself (no DISPLAY / sanitized env), and an
+      // auto-open that silently no-ops would otherwise leave the user stuck
+      // with no link. The listener stays alive here (we're in the background),
+      // so the surfaced URL completes the flow when the user clicks it.
+      onAuthorizeUrl: (url) => {
+        pendingSignInUrl = url;
+      },
     });
 
     // Persist to ~/.config/leadbay/credentials.json so future launches are silent.
@@ -331,23 +343,24 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
     process.env.LEADBAY_TOKEN = accessToken;
     process.env.LEADBAY_REGION = region;
     if (isStaging || envBaseUrl) process.env.LEADBAY_BASE_URL = authServerBaseUrl;
+    pendingSignInUrl = undefined; // token landed — drop the sign-in link
     logger.info?.(`OAuth bootstrap complete — region=${region}`);
     return true;
   } catch (err: any) {
     if (err instanceof BrowserOpenFailedError) {
-      // Couldn't auto-open the browser (sanitized PATH). Flag it so the
-      // AUTH_MISSING envelope explains the open failure, and let the server
-      // come up immediately rather than dangling on the callback wait.
+      // Launcher errored outright (ENOENT). We still surfaced the live URL via
+      // onAuthorizeUrl, so the gate keeps showing a clickable link — just note
+      // the auto-open failed so the copy can say "open it yourself".
       browserOpenFailedAtBootstrap = true;
       process.stderr.write(
         `[leadbay-mcp] Could not open a browser automatically: ${err.message}\n` +
-          `  Tools will return an AUTH_MISSING envelope asking the user to restart the extension.\n`
+          `  The sign-in link is surfaced to the user via the AUTH_PENDING envelope.\n`
       );
       return false;
     }
     process.stderr.write(
       `[leadbay-mcp] OAuth bootstrap failed: ${err?.message ?? err}\n` +
-        `  The server will start but tools will return AUTH_MISSING until you authorize.\n`
+        `  The server will start but tools will return AUTH_PENDING/AUTH_MISSING until you authorize.\n`
     );
     return false;
   }
@@ -1522,15 +1535,19 @@ async function main(): Promise<void> {
     updateStateStore,
     // Non-blocking OAuth bootstrap gate. Read per tool call: once the
     // background flow lands the token (client.isAuthenticated → true) this
-    // reports "done" and tools execute. While waiting it returns "pending",
-    // or "browser_open_failed" if the launcher couldn't be found.
+    // reports done and tools execute. While waiting it surfaces the live
+    // sign-in URL (captured via onAuthorizeUrl) so the agent can render a
+    // clickable link — the reliable path when the spawned process can't open
+    // a browser itself.
     bootstrapStatus: bootstrapPending
       ? () =>
           client.isAuthenticated
-            ? "done"
-            : browserOpenFailedAtBootstrap
-              ? "browser_open_failed"
-              : "pending"
+            ? { done: true }
+            : {
+                done: false,
+                signInUrl: pendingSignInUrl,
+                openFailed: browserOpenFailedAtBootstrap,
+              }
       : undefined,
   });
   const transport = new StdioServerTransport();

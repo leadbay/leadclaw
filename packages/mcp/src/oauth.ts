@@ -70,6 +70,16 @@ export interface OAuthLoginOptions {
    * may open the logged URL by hand, as the CLI `login` flow expects).
    */
   failFastOnOpenError?: boolean;
+  /**
+   * Fires with the fully-built authorize URL the moment it's known — BEFORE
+   * the (best-effort) browser open and BEFORE blocking on the callback. The
+   * loopback listener is already live when this fires, so the URL is
+   * immediately clickable. Used by the non-blocking .dxt bootstrap to surface
+   * a live sign-in link to the user (the spawned MCP process often can't open
+   * a GUI browser itself — no DISPLAY / sanitized env — so `openBrowser` can
+   * silently no-op). Errors in the callback are swallowed.
+   */
+  onAuthorizeUrl?: (url: string) => void;
 }
 
 /**
@@ -550,6 +560,18 @@ export async function oauthLogin(opts: OAuthLoginOptions): Promise<OAuthLoginRes
     authorizeUrl.searchParams.set("state", state);
     authorizeUrl.searchParams.set("code_challenge", pkce.challenge);
     authorizeUrl.searchParams.set("code_challenge_method", pkce.method);
+
+    // Surface the live URL the moment it's known — the listener is already up,
+    // so it's clickable now. The caller (non-blocking bootstrap) shows it to
+    // the user, which is the reliable path when the spawned process can't open
+    // a browser itself.
+    if (opts.onAuthorizeUrl) {
+      try {
+        opts.onAuthorizeUrl(authorizeUrl.toString());
+      } catch {
+        /* never let a callback error abort the flow */
+      }
+    }
 
     log(`Opening browser to authorize…\n  ${authorizeUrl.toString()}\n`);
     try {
