@@ -17,13 +17,14 @@
  *
  * New file (existing oauth.test.ts is left untouched).
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockHttp, resetHttpMock, httpsMockFactory } from "../harness.js";
 
 vi.mock("node:https", () => httpsMockFactory());
 
 import {
   browserOpenCandidates,
+  browserLaunchEnv,
   oauthLogin,
   BrowserOpenFailedError,
 } from "../../src/oauth.js";
@@ -79,6 +80,49 @@ describe("browserOpenCandidates — PATH-independent launch", () => {
     } finally {
       setPlatform(realPlatform);
     }
+  });
+});
+
+describe("browserLaunchEnv — reconstruct missing display vars (Linux)", () => {
+  const realPlatform = process.platform;
+  const SAVED = {
+    DISPLAY: process.env.DISPLAY,
+    WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY,
+    XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+  };
+  function setPlatform(p: NodeJS.Platform) {
+    Object.defineProperty(process, "platform", { value: p, configurable: true });
+  }
+  afterEach(() => {
+    setPlatform(realPlatform);
+    for (const [k, v] of Object.entries(SAVED)) {
+      if (v === undefined) delete (process.env as any)[k];
+      else (process.env as any)[k] = v;
+    }
+  });
+
+  it("does not touch the env on non-Linux", () => {
+    setPlatform("darwin");
+    delete process.env.DISPLAY;
+    const env = browserLaunchEnv();
+    expect(env.DISPLAY).toBeUndefined(); // untouched on mac
+  });
+
+  it("leaves an already-set DISPLAY/WAYLAND_DISPLAY unchanged", () => {
+    setPlatform("linux");
+    process.env.DISPLAY = ":7";
+    process.env.WAYLAND_DISPLAY = "wayland-3";
+    const env = browserLaunchEnv();
+    expect(env.DISPLAY).toBe(":7");
+    expect(env.WAYLAND_DISPLAY).toBe("wayland-3");
+  });
+
+  it("injects a DISPLAY when it's missing (the Claude Desktop strip case)", () => {
+    setPlatform("linux");
+    delete process.env.DISPLAY;
+    const env = browserLaunchEnv();
+    // Always backfills at least the ":0" default so xdg-open can reach a display.
+    expect(env.DISPLAY).toMatch(/^:\d+$/);
   });
 });
 

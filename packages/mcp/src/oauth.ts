@@ -22,6 +22,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { request as httpsRequestRaw } from "node:https";
 import { spawn } from "node:child_process";
 import { AddressInfo } from "node:net";
+import { readdirSync } from "node:fs";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -514,6 +515,54 @@ export function browserOpenCandidates(url: string): Array<{ cmd: string; args: s
   ];
 }
 
+/**
+ * Build the env to spawn the browser launcher with. On Linux, Claude Desktop
+ * spawns the .dxt server with an INCONSISTENT environment — DISPLAY and
+ * WAYLAND_DISPLAY are sometimes stripped (confirmed from a real install: a
+ * launch logged `DISPLAY=<unset> WAYLAND=<unset>`). Without them, `xdg-open`
+ * spawns "successfully" but can't reach the display server, so no tab opens —
+ * the silent install-time failure. We can't change what the host passes, so we
+ * reconstruct the missing vars from XDG_RUNTIME_DIR (the wayland-N socket
+ * lives there) and the X11 socket dir, defaulting to the standard session
+ * values. Harmless when they're already set (we don't overwrite).
+ */
+export function browserLaunchEnv(debug?: (msg: string) => void): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (process.platform !== "linux") return env;
+
+  const runtimeDir = env.XDG_RUNTIME_DIR;
+
+  if (!env.WAYLAND_DISPLAY && runtimeDir) {
+    // Find a wayland-N socket in the runtime dir (wayland-0 is the default).
+    try {
+      const sock = readdirSync(runtimeDir).find((f) => /^wayland-\d+$/.test(f));
+      if (sock) {
+        env.WAYLAND_DISPLAY = sock;
+        debug?.(`browserLaunchEnv: injected WAYLAND_DISPLAY=${sock}`);
+      }
+    } catch {
+      /* runtime dir unreadable — fall through to X11 */
+    }
+  }
+
+  if (!env.DISPLAY) {
+    // X11 sockets live at /tmp/.X11-unix/X<N>; ":0" is the near-universal
+    // default and works under XWayland too. Prefer the lowest-numbered.
+    try {
+      const x = readdirSync("/tmp/.X11-unix")
+        .map((f) => f.match(/^X(\d+)$/)?.[1])
+        .filter((n): n is string => !!n)
+        .sort((a, b) => Number(a) - Number(b))[0];
+      env.DISPLAY = x !== undefined ? `:${x}` : ":0";
+    } catch {
+      env.DISPLAY = ":0";
+    }
+    debug?.(`browserLaunchEnv: injected DISPLAY=${env.DISPLAY}`);
+  }
+
+  return env;
+}
+
 export async function openInBrowser(
   url: string,
   debug?: (msg: string) => void
@@ -524,17 +573,19 @@ export async function openInBrowser(
   // Try each candidate in order; only the LAST ENOENT propagates. This makes
   // the launch independent of the inherited PATH (see browserOpenCandidates).
   const candidates = browserOpenCandidates(url);
+  const launchEnv = browserLaunchEnv(debug);
   debug?.(
-    `openInBrowser: platform=${process.platform} DISPLAY=${process.env.DISPLAY ?? "<unset>"} ` +
-      `WAYLAND=${process.env.WAYLAND_DISPLAY ?? "<unset>"} ` +
-      `DBUS=${process.env.DBUS_SESSION_BUS_ADDRESS ? "set" : "<unset>"} ` +
+    `openInBrowser: platform=${process.platform} ` +
+      `DISPLAY=${launchEnv.DISPLAY ?? "<unset>"} ` +
+      `WAYLAND=${launchEnv.WAYLAND_DISPLAY ?? "<unset>"} ` +
+      `DBUS=${launchEnv.DBUS_SESSION_BUS_ADDRESS ? "set" : "<unset>"} ` +
       `candidates=[${candidates.map((c) => c.cmd).join(", ")}]`
   );
   let lastErr: unknown;
   for (const { cmd, args } of candidates) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(cmd, args, { stdio: "ignore", detached: true });
+        const child = spawn(cmd, args, { stdio: "ignore", detached: true, env: launchEnv });
         child.on("error", reject);
         child.on("spawn", () => {
           debug?.(`spawn OK: ${cmd} (pid=${child.pid})`);
