@@ -874,14 +874,16 @@ User picks → call the matching \`Calls\` tool. Constraints: 2–4 mutually-exc
 
 The overview itself returns no \`next_steps\` object, so when you DO propose, build the options from this table — pick the 2–4 rows that match what the account state actually showed. If none apply cleanly, propose none (the status read was complete) rather than inventing an option.
 
-| Observation                                                         | Suggest                                                | Calls                                |
-|---------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------|
-| Fresh discovery batch waiting / user wants new leads                | "See today's best new leads"                           | leadbay_daily_check_in               |
-| Follow-ups due / known leads to re-engage                           | "Show follow-ups due now"                              | leadbay_followup_check_in            |
-| Quota/credit read shows low or exhausted balance                    | "Review what's eating your quota"                      | leadbay_account_status (deeper read) |
-| Auth/connection blocker (e.g. 401 / AUTH_EXPIRED on a read)         | "Reconnect Leadbay to unblock actions"                 | (guide the user to re-authenticate)  |
-| Lens audience looks mismatched (batch is off-ICP)                   | "Adjust the lens audience to match your ICP"           | leadbay_adjust_audience              |
-| Status is healthy and nothing is pending                            | propose nothing — the overview is a complete answer    | —                                    |
+All \`Calls\` below are agent-callable \`leadbay_*\` tools (never an MCP prompt name like \`leadbay_daily_check_in\` — the agent cannot invoke a prompt from a turn; route to the underlying tool instead).
+
+| Observation                                                         | Suggest                                                | Calls                                                        |
+|---------------------------------------------------------------------|--------------------------------------------------------|--------------------------------------------------------------|
+| Fresh discovery batch waiting / user wants new leads                | "See today's best new leads"                           | leadbay_pull_leads(lensId = pinned)                          |
+| Follow-ups due / known leads to re-engage                           | "Show follow-ups due now"                              | leadbay_pull_followups                                       |
+| Quota/credit read shows low or exhausted balance                    | "Review what's eating your quota"                      | leadbay_account_status (deeper read)                         |
+| Auth/connection blocker (e.g. 401 / AUTH_EXPIRED on a read)         | "Reconnect Leadbay to unblock actions"                 | (guide the user to re-authenticate — no tool call)           |
+| Lens audience looks mismatched (batch is off-ICP)                   | "Adjust the lens audience to match your ICP"           | ASK first — collect the target sectors / sizes / exclusions, THEN leadbay_adjust_audience(...) with those params. NEVER call it with no args (an empty call writes the current filter / may clone the default lens — a no-op or unwanted change). |
+| Status is healthy and nothing is pending                            | propose nothing — the overview is a complete answer    | —                                                            |
 
 GATE — DEFER TO TOOL RENDERING. When you call a Leadbay composite that ships its own RENDERING block (every composite in 0.9.0+ does), render the response using that block's recipe verbatim — score bars, glyph palette, column order, hide-list, link priorities, all of it. Do NOT substitute prose, a numbered list, or a different column structure even when an orchestrating prompt's body suggests alternate framing. Prompt-specific commentary (motivational nudges, summaries, next-action recommendations) belongs ABOVE or BELOW the canonical table, never in place of it.
 
