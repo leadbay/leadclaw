@@ -60,7 +60,7 @@ import { parseWriteEnv } from "./env.js";
 import { initTelemetry } from "./telemetry.js";
 import { createDefaultUpdateStateStore } from "./update-state.js";
 import { checkForUpdate, recordRunningVersion } from "./update-check.js";
-import { oauthLogin, inferRegionViaStargate, BrowserOpenFailedError } from "./oauth.js";
+import { oauthLogin, inferRegionViaStargate, BrowserOpenFailedError, openInBrowser } from "./oauth.js";
 
 // Regional OAuth base URLs. Production is the default path; staging remains
 // available for `login --oauth --staging` and staging MCPB validation.
@@ -251,6 +251,14 @@ let pendingSignInUrl: string | undefined;
 // silent-no-op case — here we still have a live URL to show, but we also note
 // the auto-open failed so the copy can say "open this yourself".
 let browserOpenFailedAtBootstrap = false;
+// Tracks an in-flight browser-open spawn so shutdown can wait for it to be
+// DISPATCHED before exiting. Claude Desktop probes a freshly-installed
+// extension with rapid connect→shutdown cycles (the first process can live
+// <100ms); without this, SIGTERM/stdin-end kills the process before the
+// detached `xdg-open`/`open` child is even spawned, so the browser never
+// opens on install. Once the child is spawned (detached + unref'd) it
+// survives our exit on its own — we only need to guarantee it gets spawned.
+let browserOpenInFlight: Promise<void> | null = null;
 
 // OAuth bootstrap: when an MCPB opts in with LEADBAY_OAUTH_BOOTSTRAP=1 and no
 // token is available from env or disk, run the browser-loopback OAuth flow
@@ -299,15 +307,31 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       authServerBaseUrl,
       clientName: `Leadbay MCP @ ${hostname()}`,
       log: (m) => process.stderr.write(m),
-      // Capture the live authorize URL so the AUTH_PENDING envelope can show a
-      // clickable sign-in link. This is the reliable path: the spawned process
-      // often can't open a browser itself (no DISPLAY / sanitized env), and an
-      // auto-open that silently no-ops would otherwise leave the user stuck
-      // with no link. The listener stays alive here (we're in the background),
-      // so the surfaced URL completes the flow when the user clicks it.
+      // The moment the URL is known: (1) stash it so the AUTH_PENDING envelope
+      // surfaces a clickable link (reliable fallback), and (2) fire the browser
+      // auto-open OURSELVES, tracked in browserOpenInFlight so shutdown waits
+      // for the spawn to dispatch. This wins the install-time race: Claude
+      // Desktop probes a fresh extension with <100ms connect→shutdown cycles,
+      // and tracking the open lets us finish dispatching the detached child
+      // even if SIGTERM/stdin-end arrives first. We pass our own opener as
+      // `openBrowser` so oauthLogin doesn't ALSO open (no double tab).
       onAuthorizeUrl: (url) => {
         pendingSignInUrl = url;
+        browserOpenInFlight = openInBrowser(url)
+          .catch((err: any) => {
+            browserOpenFailedAtBootstrap = true;
+            process.stderr.write(
+              `[leadbay-mcp] auto-open browser failed (${err?.message ?? err}); user has the sign-in link.\n`
+            );
+          })
+          .finally(() => {
+            browserOpenInFlight = null;
+          });
       },
+      // No-op: we drive the open from onAuthorizeUrl (tracked) instead, so the
+      // shutdown race can be handled. Returning resolved means oauthLogin won't
+      // try its own open or hit the fail-fast path.
+      openBrowser: async () => {},
     });
 
     // Persist to ~/.config/leadbay/credentials.json so future launches are silent.
@@ -1600,6 +1624,20 @@ async function main(): Promise<void> {
   // hang can't block process exit. stdio-end fires when the MCP client
   // (Claude Desktop, Cursor) disconnects — same effect as SIGTERM.
   const shutdown = async (code: number) => {
+    // If a browser auto-open is mid-dispatch (Claude Desktop's rapid
+    // probe→shutdown on a fresh install fires teardown within ~100ms, before
+    // the detached opener child is spawned), give it a bounded moment to land
+    // the spawn. Once spawned it's detached + unref'd and survives our exit.
+    if (browserOpenInFlight) {
+      try {
+        await Promise.race([
+          browserOpenInFlight,
+          new Promise((r) => setTimeout(r, 1500)),
+        ]);
+      } catch {
+        // ignore — best-effort; the surfaced sign-in link is the fallback
+      }
+    }
     try {
       notificationsWs?.stop();
     } catch {

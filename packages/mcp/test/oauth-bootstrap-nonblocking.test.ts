@@ -17,6 +17,9 @@
  * oauth.test.ts are left untouched.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mockHttp, resetHttpMock, httpsMockFactory } from "./harness.js";
 
 vi.mock("node:https", () => httpsMockFactory());
@@ -183,16 +186,30 @@ describe("CallTool gate while bootstrap is pending", () => {
 
 describe("resolveClientFromEnv — pending bootstrap path", () => {
   const SAVED: Record<string, string | undefined> = {};
-  const KEYS = ["LEADBAY_OAUTH_BOOTSTRAP", "LEADBAY_TOKEN", "LEADBAY_REGION", "LEADBAY_BASE_URL"];
+  // Isolate the credentials-file location too: resolveClientFromEnv calls
+  // hydrateEnvFromCredentialsFile(), which reads ~/.config/leadbay/credentials.json
+  // (resolved from HOME/XDG_CONFIG_HOME/APPDATA/USERPROFILE). On a dev machine
+  // that has actually signed in, that file exists and would repopulate
+  // LEADBAY_TOKEN → authState "ok" instead of "pending". Point HOME at an empty
+  // temp dir so hydration finds nothing.
+  const KEYS = [
+    "LEADBAY_OAUTH_BOOTSTRAP", "LEADBAY_TOKEN", "LEADBAY_REGION", "LEADBAY_BASE_URL",
+    "HOME", "XDG_CONFIG_HOME", "APPDATA", "USERPROFILE",
+  ];
+  let tmpHome: string;
   beforeEach(() => {
     for (const k of KEYS) SAVED[k] = process.env[k];
     for (const k of KEYS) delete process.env[k];
+    tmpHome = mkdtempSync(join(tmpdir(), "lb-nonblock-"));
+    process.env.HOME = tmpHome;
+    process.env.USERPROFILE = tmpHome;
   });
   afterEach(() => {
     for (const k of KEYS) {
       if (SAVED[k] === undefined) delete process.env[k];
       else process.env[k] = SAVED[k];
     }
+    rmSync(tmpHome, { recursive: true, force: true });
   });
 
   const logger = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };

@@ -154,4 +154,28 @@ describe("oauthLogin — failFastOnOpenError", () => {
     expect(caught).not.toBeInstanceOf(BrowserOpenFailedError);
     expect((caught as Error).message).toMatch(/timed out/i);
   });
+
+  it("fires onAuthorizeUrl with the live URL before blocking on the callback", async () => {
+    discoveryAndRegister();
+    let surfaced: string | undefined;
+    // openBrowser is a no-op (as the non-blocking bootstrap passes — it drives
+    // the open itself from onAuthorizeUrl). The callback wait times out fast.
+    await oauthLogin({
+      authServerBaseUrl: "https://api-us.leadbay.app",
+      clientName: "Leadbay MCP @ test",
+      openBrowser: async () => {},
+      onAuthorizeUrl: (url) => {
+        surfaced = url;
+      },
+      timeoutMs: 150,
+    }).catch(() => {
+      /* expected timeout — we only care that onAuthorizeUrl fired */
+    });
+    // The URL was surfaced (the listener is already live when this fires, so
+    // it's immediately clickable), with the right client + PKCE params.
+    expect(surfaced).toBeDefined();
+    expect(surfaced!).toContain("https://leadbay.app/oauth/authorize");
+    expect(surfaced!).toContain("client_id=99");
+    expect(surfaced!).toMatch(/redirect_uri=http%3A%2F%2F127\.0\.0\.1%3A\d+%2Fcallback/);
+  });
 });
