@@ -501,13 +501,22 @@ export function browserOpenCandidates(url: string): Array<{ cmd: string; args: s
   ];
 }
 
-export async function openInBrowser(url: string): Promise<void> {
+export async function openInBrowser(
+  url: string,
+  debug?: (msg: string) => void
+): Promise<void> {
   // Cross-platform without a runtime dep. Detach the child so we don't keep it
   // tied to our process; on macOS `open` returns immediately anyway.
   //
   // Try each candidate in order; only the LAST ENOENT propagates. This makes
   // the launch independent of the inherited PATH (see browserOpenCandidates).
   const candidates = browserOpenCandidates(url);
+  debug?.(
+    `openInBrowser: platform=${process.platform} DISPLAY=${process.env.DISPLAY ?? "<unset>"} ` +
+      `WAYLAND=${process.env.WAYLAND_DISPLAY ?? "<unset>"} ` +
+      `DBUS=${process.env.DBUS_SESSION_BUS_ADDRESS ? "set" : "<unset>"} ` +
+      `candidates=[${candidates.map((c) => c.cmd).join(", ")}]`
+  );
   let lastErr: unknown;
   for (const { cmd, args } of candidates) {
     try {
@@ -515,17 +524,20 @@ export async function openInBrowser(url: string): Promise<void> {
         const child = spawn(cmd, args, { stdio: "ignore", detached: true });
         child.on("error", reject);
         child.on("spawn", () => {
+          debug?.(`spawn OK: ${cmd} (pid=${child.pid})`);
           child.unref();
           resolve();
         });
       });
       return; // launched successfully
-    } catch (err) {
+    } catch (err: any) {
       lastErr = err;
+      debug?.(`spawn FAILED: ${cmd} → ${err?.code ?? err?.message ?? err}`);
       // ENOENT → this launcher path doesn't exist here; try the next candidate.
       // Any other error also falls through to the next candidate.
     }
   }
+  debug?.(`openInBrowser: ALL candidates failed (lastErr=${(lastErr as any)?.message ?? lastErr})`);
   throw lastErr ?? new Error("no browser launcher available");
 }
 

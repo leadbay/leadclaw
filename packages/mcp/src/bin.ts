@@ -251,6 +251,25 @@ let pendingSignInUrl: string | undefined;
 // silent-no-op case — here we still have a live URL to show, but we also note
 // the auto-open failed so the copy can say "open this yourself".
 let browserOpenFailedAtBootstrap = false;
+// Diagnostic trace for the .dxt OAuth bootstrap. Claude Desktop doesn't surface
+// the spawned server's stderr anywhere the user can see, so we append a
+// timestamped line to ~/.leadbay/oauth-bootstrap-debug.log. Best-effort; never
+// throws. Lets us see, post-install, exactly when bootstrap ran, what env it
+// got, which launcher it spawned, and the result.
+function bootstrapDebug(msg: string): void {
+  try {
+    const { appendFileSync, mkdirSync } = require_("node:fs") as typeof import("node:fs");
+    const { join } = require_("node:path") as typeof import("node:path");
+    const { homedir } = require_("node:os") as typeof import("node:os");
+    const dir = join(homedir(), ".leadbay");
+    mkdirSync(dir, { recursive: true });
+    const ts = new Date().toISOString();
+    appendFileSync(join(dir, "oauth-bootstrap-debug.log"), `${ts} [pid ${process.pid}] ${msg}\n`);
+  } catch {
+    /* best-effort diagnostic — never block */
+  }
+}
+
 // Tracks an in-flight browser-open spawn so shutdown can wait for it to be
 // DISPATCHED before exiting. Claude Desktop probes a freshly-installed
 // extension with rapid connect→shutdown cycles (the first process can live
@@ -272,6 +291,10 @@ let browserOpenInFlight: Promise<void> | null = null;
 //   3. stargate /user_info -> GeoIP-detect, map to prod or staging regional URL
 async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
   if (process.env.LEADBAY_TOKEN) return false;
+  bootstrapDebug(
+    `bootstrap START — clientName=Leadbay MCP, REGION=${process.env.LEADBAY_REGION ?? "<unset>"} ` +
+      `BASE_URL=${process.env.LEADBAY_BASE_URL ?? "<unset>"}`
+  );
 
   const { hostname } = await import("node:os");
   process.stderr.write(
@@ -317,9 +340,14 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       // `openBrowser` so oauthLogin doesn't ALSO open (no double tab).
       onAuthorizeUrl: (url) => {
         pendingSignInUrl = url;
-        browserOpenInFlight = openInBrowser(url)
+        bootstrapDebug(`authorize URL ready — spawning browser open`);
+        browserOpenInFlight = openInBrowser(url, bootstrapDebug)
+          .then(() => {
+            bootstrapDebug(`auto-open dispatched OK`);
+          })
           .catch((err: any) => {
             browserOpenFailedAtBootstrap = true;
+            bootstrapDebug(`auto-open FAILED: ${err?.message ?? err}`);
             process.stderr.write(
               `[leadbay-mcp] auto-open browser failed (${err?.message ?? err}); user has the sign-in link.\n`
             );
@@ -368,6 +396,7 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
     process.env.LEADBAY_REGION = region;
     if (isStaging || envBaseUrl) process.env.LEADBAY_BASE_URL = authServerBaseUrl;
     pendingSignInUrl = undefined; // token landed — drop the sign-in link
+    bootstrapDebug(`bootstrap COMPLETE — token acquired, region=${region}`);
     logger.info?.(`OAuth bootstrap complete — region=${region}`);
     return true;
   } catch (err: any) {
@@ -382,6 +411,7 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       );
       return false;
     }
+    bootstrapDebug(`bootstrap FAILED (non-open): ${err?.message ?? err}`);
     process.stderr.write(
       `[leadbay-mcp] OAuth bootstrap failed: ${err?.message ?? err}\n` +
         `  The server will start but tools will return AUTH_PENDING/AUTH_MISSING until you authorize.\n`
@@ -1588,6 +1618,7 @@ async function main(): Promise<void> {
   // client stays tokenless and the bootstrapStatus gate keeps returning
   // AUTH_PENDING / AUTH_MISSING.
   if (bootstrapPending) {
+    bootstrapDebug(`server connected; launching background OAuth bootstrap`);
     void (async () => {
       const ok = await bootstrapOAuthIfMissing(logger);
       if (!ok) return; // gate already surfaces pending / open-failed to the user
@@ -1629,6 +1660,7 @@ async function main(): Promise<void> {
     // the detached opener child is spawned), give it a bounded moment to land
     // the spawn. Once spawned it's detached + unref'd and survives our exit.
     if (browserOpenInFlight) {
+      bootstrapDebug(`shutdown(code=${code}) while browser-open in flight — waiting up to 1.5s`);
       try {
         await Promise.race([
           browserOpenInFlight,
@@ -1637,6 +1669,8 @@ async function main(): Promise<void> {
       } catch {
         // ignore — best-effort; the surfaced sign-in link is the fallback
       }
+    } else {
+      bootstrapDebug(`shutdown(code=${code}) — no browser-open in flight`);
     }
     try {
       notificationsWs?.stop();
