@@ -43,7 +43,12 @@ const SECTORS = [
 
 export const SCENARIO = {
   name: "adjust-audience-dirty-taxonomy",
-  prompt: "leadbay_adjust_audience",
+  // `prompt` is the MCP PROMPT the harness renders to seed the agent — it must
+  // resolve to prompts/<name>.md.tmpl. leadbay_adjust_audience is a TOOL, not a
+  // prompt, so there is no template for it; the audience-build intent enters
+  // through the args-less orientation prompt (its expected_calls already lists
+  // leadbay_adjust_audience). The actual task is driven by mission.user_intent.
+  prompt: "leadbay_prospecting_overview",
   tier: "gate",
   args: {},
   backendFixtures: [
