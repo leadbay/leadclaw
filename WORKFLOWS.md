@@ -40,6 +40,7 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 26 | **Follow-up sequence** — multi-turn: discover → research the top lead → draft outreach to it, each turn building on the last | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 27 | **Prior-context carry-over** — across turns the agent must reuse the lead_id it surfaced earlier rather than re-running discovery | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 28 | **Send feedback to the team** — "send feedback", "report a bug", "tell Leadbay…", or accepting an offer to report an error — delivers a user-authored message to the Leadbay team's Sentry feedback inbox (same destination as the web app's feedback form) | `leadbay_send_feedback` | "Send feedback to the team: lead scores feel off this week" |
+| 29 | **Audience build from dirty taxonomy (no-crash)** — "create a group for menuisiers, pergolas, vérandas" — `leadbay_adjust_audience` must tolerate a null-name sector-taxonomy row and ambiguous matches, returning a graceful ambiguous-sectors message rather than a TypeError (regression lock for the v0.17.3 sector-creation crash) | `leadbay_adjust_audience` | "Create a group for menuisiers, pergolas, vérandas" |
 
 ---
 
@@ -462,6 +463,42 @@ turns:
 success_criteria:
   - "reused the top lead from turn 1 in the turn-2 research call without re-running discovery"
   - "did NOT call leadbay_report_outreach"
+```
+
+```yaml expected
+workflow_name: Lens creation — make a named audience
+prompt_name: ~
+required_calls:
+  - leadbay_new_lens
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_new_lens (with confirm:true once the user has approved the plan) to actually create the lens"
+  - "the lens was created (status:created) — NOT an API_ERROR or a 'JSON deserialization error' (the v0.17.3 numeric-base crash: POST /lenses must send `base` as a string)"
+  - "did NOT crash while resolving the sector taxonomy"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Create a lens called Joinery for the fintech sector"
+```
+
+```yaml expected
+workflow_name: Audience build from dirty taxonomy (no-crash)
+prompt_name: ~
+required_calls:
+  - leadbay_adjust_audience
+forbidden_calls:
+  - leadbay_report_outreach
+success_criteria:
+  - "called leadbay_adjust_audience with the requested sector text"
+  - "did NOT crash with a TypeError while scanning the sector taxonomy (a null-name taxonomy row must be tolerated — the v0.17.3 fix)"
+  - "when the sectors do not resolve confidently, returned a graceful ambiguous-sectors message naming the unresolved sector text rather than throwing or applying a half-built filter"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "Create a group for menuisiers, pergolas, vérandas"
 ```
 
 ---
