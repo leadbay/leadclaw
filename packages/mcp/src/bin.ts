@@ -270,6 +270,44 @@ function bootstrapDebug(msg: string): void {
   }
 }
 
+// Persisted Dynamic-Client-Registration cache. DCR is a once-and-reuse
+// operation: registering a fresh client on every launch is what exhausts the
+// backend's ~10-registrations/IP/hour limit (Claude Desktop fires several
+// launches per install via its probe-restarts). We cache the registered
+// client_id per auth-server URL in ~/.leadbay/oauth-client.json and reuse it.
+function oauthClientCachePath(): string {
+  const { join } = require_("node:path") as typeof import("node:path");
+  const { homedir } = require_("node:os") as typeof import("node:os");
+  return join(homedir(), ".leadbay", "oauth-client.json");
+}
+function getCachedOAuthClientId(authServerBaseUrl: string): string | undefined {
+  try {
+    const { readFileSync } = require_("node:fs") as typeof import("node:fs");
+    const parsed = JSON.parse(readFileSync(oauthClientCachePath(), "utf8"));
+    const id = parsed?.clients?.[authServerBaseUrl]?.client_id;
+    return typeof id === "string" && id.length > 0 ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function cacheOAuthClientId(authServerBaseUrl: string, clientId: string): void {
+  try {
+    const { readFileSync, writeFileSync, mkdirSync } = require_("node:fs") as typeof import("node:fs");
+    const { dirname } = require_("node:path") as typeof import("node:path");
+    const path = oauthClientCachePath();
+    let data: any = { clients: {} };
+    try {
+      data = JSON.parse(readFileSync(path, "utf8"));
+      if (!data || typeof data !== "object" || typeof data.clients !== "object") data = { clients: {} };
+    } catch { /* fresh file */ }
+    data.clients[authServerBaseUrl] = { client_id: clientId };
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
+  } catch {
+    /* best-effort — a write failure just means we re-register next launch */
+  }
+}
+
 // Tracks an in-flight browser-open spawn so shutdown can wait for it to be
 // DISPATCHED before exiting. Claude Desktop probes a freshly-installed
 // extension with rapid connect→shutdown cycles (the first process can live
@@ -360,6 +398,17 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       // shutdown race can be handled. Returning resolved means oauthLogin won't
       // try its own open or hit the fail-fast path.
       openBrowser: async () => {},
+      // Reuse a cached client_id (keyed by auth server) so we register at most
+      // once — avoids the 429 from re-registering on every probe-restart.
+      getCachedClientId: () => {
+        const id = getCachedOAuthClientId(authServerBaseUrl);
+        if (id) bootstrapDebug(`reusing cached client_id=${id} for ${authServerBaseUrl}`);
+        return id;
+      },
+      onClientRegistered: (id) => {
+        bootstrapDebug(`registered new client_id=${id} — caching for ${authServerBaseUrl}`);
+        cacheOAuthClientId(authServerBaseUrl, id);
+      },
     });
 
     // Persist to ~/.config/leadbay/credentials.json so future launches are silent.

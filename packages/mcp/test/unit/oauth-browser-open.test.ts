@@ -155,6 +155,65 @@ describe("oauthLogin — failFastOnOpenError", () => {
     expect((caught as Error).message).toMatch(/timed out/i);
   });
 
+  it("reuses a cached client_id and does NOT POST to the registration endpoint", async () => {
+    // Only discovery is declared — NO /register endpoint. The harness throws if
+    // the code hits an undeclared endpoint, so a registration attempt fails the
+    // test. This proves the cached id skips registration (the 429 root cause).
+    const captured = mockHttp([
+      {
+        method: "GET",
+        path: "/.well-known/oauth-authorization-server",
+        status: 200,
+        body: {
+          issuer: "https://api-us.leadbay.app",
+          authorization_endpoint: "https://leadbay.app/oauth/authorize",
+          token_endpoint: "https://api-us.leadbay.app/1.6/oauth/token",
+          registration_endpoint: "https://api-us.leadbay.app/1.6/oauth/register",
+          code_challenge_methods_supported: ["S256"],
+        },
+      },
+    ]);
+    let surfaced: string | undefined;
+    let registeredCalled = false;
+    await oauthLogin({
+      authServerBaseUrl: "https://api-us.leadbay.app",
+      clientName: "Leadbay MCP @ test",
+      openBrowser: async () => {},
+      getCachedClientId: () => "cached-123",
+      onClientRegistered: () => {
+        registeredCalled = true;
+      },
+      onAuthorizeUrl: (url) => {
+        surfaced = url;
+      },
+      timeoutMs: 120,
+    }).catch(() => {
+      /* expected timeout on the callback wait */
+    });
+    expect(registeredCalled).toBe(false);
+    expect(captured.requests.some((r) => r.path.includes("/oauth/register"))).toBe(false);
+    // The cached id is what ends up in the authorize URL.
+    expect(surfaced).toContain("client_id=cached-123");
+  });
+
+  it("registers when no cache, and reports the new id via onClientRegistered", async () => {
+    discoveryAndRegister();
+    let persisted: string | undefined;
+    await oauthLogin({
+      authServerBaseUrl: "https://api-us.leadbay.app",
+      clientName: "Leadbay MCP @ test",
+      openBrowser: async () => {},
+      getCachedClientId: () => undefined, // no cache → must register
+      onClientRegistered: (id) => {
+        persisted = id;
+      },
+      timeoutMs: 120,
+    }).catch(() => {
+      /* expected timeout on the callback wait */
+    });
+    expect(persisted).toBe("99"); // the registration response's client_id
+  });
+
   it("fires onAuthorizeUrl with the live URL before blocking on the callback", async () => {
     discoveryAndRegister();
     let surfaced: string | undefined;

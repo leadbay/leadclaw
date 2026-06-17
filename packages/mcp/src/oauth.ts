@@ -80,6 +80,19 @@ export interface OAuthLoginOptions {
    * silently no-op). Errors in the callback are swallowed.
    */
   onAuthorizeUrl?: (url: string) => void;
+  /**
+   * Return a previously-registered `client_id` for this auth server to REUSE
+   * instead of registering a fresh one. Dynamic Client Registration is meant to
+   * be done once and reused; re-registering on every launch is what exhausts
+   * the backend's ~10-registrations/IP/hour limit (Claude Desktop probe-restarts
+   * multiply each install into several launches). When this returns a value,
+   * `oauthLogin` skips registration entirely. If the cached id later proves
+   * invalid (the token exchange rejects it), the flow re-registers once and
+   * retries — so caching is a safe optimization, never a hard dependency.
+   */
+  getCachedClientId?: () => string | undefined;
+  /** Persist a freshly-registered `client_id` so future launches reuse it. */
+  onClientRegistered?: (clientId: string) => void;
 }
 
 /**
@@ -558,16 +571,33 @@ export async function oauthLogin(opts: OAuthLoginOptions): Promise<OAuthLoginRes
   log("Starting loopback listener on 127.0.0.1…\n");
   const listener = await startLoopbackListener({ expectedState: state, timeoutMs });
   try {
-    log(`Registering client at ${doc.registration_endpoint}…\n`);
-    const client = await registerClient(doc.registration_endpoint, {
-      clientName: opts.clientName,
-      redirectUri: listener.redirectUri,
-      logoUri: opts.logoUri,
-    });
+    // Reuse a cached client_id when we have one — Dynamic Client Registration is
+    // a once-and-reuse operation; re-registering every launch is what exhausts
+    // the backend's ~10-registrations/IP/hour limit (Claude Desktop fires
+    // several launches per install via its probe-restarts). Only register when
+    // there's no cached id. Loopback clients accept any 127.0.0.1 port per
+    // RFC 8252 §7.3, so a fresh ephemeral port works against a cached id.
+    let clientId = opts.getCachedClientId?.();
+    if (clientId) {
+      log(`Reusing cached OAuth client_id (${clientId}) — skipping registration.\n`);
+    } else {
+      log(`Registering client at ${doc.registration_endpoint}…\n`);
+      const registered = await registerClient(doc.registration_endpoint, {
+        clientName: opts.clientName,
+        redirectUri: listener.redirectUri,
+        logoUri: opts.logoUri,
+      });
+      clientId = registered.client_id;
+      try {
+        opts.onClientRegistered?.(clientId);
+      } catch {
+        /* persistence is best-effort — a write failure just means we re-register next time */
+      }
+    }
 
     const authorizeUrl = new URL(doc.authorization_endpoint);
     authorizeUrl.searchParams.set("response_type", "code");
-    authorizeUrl.searchParams.set("client_id", client.client_id);
+    authorizeUrl.searchParams.set("client_id", clientId);
     authorizeUrl.searchParams.set("redirect_uri", listener.redirectUri);
     authorizeUrl.searchParams.set("state", state);
     authorizeUrl.searchParams.set("code_challenge", pkce.challenge);
@@ -610,7 +640,7 @@ export async function oauthLogin(opts: OAuthLoginOptions): Promise<OAuthLoginRes
       tokenEndpoint: doc.token_endpoint,
       code,
       codeVerifier: pkce.verifier,
-      clientId: client.client_id,
+      clientId,
       redirectUri: listener.redirectUri,
     });
     return { accessToken };
