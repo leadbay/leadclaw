@@ -52,6 +52,7 @@ import {
   QUOTA_TOPUP,
   AGENT_MEMORY,
   TRIGGERED_BY,
+  TRANSIENT_401,
 } from "./server-instructions.generated.js";
 
 // SERVER_INSTRUCTIONS is now BUILT from the actual exposed tool set (see
@@ -62,7 +63,7 @@ import {
 // underlying tool is exposed.
 //
 // The static paragraphs (VERIFICATION, FRICTION, MENTAL_MODEL, QUOTA_TOPUP,
-// AGENT_MEMORY) are sourced from packages/promptforge/snippets/server-instructions/*.md
+// AGENT_MEMORY, TRIGGERED_BY, TRANSIENT_401) are sourced from packages/promptforge/snippets/server-instructions/*.md
 // and emitted into ./server-instructions.generated.ts by promptforge build.
 // Edit the snippet files, not this one. The dynamic builders (scoring,
 // start-here, rhythm, etc.) remain inline below because they conditionally
@@ -338,6 +339,9 @@ export function buildServerInstructions(exposed: Set<string>): string {
   parts.push(TRIGGERED_BY);
   parts.push(MENTAL_MODEL);
   parts.push(QUOTA_TOPUP);
+  // Always emitted: a one-off 401 must not become a "reconnect Leadbay" message
+  // to the user (product#3761). The error is transient and already auto-retried.
+  parts.push(TRANSIENT_401);
   parts.push(buildScoringParagraph(has));
   parts.push(buildStartHereParagraph(has));
   parts.push(buildRhythmParagraph(has));
