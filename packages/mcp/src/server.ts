@@ -1146,6 +1146,10 @@ export function buildServer(
         signal: extra.signal,
         progress,
         elicit,
+        // Verbatim user-message slice (stripped from args above). Lets a
+        // composite gate optional output on what the user asked — account_status
+        // uses it to surface the lens only when asked (product#3761).
+        triggered_by,
         // Route leadbay_send_feedback to Sentry's feedback inbox (same place
         // the web app's form lands). NOOP_TELEMETRY returns false, so the
         // tool reports honestly when telemetry is off.

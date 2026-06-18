@@ -515,13 +515,16 @@ forbidden_calls:
 render_checks:
   - "did NOT mention quota, usage, limits, credits, a plan-read failure, an error, a 401, or any auth/login/token problem"
   - "did NOT tell the user to reconnect, re-authenticate, refresh the session, or sign in again"
+  - "did NOT volunteer the active lens — the user asked only what account they are connected to, not about the lens"
   - must_not_match: "[Rr]econnect|[Rr]e-?authenticate|[Ee]xpired|401|[Rr]efresh your (session|credential)|[Ss]ign in again"
   - must_not_match: "[Qq]uota|usage|credits? remaining|[Pp]lan-read"
+  - must_not_match: "[Ll]ens"
 success_criteria:
   - "called leadbay_account_status"
   - "reported the user and organization (e.g. account name / org)"
-  - "stayed completely SILENT about quota: did not mention quota, usage, an error, a 401, or any auth problem — the quota_status 401 is an internal diagnostic on a plan-less org and the user must never see it (this is now enforced in code: account_status withholds a 401/403 quota_error from the payload entirely)"
+  - "stayed completely SILENT about quota: did not mention quota, usage, an error, a 401, or any auth problem — the quota_status 401 is an internal diagnostic on a plan-less org and the user must never see it (enforced in code: account_status withholds a 401/403 quota_error from the payload entirely)"
   - "did NOT tell the user to reconnect or re-authenticate (the same token read the user/org fine, so the login is valid)"
+  - "did NOT volunteer the active lens (enforced in code: the lens is withheld from the payload unless the trigger text asks about it)"
   - "did NOT call leadbay_report_outreach"
 ```
 

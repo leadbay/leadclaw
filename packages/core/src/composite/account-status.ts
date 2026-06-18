@@ -46,12 +46,12 @@ export const accountStatus: Tool<Record<string, never>> = {
       last_requested_lens: {
         type: ["string", "null"],
         description:
-          "INTERNAL — the most recent lens id (a STRING, e.g. \"40005\") the user pulled leads from. Do NOT volunteer the lens in an account-status answer; the user did not ask about it. This raw id is for internal routing only — NEVER show it to the user. If the user explicitly asks which lens is active, answer with `last_requested_lens_name`, never this id.",
+          "The most recent lens id (a STRING, e.g. \"40005\"). WITHHELD (null) unless the user's message asked about the lens/audience — the composite only populates it when asked, so a plain 'what account?' answer has no lens to show. Even when present, this raw id is internal routing only — NEVER show the number to the user; use `last_requested_lens_name`.",
       },
       last_requested_lens_name: {
         type: ["string", "null"],
         description:
-          "Human-readable name of last_requested_lens (resolved from /lenses). DEFAULT BEHAVIOR: do NOT include the lens in your account-status answer at all — a plain 'what account am I connected to' question is about the user + org, NOT the lens. ONLY surface this when the user's message EXPLICITLY asks about the lens/audience (e.g. 'which lens is active?'). When you do, use THIS name — never the numeric id. Null if unresolved.",
+          "Human-readable name of the active lens (resolved from /lenses). WITHHELD (null) unless the user explicitly asked about the lens/audience — the composite only resolves it when asked, so on a plain account question there is nothing here to mention. When present (the user asked), answer with THIS name, never the numeric id.",
       },
       quota: {
         type: ["object", "null"],
@@ -148,12 +148,22 @@ export const accountStatus: Tool<Record<string, never>> = {
       }
     }
 
-    // Resolve the lens id → human name so the agent can answer with the NAME
-    // (never the raw number) if the user explicitly asks which lens is active.
-    // Best-effort: never block account_status on it — null name on any failure.
-    let last_requested_lens_name: string | null = null;
+    // The lens is gated on what the user ACTUALLY asked (product#3761). A plain
+    // "what account am I connected to?" is NOT a lens question, and prompt
+    // guidance alone leaked the lens unprompted in ~1/3 of live runs. So we only
+    // surface ANYTHING lens-related when the trigger text mentions the lens /
+    // audience. When not asked, both the id and the resolved name are withheld
+    // from the payload entirely — the agent literally cannot volunteer what it
+    // can't see. Safe failure: an unusual phrasing that misses the keywords just
+    // omits the lens (never leaks it). When asked, we resolve the human NAME so
+    // the agent answers with it, never the raw numeric id.
     const lensId = me.last_requested_lens ?? null;
-    if (lensId != null) {
+    const lensAsked =
+      typeof ctx?.triggered_by === "string" &&
+      /\b(lens|lenses|audience|targeting|segment|filter)\b/i.test(ctx.triggered_by);
+
+    let last_requested_lens_name: string | null = null;
+    if (lensAsked && lensId != null) {
       try {
         const lenses = await client.request<LensPayload[]>("GET", "/lenses");
         // Lens ids are STRINGS server-side (e.g. "40005") — see my-lenses.ts.
@@ -185,10 +195,10 @@ export const accountStatus: Tool<Record<string, never>> = {
         computing_intelligence: me.organization.computing_intelligence ?? false,
         plan: quota?.plan ?? me.organization.quota_plan ?? null,
       },
-      // Lens ids are STRINGS server-side (my-lenses.ts), though /me may type
-      // this as a number — normalize to the string form so the value matches
-      // the schema and never drifts string-vs-number across accounts.
-      last_requested_lens: lensId == null ? null : String(lensId),
+      // Lens is withheld unless the user asked (lensAsked, above). When present,
+      // the id is normalized to the STRING form (my-lenses.ts) so it matches the
+      // schema and never drifts string-vs-number across accounts.
+      last_requested_lens: lensAsked && lensId != null ? String(lensId) : null,
       last_requested_lens_name,
       // Quota goes here verbatim from /quota_status. Legacy freemium.* fields
       // on /me are intentionally NOT surfaced — they're defunct (see
