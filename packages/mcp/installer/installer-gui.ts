@@ -401,7 +401,9 @@ function pageHtml(): string {
     h1 { font-size:18px; line-height:1.3; margin:0 0 6px; font-weight:700; color:var(--strong); text-align:center; }
     .sub { color:var(--muted); text-align:center; margin:0; min-height:1.55em; }
     .sub.err { color:var(--danger); }
-    .hidden { display:none; }
+    .hidden { display:none !important; }
+    .spinner { width:26px; height:26px; margin:18px auto 0; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     .agents { display:grid; gap:8px; margin-top:18px; }
     .agent { display:grid; grid-template-columns:auto 1fr; gap:11px; align-items:center; padding:11px 13px; border:1px solid var(--line); border-radius:10px; cursor:pointer; transition:border-color .15s; }
     .agent:hover { border-color:var(--muted); }
@@ -431,6 +433,7 @@ function pageHtml(): string {
     .ring.err .disc { fill:var(--danger); animation:pop .4s ease-out; }
     .result-msg { font-size:15px; font-weight:700; color:var(--strong); text-align:center; }
     .result.err .result-msg { color:var(--danger); }
+    .result-note { font-size:12.5px; color:var(--muted); text-align:center; margin-top:-6px; }
     @keyframes draw { to { stroke-dashoffset:0; } }
     @keyframes pop { 0%{transform:scale(.5);opacity:0;} 60%{transform:scale(1.06);} 100%{transform:scale(1);opacity:1;} }
     @media (max-width:520px) { .actions{flex-direction:column;} button{width:100%;} }
@@ -444,6 +447,7 @@ function pageHtml(): string {
       <p class="sub" id="sub">Sign in to install Leadbay across your AI agents.</p>
 
       <section id="step-2" class="hidden">
+        <div class="spinner" id="spinner"></div>
         <div class="agents" id="agents"></div>
       </section>
 
@@ -454,6 +458,7 @@ function pageHtml(): string {
           <path id="ring-mark" d="M20 33 l8 8 l16 -18"></path>
         </svg>
         <div class="result-msg" id="result-msg"></div>
+        <div class="result-note" id="result-note"></div>
       </section>
 
       <div class="actions">
@@ -493,15 +498,17 @@ function pageHtml(): string {
     function showResult(ok, msg) {
       $("sub").classList.add("hidden");
       $("result-msg").textContent = msg;
+      $("result-note").textContent = ok ? "You can close this window." : "";
       $("ring-mark").setAttribute("d", ok ? CHECK : CROSS);
       const ring = $("ring"); ring.classList.remove("ok", "err"); void ring.getBoundingClientRect();
       ring.classList.add(ok ? "ok" : "err");
       $("result").classList.toggle("err", !ok);
       $("result").classList.remove("hidden");
       $("title").textContent = ok ? "All set" : "Something went wrong";
+      ["next", "back", "refresh"].forEach((id) => $(id).classList.add("hidden"));
     }
-    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="sub">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const manual = client.id === "chatgpt-desktop"; const badgeText = manual ? "manual" : client.configured ? "update" : "install"; const badgeClass = manual ? "badge-update" : client.configured ? "badge-update" : "badge-install"; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' <span class="badge-pill ' + badgeClass + '">' + badgeText + '</span></strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
-    async function refresh() { const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); if (!clients.length) say("No supported agents detected."); }
+    function renderAgents() { $("spinner").classList.add("hidden"); const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="sub">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const manual = client.id === "chatgpt-desktop"; const badgeText = manual ? "manual" : client.configured ? "update" : "install"; const badgeClass = manual ? "badge-update" : client.configured ? "badge-update" : "badge-install"; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' <span class="badge-pill ' + badgeClass + '">' + badgeText + '</span></strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
+    async function refresh() { $("spinner").classList.remove("hidden"); $("agents").innerHTML = ""; const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); if (!clients.length) say("No supported agents detected."); }
     async function doLogin() { $("next").disabled = true; say("Opening Leadbay sign-in in your browser..."); try { const res = await fetch("/api/oauth-login", { method:"POST" }); const data = await res.json(); if (!data.ok) return say(data.error || "OAuth login failed.", true); sessionId = data.sessionId; setStep(2); await refresh(); } finally { $("next").disabled = false; } }
     async function install() {
       const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client);
