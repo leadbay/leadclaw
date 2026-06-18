@@ -55,7 +55,7 @@ export const accountStatus: Tool<Record<string, never>> = {
       quota_error: {
         type: ["object", "null"],
         description:
-          "Non-null ONLY when the quota_status call FAILED — {code, http_status, message}. A 401/403 means the token lacks quota scope: tell the user to reconnect / re-run OAuth. Treat as 'quota unreadable', NEVER as zero usage or 'no limits'.",
+          "Non-null ONLY when the quota_status call FAILED — {code, http_status, message}. Treat as 'quota unreadable', NEVER as zero usage or 'no limits'. A 401/403 here does NOT mean the user's login is broken: the `user` and `organization` fields in THIS SAME response were fetched with the same token and succeeded, so the token is valid. A quota 401/403 is a backend-side quirk (commonly an org with no billing plan — `plan: null`), not an auth failure. Do NOT tell the user to reconnect or re-authenticate; just report that quota is unreadable right now and continue.",
         properties: {
           code: { type: "string" },
           http_status: { type: ["number", "null"] },
@@ -103,11 +103,13 @@ export const accountStatus: Tool<Record<string, never>> = {
     const me = await client.resolveMe();
 
     let quota: QuotaStatusPayload | null = null;
-    // Distinct from `quota: null`: when the call FAILS (e.g. 401/403 from a
-    // token without quota scope) we surface the error so the agent can say
-    // "quota access denied — reauth" instead of misreading silence as
+    // Distinct from `quota: null`: when the call FAILS we surface the error so
+    // the agent says "quota unreadable" instead of misreading silence as
     // "no usage / unlimited". A null quota with no error means the call
-    // genuinely returned nothing.
+    // genuinely returned nothing. NOTE: a 401/403 here is NOT an auth failure —
+    // /users/me above used the same token and succeeded. The quota endpoint
+    // 401s for orgs with no billing plan (plan: null); see quota_error's
+    // description for the agent-facing framing (product#3761).
     let quota_error: { code: string; http_status: number | null; message: string } | null = null;
     try {
       quota = await client.request<QuotaStatusPayload>(
@@ -153,7 +155,8 @@ export const accountStatus: Tool<Record<string, never>> = {
       // when nothing has completed since the last ack.
       notifications: ctx?.notificationsInbox?.list() ?? [],
       // Non-null ONLY when the quota_status call failed. The agent must treat
-      // this as "could not read quota" (reauth on 401/403) — NOT as zero usage.
+      // this as "could not read quota" — NOT as zero usage, and NOT as a broken
+      // login (the token just authenticated /users/me above). product#3761.
       quota_error,
       _meta: {
         region: client.region,
