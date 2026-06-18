@@ -323,15 +323,18 @@ function pageUninstallHtml(): string {
     body { margin:0; min-height:100vh; background:var(--bg); color:var(--strong); font:14px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; display:flex; align-items:center; justify-content:center; padding:32px 24px; -webkit-font-smoothing:antialiased; }
     main { width:min(420px,100%); }
     .steps { display:flex; gap:6px; justify-content:center; margin-bottom:18px; }
-    .dot { width:24px; height:3px; border-radius:999px; background:var(--line); }
+    .dot { width:24px; height:3px; border-radius:999px; background:var(--line); transition:background .2s; }
     .dot.active,.dot.done { background:var(--danger); }
     .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:30px 26px; }
     h1 { font-size:18px; line-height:1.3; margin:0 0 6px; font-weight:700; color:var(--strong); text-align:center; }
     .sub { color:var(--muted); text-align:center; margin:0; min-height:1.55em; }
     .sub.err { color:var(--danger); }
-    .hidden { display:none; }
+    .hidden { display:none !important; }
+    .spinner { width:26px; height:26px; margin:18px auto 0; border:3px solid var(--line); border-top-color:var(--danger); border-radius:50%; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     .agents { display:grid; gap:8px; margin-top:18px; }
-    .agent { display:grid; grid-template-columns:auto 1fr; gap:11px; align-items:center; padding:11px 13px; border:1px solid var(--line); border-radius:10px; cursor:pointer; }
+    .agent { display:grid; grid-template-columns:auto 1fr; gap:11px; align-items:center; padding:11px 13px; border:1px solid var(--line); border-radius:10px; cursor:pointer; transition:border-color .15s; }
+    .agent:hover { border-color:var(--muted); }
     .agent strong { display:block; font-weight:650; color:var(--strong); }
     .agent .detail { color:var(--muted); font-size:12px; word-break:break-all; }
     .agent input { width:16px; height:16px; accent-color:var(--danger); }
@@ -342,6 +345,21 @@ function pageUninstallHtml(): string {
     button.danger:hover { opacity:.88; }
     button.ghost { border:0; background:transparent; color:var(--muted); padding:9px 14px; }
     button:disabled { opacity:.45; cursor:default; }
+    /* result state — animated check / cross */
+    .result { display:flex; flex-direction:column; align-items:center; gap:14px; padding:8px 0 4px; }
+    .ring { width:64px; height:64px; }
+    .ring circle { fill:none; stroke-width:3; stroke-linecap:round; stroke-dasharray:170; stroke-dashoffset:170; animation:draw .5s ease-out forwards; }
+    .ring path { fill:none; stroke:#fff; stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:48; stroke-dashoffset:48; animation:draw .35s .45s ease-out forwards; }
+    .ring .disc { stroke:none; }
+    .ring.ok circle:not(.disc) { stroke:var(--ok); }
+    .ring.err circle:not(.disc) { stroke:var(--danger); }
+    .ring.ok .disc { fill:var(--ok); animation:pop .4s ease-out; }
+    .ring.err .disc { fill:var(--danger); animation:pop .4s ease-out; }
+    .result-msg { font-size:15px; font-weight:700; color:var(--strong); text-align:center; }
+    .result.err .result-msg { color:var(--danger); }
+    .result-note { font-size:12.5px; color:var(--muted); text-align:center; margin-top:-6px; }
+    @keyframes draw { to { stroke-dashoffset:0; } }
+    @keyframes pop { 0%{transform:scale(.5);opacity:0;} 60%{transform:scale(1.06);} 100%{transform:scale(1);opacity:1;} }
     @media (max-width:520px) { .actions{flex-direction:column;} button{width:100%;} }
   </style>
 </head>
@@ -351,7 +369,22 @@ function pageUninstallHtml(): string {
     <div class="card">
       <h1 id="title">Remove Leadbay MCP</h1>
       <p class="sub" id="sub">Select the agents to remove Leadbay MCP from.</p>
-      <section id="step-1"><div class="agents" id="agents"></div></section>
+
+      <section id="step-1">
+        <div class="spinner" id="spinner"></div>
+        <div class="agents" id="agents"></div>
+      </section>
+
+      <section id="result" class="result hidden">
+        <svg class="ring" id="ring" viewBox="0 0 64 64" aria-hidden="true">
+          <circle class="disc" cx="32" cy="32" r="28"></circle>
+          <circle cx="32" cy="32" r="28"></circle>
+          <path id="ring-mark" d="M20 33 l8 8 l16 -18"></path>
+        </svg>
+        <div class="result-msg" id="result-msg"></div>
+        <div class="result-note" id="result-note"></div>
+      </section>
+
       <div class="actions">
         <button id="back" class="ghost hidden">Back</button>
         <button id="refresh">Refresh</button>
@@ -365,14 +398,29 @@ function pageUninstallHtml(): string {
       1: { title: "Remove Leadbay MCP", sub: "Select the agents to remove Leadbay MCP from." },
       2: { title: "Removing", sub: "Keep this window open until it's done." },
     };
+    const CHECK = "M20 33 l8 8 l16 -18";
+    const CROSS = "M22 22 l20 20 M42 22 l-20 20";
     let step = 1;
     let clients = [];
     function say(text, error = false) { const s = $("sub"); s.textContent = text; s.classList.toggle("err", !!error); }
     function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-    function setStep(n) { step = n; [1,2].forEach((i) => { const dot = $("dot-" + i); dot.classList.toggle("active", i === step); dot.classList.toggle("done", i < step); }); $("step-1").classList.toggle("hidden", step !== 1); $("title").textContent = STEPS[step].title; say(STEPS[step].sub); $("next").classList.toggle("hidden", step === 2); $("refresh").classList.toggle("hidden", step === 2); }
-    function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="sub">No Leadbay MCP installation detected on this machine.</div>'; return; } root.innerHTML = clients.map((c) => '<label class="agent"><input type="checkbox" data-client="' + esc(c.id) + '" checked /><span><strong>' + esc(c.label) + '</strong><span class="detail">' + esc(c.detail) + '</span></span></label>').join(""); }
-    async function refresh() { const res = await fetch("/api/status"); const data = await res.json(); clients = (data.clients || []).filter((c) => c.configured); renderAgents(); if (!clients.length) say("No Leadbay MCP installation detected on this machine."); }
-    async function doUninstall() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return say("Select at least one agent.", true); setStep(2); const params = new URLSearchParams({ clients: selected.join(",") }); const events = new EventSource("/api/uninstall-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); say(data.message, data.level === "error"); if (data.level === "done") events.close(); }; events.onerror = () => { say("Uninstall stream disconnected.", true); events.close(); }; }
+    function setStep(n) { step = n; [1,2].forEach((i) => { const dot = $("dot-" + i); dot.classList.toggle("active", i === step); dot.classList.toggle("done", i < step); }); $("step-1").classList.toggle("hidden", step !== 1); $("result").classList.add("hidden"); $("title").textContent = STEPS[step].title; say(STEPS[step].sub); $("next").classList.toggle("hidden", step === 2); $("refresh").classList.toggle("hidden", step === 2); }
+    // Final completion state: animated green check / red cross + message.
+    function showResult(ok, msg) {
+      $("sub").classList.add("hidden");
+      $("result-msg").textContent = msg;
+      $("result-note").textContent = ok ? "You can close this window." : "";
+      $("ring-mark").setAttribute("d", ok ? CHECK : CROSS);
+      const ring = $("ring"); ring.classList.remove("ok", "err"); void ring.getBoundingClientRect();
+      ring.classList.add(ok ? "ok" : "err");
+      $("result").classList.toggle("err", !ok);
+      $("result").classList.remove("hidden");
+      $("title").textContent = ok ? "All set" : "Something went wrong";
+      ["next", "back", "refresh"].forEach((id) => $(id).classList.add("hidden"));
+    }
+    function renderAgents() { $("spinner").classList.add("hidden"); const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="sub">No Leadbay MCP installation detected on this machine.</div>'; return; } root.innerHTML = clients.map((c) => '<label class="agent"><input type="checkbox" data-client="' + esc(c.id) + '" checked /><span><strong>' + esc(c.label) + '</strong><span class="detail">' + esc(c.detail) + '</span></span></label>').join(""); }
+    async function refresh() { $("spinner").classList.remove("hidden"); $("agents").innerHTML = ""; const res = await fetch("/api/status"); const data = await res.json(); clients = (data.clients || []).filter((c) => c.configured); renderAgents(); if (!clients.length) say("No Leadbay MCP installation detected on this machine."); }
+    async function doUninstall() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return say("Select at least one agent.", true); setStep(2); let okCount = 0, lastError = ""; const params = new URLSearchParams({ clients: selected.join(",") }); const events = new EventSource("/api/uninstall-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); if (data.level === "error") lastError = data.message; if (data.level === "success") okCount += 1; if (data.level === "done") { events.close(); const ok = okCount > 0 && !lastError; showResult(ok, ok ? "MCP successfully removed" : (lastError || "No agents were removed.")); } else { say(data.message, data.level === "error"); } }; events.onerror = () => { events.close(); showResult(false, "Uninstall stream disconnected."); }; }
     $("back").addEventListener("click", () => setStep(1));
     $("refresh").addEventListener("click", refresh);
     $("next").addEventListener("click", doUninstall);
