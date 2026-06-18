@@ -18,7 +18,7 @@ import { inferRegionViaStargate, oauthLogin, verifyTokenRegion } from "../src/oa
 
 declare const __LEADBAY_MCP_VERSION__: string;
 
-type InstallRequest = { sessionId?: string; clientIds?: string[]; includeWrite?: boolean; telemetryEnabled?: boolean };
+type InstallRequest = { sessionId?: string; clientIds?: string[]; includeWrite?: boolean; telemetryEnabled?: boolean; region?: "us" | "fr" };
 type LoginSession = { token: string; region: "us" | "fr"; accountLabel: string; createdAt: number };
 type InstallResult = { id: string; label: string; ok: boolean; message: string };
 type LogLevel = "info" | "active" | "success" | "error" | "done";
@@ -214,6 +214,12 @@ export async function install(body: InstallRequest): Promise<{ ok: boolean; outp
   if (!session) return { ok: false, output: "Login expired. Go back and sign in again." };
   if (!clientIds.length) return { ok: false, output: "Select at least one agent." };
 
+  // Honor an explicit region override (product#3761) — same as the streaming path.
+  if ((body.region === "us" || body.region === "fr") && body.region !== session.region) {
+    session.region = body.region;
+    session.accountLabel = `Leadbay OAuth (${body.region.toUpperCase()} — chosen)`;
+  }
+
   const detected = await detectClients();
   const selected = detected.filter((client) => clientIds.includes(client.id));
   if (!selected.length) return { ok: false, output: "No selected agents were detected on this machine." };
@@ -256,6 +262,17 @@ async function streamInstall(url: URL, res: ServerResponse, onDone?: () => void)
 
   if (!session) { emit("error", "Login expired. Go back and sign in again."); abort("Install stopped."); return; }
   if (!clientIds.length) { emit("error", "Select at least one agent."); abort("Install stopped."); return; }
+
+  // Region override: the wizard pre-selects the verified region but lets the
+  // user pick us|fr explicitly (product#3761). Honor an explicit, valid choice
+  // — it's what gets written as LEADBAY_REGION, so a wrong pin here is exactly
+  // the bug we're fixing; trust the human's pick over the GeoIP guess.
+  const regionParam = url.searchParams.get("region");
+  if ((regionParam === "us" || regionParam === "fr") && regionParam !== session.region) {
+    session.region = regionParam;
+    session.accountLabel = `Leadbay OAuth (${regionParam.toUpperCase()} — chosen)`;
+    emit("info", `Region set to ${regionParam.toUpperCase()} (your choice).`);
+  }
 
   emit("info", `Connected to ${session.accountLabel}.`);
   emit("info", `Write tools ${includeWrite ? "enabled" : "disabled"}; telemetry ${telemetryEnabled ? "enabled" : "disabled"}.`);
@@ -465,7 +482,7 @@ function pageHtml(): string {
     <div class="steps"><div class="step-pill active" id="pill-1">1. Sign in</div><div class="step-pill" id="pill-2">2. Agents</div><div class="step-pill" id="pill-3">3. Install</div></div>
 
     <section id="step-1"><strong>Connect your Leadbay account</strong><div class="hint">This opens Leadbay in your browser. After approval, come back here to choose where to install the MCP.</div></section>
-    <section id="step-2" class="hidden"><strong>Detected agents</strong><div class="hint">Local agents are installed automatically when supported. ChatGPT Desktop requires manual setup with the hosted MCP URL.</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
+    <section id="step-2" class="hidden"><strong>Detected agents</strong><div class="hint">Local agents are installed automatically when supported. ChatGPT Desktop requires manual setup with the hosted MCP URL.</div><div class="agents" id="agents"></div><div class="options"><div class="setting-card"><label>Region<select id="region"><option value="us">US (api-us.leadbay.app)</option><option value="fr">FR (api-fr.leadbay.app)</option></select></label><div class="hint" id="region-hint">The Leadbay backend that owns your account. Pre-filled from your sign-in; change it if it's wrong. The wrong region makes every request fail on startup.</div></div><div class="setting-card"><label class="toggle"><input id="write" type="checkbox" checked /> Write tools</label><div class="hint">Allows Leadbay actions that change data or spend credits, like import, enrich, qualify, refine audience, and log outreach.</div></div><div class="setting-card"><label class="toggle"><input id="telemetry" type="checkbox" checked /> Telemetry</label><div class="hint">Sends product usage and crash events so we can debug installs. It does not send tool arguments, lead data, or the token.</div></div></div></section>
     <section id="step-3" class="hidden"><strong>Installing</strong><div class="hint">Keep this window open until the final message appears. ChatGPT Desktop setup is manual in ChatGPT Settings > Apps.</div></section>
 
     <div class="actions"><button id="back" disabled>Back</button><div class="right-actions"><button id="refresh" class="hidden">Refresh</button><button class="primary" id="next">Sign in with Leadbay</button></div></div>
@@ -476,6 +493,7 @@ function pageHtml(): string {
     let step = 1;
     let sessionId = null;
     let clients = [];
+    let detectedRegion = null;
     function clearLog() { $("log").innerHTML = ""; }
     function appendLog(level, text) { const row = document.createElement("div"); row.className = "log-row log-" + level; row.textContent = text; $("log").appendChild(row); $("log").scrollTop = $("log").scrollHeight; }
     function line(text, error = false) { clearLog(); appendLog(error ? "error" : "info", text); }
@@ -483,8 +501,8 @@ function pageHtml(): string {
     function setStep(next) { step = next; [1,2,3].forEach((n) => { $("step-" + n).classList.toggle("hidden", n !== step); $("pill-" + n).classList.toggle("active", n === step); }); $("back").disabled = step === 1 || step === 3; $("refresh").classList.toggle("hidden", step !== 2); $("next").classList.toggle("hidden", step === 3); $("next").textContent = step === 2 ? "Continue" : "Sign in with Leadbay"; }
     function renderAgents() { const root = $("agents"); if (!clients.length) { root.innerHTML = '<div class="hint">No supported MCP client detected on this machine.</div>'; return; } root.innerHTML = clients.map((client) => { const manual = client.id === "chatgpt-desktop"; const badgeText = manual ? "manual setup" : client.configured ? "update" : "install"; const badgeClass = manual ? "badge-update" : client.configured ? "badge-update" : "badge-install"; return '<label class="agent"><input type="checkbox" data-client="' + esc(client.id) + '" checked /><span><strong>' + esc(client.label) + ' <span class="' + badgeClass + '">' + badgeText + '</span></strong><span class="detail">' + esc(client.detail) + '</span></span></label>'; }).join(""); }
     async function refresh() { line("Detecting agents..."); const res = await fetch("/api/status"); const data = await res.json(); clients = data.clients || []; renderAgents(); line(clients.length ? "Agents detected." : "No supported agents detected."); }
-    async function doLogin() { $("next").disabled = true; line("Opening Leadbay sign-in in your browser..."); try { const res = await fetch("/api/oauth-login", { method:"POST" }); const data = await res.json(); if (!data.ok) return line(data.error || "OAuth login failed.", true); sessionId = data.sessionId; line("Signed in. Detecting installed agents..."); setStep(2); await refresh(); } finally { $("next").disabled = false; } }
-    async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); setStep(3); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }
+    async function doLogin() { $("next").disabled = true; line("Opening Leadbay sign-in in your browser..."); try { const res = await fetch("/api/oauth-login", { method:"POST" }); const data = await res.json(); if (!data.ok) return line(data.error || "OAuth login failed.", true); sessionId = data.sessionId; detectedRegion = (data.region === "fr" ? "fr" : "us"); $("region").value = detectedRegion; line("Signed in (" + detectedRegion.toUpperCase() + " backend). Detecting installed agents..."); setStep(2); await refresh(); } finally { $("next").disabled = false; } }
+    async function install() { const selected = [...document.querySelectorAll("[data-client]:checked")].map((el) => el.dataset.client); if (!selected.length) return line("Select at least one agent.", true); const region = $("region").value === "fr" ? "fr" : "us"; setStep(3); clearLog(); appendLog("info", "Starting install..."); const params = new URLSearchParams({ sessionId, clients: selected.join(","), region, write: $("write").checked ? "1" : "0", telemetry: $("telemetry").checked ? "1" : "0" }); const events = new EventSource("/api/install-stream?" + params.toString()); events.onmessage = (event) => { const data = JSON.parse(event.data); appendLog(data.level === "done" ? "success" : data.level, data.message); if (data.level === "done") events.close(); }; events.onerror = () => { appendLog("error", "Install log stream disconnected."); events.close(); }; }
     $("back").addEventListener("click", () => setStep(Math.max(1, step - 1)));
     $("refresh").addEventListener("click", refresh);
     $("next").addEventListener("click", async () => { if (step === 1) await doLogin(); else await install(); });
