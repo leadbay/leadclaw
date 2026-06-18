@@ -277,7 +277,9 @@ export interface UserMePayload {
   admin?: boolean;
   manager?: boolean;
   organization: OrgPayload;
-  last_requested_lens?: number | null;
+  // Backend sends lens ids as STRINGS (e.g. "40005"); older callers treated
+  // this as a number, so accept both and normalize at the use site.
+  last_requested_lens?: string | number | null;
   language?: string;
   free_ai_credits?: number;
 }

@@ -44,9 +44,9 @@ export const accountStatus: Tool<Record<string, never>> = {
         },
       },
       last_requested_lens: {
-        type: ["number", "null"],
+        type: ["string", "null"],
         description:
-          "INTERNAL — the most recent lens id the user pulled leads from. Do NOT volunteer the lens in an account-status answer; the user did not ask about it. This raw NUMBER is for internal routing only — NEVER show it to the user. If the user explicitly asks which lens is active, answer with `last_requested_lens_name`, never this id.",
+          "INTERNAL — the most recent lens id (a STRING, e.g. \"40005\") the user pulled leads from. Do NOT volunteer the lens in an account-status answer; the user did not ask about it. This raw id is for internal routing only — NEVER show it to the user. If the user explicitly asks which lens is active, answer with `last_requested_lens_name`, never this id.",
       },
       last_requested_lens_name: {
         type: ["string", "null"],
@@ -170,7 +170,10 @@ export const accountStatus: Tool<Record<string, never>> = {
         computing_intelligence: me.organization.computing_intelligence ?? false,
         plan: quota?.plan ?? me.organization.quota_plan ?? null,
       },
-      last_requested_lens: me.last_requested_lens ?? null,
+      // Lens ids are STRINGS server-side (my-lenses.ts), though /me may type
+      // this as a number — normalize to the string form so the value matches
+      // the schema and never drifts string-vs-number across accounts.
+      last_requested_lens: lensId == null ? null : String(lensId),
       last_requested_lens_name,
       // Quota goes here verbatim from /quota_status. Legacy freemium.* fields
       // on /me are intentionally NOT surfaced — they're defunct (see
