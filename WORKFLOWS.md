@@ -41,8 +41,9 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 27 | **Prior-context carry-over** — across turns the agent must reuse the lead_id it surfaced earlier rather than re-running discovery | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 28 | **Send feedback to the team** — "send feedback", "report a bug", "tell Leadbay…", or accepting an offer to report an error — delivers a user-authored message to the Leadbay team's Sentry feedback inbox (same destination as the web app's feedback form) | `leadbay_send_feedback` | "Send feedback to the team: lead scores feel off this week" |
 | 29 | **Audience build from dirty taxonomy (no-crash)** — "create a group for menuisiers, pergolas, vérandas" — `leadbay_adjust_audience` must tolerate a null-name sector-taxonomy row and ambiguous matches, returning a graceful ambiguous-sectors message rather than a TypeError (regression lock for the v0.17.3 sector-creation crash) | `leadbay_adjust_audience` | "Create a group for menuisiers, pergolas, vérandas" |
-| 30 | **Org qualification methods** — "what qualification questions does Leadbay use", "how are my leads qualified" — retrieve the org-level AI-agent question catalog (read-only; editing is web-app only) | `leadbay_get_qualification_methods` | "What qualification questions does Leadbay use to score my leads?" |
+| 30 | **Org qualification methods** — "what qualification questions does Leadbay use", "how are my leads qualified" — retrieve the org-level AI-agent question catalog | `leadbay_get_qualification_methods` | "What qualification questions does Leadbay use to score my leads?" |
 | 31 | **Per-lead custom-field values** — "what custom fields are on this lead", "show the CRM custom field values for <Company>" — retrieve the custom-field VALUES stored on one lead (distinct from the definitions catalog in `leadbay_list_mappable_fields`) | `leadbay_get_lead_custom_fields` | "What custom field values are stored on this lead?" |
+| 32 | **Modify qualification methods** — "add a qualification question", "remove the X question", "change my qualification questions" — write the org's AI-agent questions. Enforces the max-5 cap and gates removals behind a confirm; does not invent or silently drop questions | `leadbay_set_qualification_methods` | "Add a qualification question: is the company a flooring distributor?" |
 
 ---
 
@@ -537,6 +538,24 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Pull one of my leads and show me its CRM custom field values."
+```
+
+```yaml expected
+workflow_name: Modify qualification methods
+prompt_name: ~
+required_calls:
+  - leadbay_set_qualification_methods
+forbidden_calls:
+  - leadbay_create_custom_field
+success_criteria:
+  - "called leadbay_set_qualification_methods to add the requested question (add mode), not a read tool"
+  - "reported the outcome truthfully from the tool result — if the org is at the 5-question cap, surfaced that the question was NOT added and that an existing one must be removed first (did not falsely claim success)"
+  - "did NOT silently drop or replace the org's existing questions, and did NOT invent a confirmation that the question was saved when the tool reported it was not"
+  - "did NOT call leadbay_create_custom_field (qualification questions are not custom fields)"
+```
+
+```yaml scenario
+prompt: "Add a qualification question: is the company a flooring distributor?"
 ```
 
 ---
