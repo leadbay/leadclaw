@@ -1306,6 +1306,71 @@ WHEN NOT TO USE: when leadbay_research_lead_by_id has already been called — it
 `;
 // endregion: leadbay_get_lead_activities
 
+// region: leadbay_get_lead_custom_fields
+export const leadbay_get_lead_custom_fields: string = `## WHEN TO USE
+
+Trigger phrases: "what custom fields are on this lead", "show the CRM custom field values for <Company>", "what's the <custom field name> on this lead", "get lead <UUID>'s custom fields", "does this lead have any custom field values".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "what custom fields exist on my account" → \`leadbay_list_mappable_fields\`; "give me the full research dossier on this lead" → \`leadbay_research_lead_by_id\`.
+
+Prefer when: user wants the custom-field VALUES on ONE lead; pass \`leadId\`
+
+Examples that SHOULD invoke this tool:
+- "What custom field values are stored on this lead?"
+- "Show me the CRM custom fields for that company."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "What custom fields are defined on my account?"
+- "Give me the full research breakdown on Acme Corp."
+
+## RENDER (quick)
+
+3-column markdown table: Field | Type | Value, one row per entry. When
+\`custom_fields\` is empty, render the \`hint\` sentence instead of an empty
+table.
+
+---
+
+Retrieve the CRM custom-field **values** stored on a single lead — the actual
+data (\`value\`) per custom field, not the field definitions.
+
+This is distinct from **leadbay_list_mappable_fields**, which returns the org's
+custom-field *catalog* (the definitions: id/name/type, used for import
+mapping). This tool answers "what does *this* lead hold for each custom field".
+
+Params: \`leadId\` (required UUID); \`lensId\` (optional escape hatch — normally
+omit; auto-resolves to the active lens).
+
+Returns:
+
+- **\`custom_fields\`** — one row per value: \`{id, name, type, value}\`. The lead
+  payload embeds each field's definition, so rows are fully named without a
+  separate catalog lookup. Empty array when the org has no custom fields or
+  none are set on this lead.
+- **\`count\`** — number of values.
+- **\`hint\`** — empty-state guidance (points at \`leadbay_list_mappable_fields\`
+  and the import path), or a degradation note in the rare case a value arrived
+  without an embedded definition and the catalog fallback failed.
+
+Reading a lead marks it seen (LEAD_SEEN) the same way the research tools do, so
+it ages out of the 'new' Discover view.
+
+Companion tools: **leadbay_list_mappable_fields** for the catalog/definitions;
+**leadbay_research_lead_by_id** for the full lead dossier (signals, contacts,
+qualification answers).
+
+### RENDERING
+
+Render \`custom_fields\` as a 3-column markdown table: **Field** (\`name\`, or the
+\`id\` when name is null) · **Type** (\`type\`) · **Value** (\`value\`, or "—" when
+null/empty). One row per entry, in the order returned. When \`custom_fields\` is
+empty, render the \`hint\` sentence instead of an empty table. Don't fabricate
+fields or values — render verbatim.
+`;
+// endregion: leadbay_get_lead_custom_fields
+
 // region: leadbay_get_lead_notes
 export const leadbay_get_lead_notes: string = `Read existing notes on a lead — context the human team or prior agent runs have already captured.
 
@@ -1350,6 +1415,69 @@ WHEN TO USE: before contacting the lead, to avoid duplicating outreach the team 
 WHEN NOT TO USE: when the lead summary's \`prospecting_actions_count\` is 0.
 `;
 // endregion: leadbay_get_prospecting_actions
+
+// region: leadbay_get_qualification_methods
+export const leadbay_get_qualification_methods: string = `## WHEN TO USE
+
+Trigger phrases: "what are my qualification methods", "what questions does Leadbay ask about each lead", "show me the org qualification questions", "how are my leads being qualified", "what's the qualification criteria".
+
+**Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
+
+Do NOT use for: "how did this lead score on the qualification questions" → \`leadbay_research_lead_by_id\`; "show my ideal buyer profile and intent tags" → \`leadbay_get_taste_profile\`.
+
+Prefer when: user wants the ORG-level qualification questions catalog, no lead and no buyer profile
+
+Examples that SHOULD invoke this tool:
+- "What qualification questions does Leadbay use to score my leads?"
+- "Show me my org's qualification methods."
+
+Examples that should NOT invoke this tool (sound similar, route elsewhere):
+- "How did Acme Corp answer the qualification questions?"
+- "What's my ideal buyer profile?"
+
+## RENDER (quick)
+
+Numbered list of the questions (chat-native markdown), each one line. When
+\`is_admin\` is true, append the \`hint\` as a footnote pointing at the web app
+for editing. When the list is empty, render the \`hint\` instead.
+
+---
+
+Retrieve the organization's **qualification methods** — the AI-agent questions
+Leadbay scores every lead against. These are the org-level questions that drive
+each lead's qualification boost; the per-lead ANSWERS to them surface inside
+\`leadbay_research_lead_by_id\`.
+
+Returns:
+
+- **\`qualification_questions\`** — the catalog. Each: \`{question, created_at,
+  lang}\`. Ordered as the backend returns them.
+- **\`count\`** — number of configured questions.
+- **\`is_admin\`** — whether the current user is an org admin. Editing the
+  questions is currently done in the Leadbay web app (there is no MCP edit
+  endpoint yet); for admins a \`hint\` points this out.
+- **\`hint\`** — operator note: the admin edit pointer, or an empty-state message
+  when no questions are configured.
+
+The questions are read-only here regardless of role. The result is cached on
+the client (it reuses the same taste-profile fetch as
+\`leadbay_get_taste_profile\`), so repeated calls in a session are cheap.
+
+Companion tools: **leadbay_get_taste_profile** when the user also wants the
+Ideal Buyer Profile + purchase-intent tags; **leadbay_research_lead_by_id** for
+how a SPECIFIC lead answered these questions; **leadbay_refine_prompt** to shape
+the AI agent's behaviour.
+
+### RENDERING
+
+Render \`qualification_questions\` as a numbered list — one question per line, in
+the order returned. Lead with a short heading like **"Qualification methods
+(N)"**. When \`qualification_questions\` is empty, render the \`hint\` sentence
+instead of an empty list. When \`is_admin\` is true and there are questions,
+append the \`hint\` as a one-line footnote (editing happens in the web app). Do
+not invent questions or reword them — render verbatim.
+`;
+// endregion: leadbay_get_qualification_methods
 
 // region: leadbay_get_quota
 export const leadbay_get_quota: string = `Read remaining quota / spend across daily, weekly, and monthly windows for the org's resources (\`llm_completion\`, \`ai_rescore\`, \`web_fetch\`). Each entry shows \`current_units\` vs \`max_units\` and \`resets_at\`.
@@ -3904,11 +4032,13 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_get_enrichment_job_titles,
   leadbay_get_epilogue_responses,
   leadbay_get_lead_activities,
+  leadbay_get_lead_custom_fields,
   leadbay_get_lead_notes,
   leadbay_get_lead_profile,
   leadbay_get_lens_filter,
   leadbay_get_lens_scoring,
   leadbay_get_prospecting_actions,
+  leadbay_get_qualification_methods,
   leadbay_get_quota,
   leadbay_get_selection_ids,
   leadbay_get_taste_profile,

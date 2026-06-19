@@ -98,6 +98,8 @@ import { campaignProgression } from "./composite/campaign-progression.js";
 import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
 import { researchLeadById } from "./composite/research-lead-by-id.js";
 import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
+import { getQualificationMethods } from "./composite/get-qualification-methods.js";
+import { getLeadCustomFields } from "./composite/get-lead-custom-fields.js";
 import { accountHistory } from "./composite/account-history.js";
 import { scanPortfolioSignals } from "./composite/scan-portfolio-signals.js";
 import { recallOrderedTitles } from "./composite/recall-ordered-titles.js";
@@ -164,6 +166,7 @@ export {
   // new composite reads
   pullLeads, pullFollowups, followupsMap, tourPlan, listCampaigns,
   campaignProgression, campaignCallSheet, researchLeadById, researchLeadByNameFuzzy,
+  getQualificationMethods, getLeadCustomFields,
   accountHistory,
   recallOrderedTitles, accountStatus, scanPortfolioSignals,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
@@ -260,6 +263,15 @@ export const compositeReadTools: Tool[] = [
   campaignCallSheet,
   researchLeadById,
   researchLeadByNameFuzzy,
+  // Org qualification methods — the AI-agent questions every lead is scored
+  // against. ALWAYS exposed (default surface): "how are my leads qualified"
+  // is a first-session question, and the underlying get_taste_profile is
+  // ADVANCED-gated. Read-only; no MCP edit endpoint exists (issue #3768).
+  getQualificationMethods,
+  // Per-lead custom-field VALUES. ALWAYS exposed: complements the always-on
+  // list_mappable_fields (which returns DEFINITIONS only). The lead payload
+  // embeds each field's definition, so no catalog join is needed (issue #3768).
+  getLeadCustomFields,
   // accountHistory layers FULL notes + activity timeline on top of research
   // so the agent can write the US4 "why has this dormant account resurfaced"
   // narrative in ONE call. ALWAYS exposed (compositeReadTools) — the underlying

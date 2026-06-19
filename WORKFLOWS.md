@@ -41,6 +41,8 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 27 | **Prior-context carry-over** — across turns the agent must reuse the lead_id it surfaced earlier rather than re-running discovery | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 28 | **Send feedback to the team** — "send feedback", "report a bug", "tell Leadbay…", or accepting an offer to report an error — delivers a user-authored message to the Leadbay team's Sentry feedback inbox (same destination as the web app's feedback form) | `leadbay_send_feedback` | "Send feedback to the team: lead scores feel off this week" |
 | 29 | **Audience build from dirty taxonomy (no-crash)** — "create a group for menuisiers, pergolas, vérandas" — `leadbay_adjust_audience` must tolerate a null-name sector-taxonomy row and ambiguous matches, returning a graceful ambiguous-sectors message rather than a TypeError (regression lock for the v0.17.3 sector-creation crash) | `leadbay_adjust_audience` | "Create a group for menuisiers, pergolas, vérandas" |
+| 30 | **Org qualification methods** — "what qualification questions does Leadbay use", "how are my leads qualified" — retrieve the org-level AI-agent question catalog (read-only; editing is web-app only) | `leadbay_get_qualification_methods` | "What qualification questions does Leadbay use to score my leads?" |
+| 31 | **Per-lead custom-field values** — "what custom fields are on this lead", "show the CRM custom field values for <Company>" — retrieve the custom-field VALUES stored on one lead (distinct from the definitions catalog in `leadbay_list_mappable_fields`) | `leadbay_get_lead_custom_fields` | "What custom field values are stored on this lead?" |
 
 ---
 
