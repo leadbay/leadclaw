@@ -34,7 +34,12 @@ const BASE = "https://api-us.leadbay.app";
 
 async function connect(opts: {
   client: LeadbayClient;
-  bootstrapStatus?: () => { done: boolean; signInUrl?: string; openFailed?: boolean };
+  bootstrapStatus?: () => {
+    done: boolean;
+    signInUrl?: string;
+    openFailed?: boolean;
+    failureMessage?: string;
+  };
 }) {
   const server = buildServer(opts.client, {
     includeWrite: true,
@@ -89,6 +94,58 @@ describe("CallTool gate while bootstrap is pending", () => {
     expect(text).toContain(URL);
     expect(text).toMatch(/open this link to authorize/i);
     expect(captured.requests).toHaveLength(0);
+  });
+
+  it("a terminal failureMessage surfaces AUTH_FAILED (not a forever-pending message)", async () => {
+    // Regression (P2): a non-browser bootstrap failure (region probe / discovery
+    // / registration / token exchange) used to leave done:false with no URL, so
+    // the user saw "a browser window should have opened" forever. Now a recorded
+    // failureMessage wins → AUTH_FAILED with the real error + restart guidance.
+    const captured = mockHttp([]);
+    const tokenless = new LeadbayClient(BASE, undefined as unknown as string);
+    const { mcpClient } = await connect({
+      client: tokenless,
+      bootstrapStatus: () => ({
+        done: false,
+        // failure with NO signInUrl — the pre-URL failure case.
+        failureMessage: "Stargate region probe failed: GET … returned 503",
+      }),
+    });
+    const res: any = await mcpClient.callTool({
+      name: "leadbay_account_status",
+      arguments: { _triggered_by: "check" },
+    });
+    expect(res.isError).toBe(true);
+    const text = res.content[0].text as string;
+    // formatErrorForLLM renders message + hint (not the code), so assert on those.
+    expect(text).toMatch(/couldn.t sign you in to leadbay/i);
+    expect(text).toMatch(/sign-in failed/i);
+    expect(text).toContain("503"); // the real underlying error is surfaced
+    expect(text).toMatch(/restart the leadbay extension/i);
+    expect(text).not.toMatch(/browser window should have opened/i); // NOT the pending msg
+    expect(captured.requests).toHaveLength(0);
+  });
+
+  it("failureMessage wins even if a stale signInUrl is also present", async () => {
+    // e.g. token-exchange failed AFTER a URL was minted — the URL's code is
+    // spent, so we must not keep offering it; the failure takes priority.
+    mockHttp([]);
+    const tokenless = new LeadbayClient(BASE, undefined as unknown as string);
+    const { mcpClient } = await connect({
+      client: tokenless,
+      bootstrapStatus: () => ({
+        done: false,
+        signInUrl: "https://leadbay.app/oauth/authorize?client_id=9",
+        failureMessage: "OAuth token exchange failed: 400",
+      }),
+    });
+    const res: any = await mcpClient.callTool({
+      name: "leadbay_account_status",
+      arguments: { _triggered_by: "check" },
+    });
+    const text = res.content[0].text as string;
+    expect(text).toMatch(/couldn.t sign you in to leadbay/i);
+    expect(text).not.toMatch(/open this link to authorize/i);
   });
 
   it("openFailed adds the 'couldn't open your browser' note alongside the link", async () => {

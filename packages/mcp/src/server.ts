@@ -406,6 +406,10 @@ interface BuildServerOptions {
     done: boolean;
     signInUrl?: string;
     openFailed?: boolean;
+    /** Set when bootstrap hit a terminal non-browser failure (probe/discovery/
+     *  registration/token-exchange). The gate surfaces AUTH_FAILED with this
+     *  message instead of a forever-"pending" envelope. */
+    failureMessage?: string;
   };
 }
 
@@ -1118,27 +1122,41 @@ export function buildServer(
       const bootstrapState = opts.bootstrapStatus?.() ?? { done: true };
       if (!bootstrapState.done) {
         const url = bootstrapState.signInUrl;
-        // Prefer surfacing the live sign-in URL — the spawned MCP process often
-        // can't open a GUI browser itself (no DISPLAY / sanitized env), so a
-        // clickable link the agent renders to the user is the reliable path.
-        const envelope = url
+        // Priority: a terminal failure (no token possible this session) > a live
+        // sign-in link > generic pending. The failure case must win so the user
+        // sees the real error + restart guidance instead of a forever-"pending"
+        // "a browser should have opened" message.
+        const envelope = bootstrapState.failureMessage
           ? {
               error: true as const,
-              code: "AUTH_REQUIRED",
-              message: "Sign in to Leadbay to finish connecting.",
+              code: "AUTH_FAILED",
+              message: "Couldn't sign you in to Leadbay.",
               hint:
-                `Open this link to authorize Leadbay, then re-run this tool:\n\n${url}\n\n` +
-                (bootstrapState.openFailed
-                  ? "(The extension couldn't open your browser automatically.)"
-                  : "(A browser may have opened automatically — if not, use the link above.)"),
+                `Sign-in failed: ${bootstrapState.failureMessage}\n\n` +
+                "Restart the Leadbay extension in Claude Desktop to retry. " +
+                "If it keeps failing, check your network/region and that Leadbay is reachable.",
             }
-          : {
-              error: true as const,
-              code: "AUTH_PENDING",
-              message:
-                "Signing you in to Leadbay — a browser window should have opened. Authorize there, then try again.",
-              hint: "Complete the Leadbay sign-in in your browser, then re-run this tool.",
-            };
+          : url
+            ? {
+                // Prefer surfacing the live sign-in URL — the spawned MCP process
+                // often can't open a GUI browser itself (no DISPLAY / sanitized
+                // env), so a clickable link the agent renders is the reliable path.
+                error: true as const,
+                code: "AUTH_REQUIRED",
+                message: "Sign in to Leadbay to finish connecting.",
+                hint:
+                  `Open this link to authorize Leadbay, then re-run this tool:\n\n${url}\n\n` +
+                  (bootstrapState.openFailed
+                    ? "(The extension couldn't open your browser automatically.)"
+                    : "(A browser may have opened automatically — if not, use the link above.)"),
+              }
+            : {
+                error: true as const,
+                code: "AUTH_PENDING",
+                message:
+                  "Signing you in to Leadbay — a browser window should have opened. Authorize there, then try again.",
+                hint: "Complete the Leadbay sign-in in your browser, then re-run this tool.",
+              };
         const pendingText = formatErrorForLLM(envelope);
         const pendingDur = Date.now() - callStart;
         telemetry.captureToolCall({

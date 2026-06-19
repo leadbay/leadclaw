@@ -251,6 +251,12 @@ let pendingSignInUrl: string | undefined;
 // silent-no-op case — here we still have a live URL to show, but we also note
 // the auto-open failed so the copy can say "open this yourself".
 let browserOpenFailedAtBootstrap = false;
+// Set when the background bootstrap fails for a reason that produced NO sign-in
+// URL (region probe / discovery / registration / token exchange). Without this,
+// the gate would keep reporting AUTH_PENDING ("a browser window should have
+// opened…") forever even though OAuth can never complete this session — the
+// user must see the real error + restart guidance. Holds the failure message.
+let bootstrapFailureMessage: string | undefined;
 // Diagnostic trace for the .dxt OAuth bootstrap. Claude Desktop doesn't surface
 // the spawned server's stderr anywhere the user can see, so we append a
 // timestamped line to ~/.leadbay/oauth-bootstrap-debug.log. Best-effort; never
@@ -321,6 +327,13 @@ function cacheOAuthClientId(authServerBaseUrl: string, clientId: string, port: n
 // opens on install. Once the child is spawned (detached + unref'd) it
 // survives our exit on its own — we only need to guarantee it gets spawned.
 let browserOpenInFlight: Promise<void> | null = null;
+// The whole background bootstrap task (region probe → discovery → registration
+// → authorize-URL mint → browser-open dispatch). shutdown() waits on THIS
+// (bounded), not just browserOpenInFlight: Claude Desktop can fire its
+// probe→teardown while bootstrap is still in discovery/registration — BEFORE
+// any browser-open promise exists — and without waiting on the task itself the
+// process would die mid-registration and never produce a URL or open a browser.
+let bootstrapInFlight: Promise<void> | null = null;
 
 // OAuth bootstrap: when an MCPB opts in with LEADBAY_OAUTH_BOOTSTRAP=1 and no
 // token is available from env or disk, run the browser-loopback OAuth flow
@@ -467,10 +480,18 @@ async function bootstrapOAuthIfMissing(logger: ToolLogger): Promise<boolean> {
       );
       return false;
     }
-    bootstrapDebug(`bootstrap FAILED (non-open): ${err?.message ?? err}`);
+    // Non-browser failure (region probe / discovery / registration / token
+    // exchange). OAuth can't complete this session, so record the reason — the
+    // gate surfaces it as AUTH_FAILED with restart guidance instead of leaving
+    // the user on a forever-"pending" message. Clear any stale sign-in URL: if
+    // we got far enough to mint one, its code/listener is no longer usable.
+    const message = err?.message ?? String(err);
+    bootstrapFailureMessage = message;
+    pendingSignInUrl = undefined;
+    bootstrapDebug(`bootstrap FAILED (non-open): ${message}`);
     process.stderr.write(
-      `[leadbay-mcp] OAuth bootstrap failed: ${err?.message ?? err}\n` +
-        `  The server will start but tools will return AUTH_PENDING/AUTH_MISSING until you authorize.\n`
+      `[leadbay-mcp] OAuth bootstrap failed: ${message}\n` +
+        `  Tools will return AUTH_FAILED until you restart the extension to retry.\n`
     );
     return false;
   }
@@ -1657,6 +1678,7 @@ async function main(): Promise<void> {
                 done: false,
                 signInUrl: pendingSignInUrl,
                 openFailed: browserOpenFailedAtBootstrap,
+                failureMessage: bootstrapFailureMessage,
               }
       : undefined,
   });
@@ -1675,9 +1697,9 @@ async function main(): Promise<void> {
   // AUTH_PENDING / AUTH_MISSING.
   if (bootstrapPending) {
     bootstrapDebug(`server connected; launching background OAuth bootstrap`);
-    void (async () => {
+    bootstrapInFlight = (async () => {
       const ok = await bootstrapOAuthIfMissing(logger);
-      if (!ok) return; // gate already surfaces pending / open-failed to the user
+      if (!ok) return; // gate already surfaces pending / open-failed / failed
       const region: "us" | "fr" = process.env.LEADBAY_REGION === "fr" ? "fr" : "us";
       // API base URL: a pinned LEADBAY_BASE_URL (staging/custom) wins; otherwise
       // the regional API host — mirroring createClient({ region }).
@@ -1711,12 +1733,27 @@ async function main(): Promise<void> {
   // hang can't block process exit. stdio-end fires when the MCP client
   // (Claude Desktop, Cursor) disconnects — same effect as SIGTERM.
   const shutdown = async (code: number) => {
-    // If a browser auto-open is mid-dispatch (Claude Desktop's rapid
-    // probe→shutdown on a fresh install fires teardown within ~100ms, before
-    // the detached opener child is spawned), give it a bounded moment to land
-    // the spawn. Once spawned it's detached + unref'd and survives our exit.
+    // Claude Desktop's rapid probe→teardown on a fresh install fires within
+    // ~100ms — often while the background OAuth is still in region-probe /
+    // discovery / registration, BEFORE a browser-open promise exists. Wait
+    // (bounded) on the whole bootstrap task so the flow can reach the
+    // authorize-URL mint + open dispatch; then, if the open is still in flight,
+    // wait a little more for that spawn to land. Once the detached launcher is
+    // spawned it survives our exit; and a minted sign-in URL persists in the
+    // gate as the fallback. The bound keeps a hung network from blocking exit.
+    if (bootstrapInFlight && !client.isAuthenticated) {
+      bootstrapDebug(`shutdown(code=${code}) while bootstrap in flight — waiting up to 4s for URL/open`);
+      try {
+        await Promise.race([
+          bootstrapInFlight,
+          new Promise((r) => setTimeout(r, 4000)),
+        ]);
+      } catch {
+        // ignore — best-effort
+      }
+    }
     if (browserOpenInFlight) {
-      bootstrapDebug(`shutdown(code=${code}) while browser-open in flight — waiting up to 1.5s`);
+      bootstrapDebug(`shutdown(code=${code}) browser-open still in flight — waiting up to 1.5s`);
       try {
         await Promise.race([
           browserOpenInFlight,
@@ -1725,8 +1762,6 @@ async function main(): Promise<void> {
       } catch {
         // ignore — best-effort; the surfaced sign-in link is the fallback
       }
-    } else {
-      bootstrapDebug(`shutdown(code=${code}) — no browser-open in flight`);
     }
     try {
       notificationsWs?.stop();
