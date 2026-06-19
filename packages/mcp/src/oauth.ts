@@ -30,7 +30,7 @@ import { readdirSync } from "node:fs";
 // also reuse the same port every launch — and register that exact port. Picked
 // from the IANA dynamic/private range, high enough to rarely collide; if it's
 // busy we fall back to an ephemeral port + a fresh registration for that port.
-const LEADBAY_LOOPBACK_PORT = 51789;
+const LEADBAY_LOOPBACK_PORTS = [51789, 51790, 51791, 51792];
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -333,13 +333,16 @@ export async function startLoopbackListener(opts: {
   expectedState: string;
   timeoutMs: number;
   /**
-   * Try to bind this exact 127.0.0.1 port first; fall back to an ephemeral port
-   * if it's already in use. The Leadbay backend requires the authorize
+   * Try to bind these exact 127.0.0.1 ports in order; fall back to an ephemeral
+   * port only if ALL are in use. The Leadbay backend requires the authorize
    * redirect_uri to EXACTLY match a registered one (it does NOT do RFC 8252
    * loopback-port matching), so reusing a cached client_id only works if the
-   * port is stable too. Defaults to ephemeral when unset.
+   * port is stable. A short list (not a single port) means a transient
+   * collision still lands on a STABLE, cacheable port — preserving the
+   * register-once benefit instead of churning fresh registrations. Defaults to
+   * ephemeral when unset/empty.
    */
-  preferredPort?: number;
+  preferredPorts?: number[];
 }): Promise<LoopbackListener> {
   // Resolved exactly once by the first matching /callback hit, or by timeout.
   let resolveCallback: (v: { code: string; state: string }) => void;
@@ -391,9 +394,9 @@ export async function startLoopbackListener(opts: {
     resolveCallback({ code, state });
   });
 
-  // 127.0.0.1 (not "localhost" — dual-stack IPv6 surprises). Prefer the stable
-  // port so a cached client_id keeps matching; fall back to ephemeral (0) if
-  // it's taken.
+  // 127.0.0.1 (not "localhost" — dual-stack IPv6 surprises). Prefer a stable
+  // port so a cached client_id keeps matching; try each in order, then fall
+  // back to an ephemeral port (0) only if every preferred port is taken.
   const bindPort = async (port: number) =>
     new Promise<void>((resolve, reject) => {
       const onErr = (e: Error) => reject(e);
@@ -403,16 +406,17 @@ export async function startLoopbackListener(opts: {
         resolve();
       });
     });
-  if (opts.preferredPort) {
+  let bound = false;
+  for (const port of opts.preferredPorts ?? []) {
     try {
-      await bindPort(opts.preferredPort);
+      await bindPort(port);
+      bound = true;
+      break;
     } catch {
-      // Port busy (or otherwise unbindable) — fall back to an ephemeral port.
-      await bindPort(0);
+      // Busy/unbindable — try the next stable port.
     }
-  } else {
-    await bindPort(0);
   }
+  if (!bound) await bindPort(0); // all preferred taken → ephemeral (works, but re-registers)
 
   const addr = server.address() as AddressInfo;
   const redirectUri = `http://127.0.0.1:${addr.port}/callback`;
@@ -656,7 +660,7 @@ export async function oauthLogin(opts: OAuthLoginOptions): Promise<OAuthLoginRes
   const listener = await startLoopbackListener({
     expectedState: state,
     timeoutMs,
-    preferredPort: LEADBAY_LOOPBACK_PORT,
+    preferredPorts: LEADBAY_LOOPBACK_PORTS,
   });
   try {
     // Reuse a cached client_id (keyed by the bound loopback port) — DCR is a

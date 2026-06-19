@@ -22,10 +22,12 @@ import { mockHttp, resetHttpMock, httpsMockFactory } from "../harness.js";
 
 vi.mock("node:https", () => httpsMockFactory());
 
+import { createServer } from "node:http";
 import {
   browserOpenCandidates,
   browserLaunchEnv,
   oauthLogin,
+  startLoopbackListener,
   BrowserOpenFailedError,
 } from "../../src/oauth.js";
 
@@ -123,6 +125,62 @@ describe("browserLaunchEnv — reconstruct missing display vars (Linux)", () => 
     const env = browserLaunchEnv();
     // Always backfills at least the ":0" default so xdg-open can reach a display.
     expect(env.DISPLAY).toMatch(/^:\d+$/);
+  });
+});
+
+describe("startLoopbackListener — stable-port fallback", () => {
+  it("binds the next preferred port when the first is busy", async () => {
+    // Occupy a port, then ask the listener to prefer [busy, free].
+    const blocker = createServer(() => {});
+    const busyPort = await new Promise<number>((resolve) => {
+      blocker.listen(0, "127.0.0.1", () => {
+        resolve((blocker.address() as any).port);
+      });
+    });
+    // A second free port to be the fallback target.
+    const probe = createServer(() => {});
+    const freePort = await new Promise<number>((resolve) => {
+      probe.listen(0, "127.0.0.1", () => {
+        const p = (probe.address() as any).port;
+        probe.close(() => resolve(p));
+      });
+    });
+
+    let listener: Awaited<ReturnType<typeof startLoopbackListener>> | undefined;
+    try {
+      listener = await startLoopbackListener({
+        expectedState: "s",
+        timeoutMs: 200,
+        preferredPorts: [busyPort, freePort],
+      });
+      // It skipped the busy one and bound the free one.
+      expect(listener.port).toBe(freePort);
+      expect(listener.redirectUri).toBe(`http://127.0.0.1:${freePort}/callback`);
+    } finally {
+      listener?.close();
+      blocker.close();
+    }
+  });
+
+  it("falls back to an ephemeral port when ALL preferred are busy", async () => {
+    const blocker = createServer(() => {});
+    const busyPort = await new Promise<number>((resolve) => {
+      blocker.listen(0, "127.0.0.1", () => resolve((blocker.address() as any).port));
+    });
+    let listener: Awaited<ReturnType<typeof startLoopbackListener>> | undefined;
+    try {
+      listener = await startLoopbackListener({
+        expectedState: "s",
+        timeoutMs: 200,
+        preferredPorts: [busyPort], // the only preferred port is taken
+      });
+      // Still came up — on some non-busy ephemeral port.
+      expect(listener.port).toBeGreaterThan(0);
+      expect(listener.port).not.toBe(busyPort);
+    } finally {
+      listener?.close();
+      blocker.close();
+    }
   });
 });
 
