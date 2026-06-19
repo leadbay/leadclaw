@@ -170,7 +170,7 @@ forbidden_calls:
 success_criteria:
   - "called leadbay_account_status at least once"
   - "reported remaining quota figures without fabrication"
-  - "proposed a concrete next step"
+  - "IF a next step is proposed, it is a concrete action routed through the native choice widget (ask_user_input_v0 / AskUserQuestion), not reflexive prose filler — and proposing none is acceptable when the status read is a complete answer"
   - "did NOT call leadbay_report_outreach or any mutating tool"
 ```
 
