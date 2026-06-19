@@ -162,6 +162,32 @@ interface ConformanceCase {
 
 const CASES: ConformanceCase[] = [
   {
+    toolName: "leadbay_set_qualification_methods",
+    arguments: { add: ["Is the company hiring installers?"] },
+    setupMocks: () => {
+      mockHttp([
+        {
+          method: "GET",
+          path: "/1.5/users/me",
+          status: 200,
+          body: { id: "u", organization: { id: "org-1", name: "Test Co" } },
+        },
+        {
+          method: "GET",
+          path: /\/1\.5\/organizations\/org-1\/ai_agent_questions/,
+          status: 200,
+          body: [{ question: "Does the company run install crews?", created_at: "2026-05-30T00:00:00Z", lang: "en" }],
+        },
+        {
+          method: "POST",
+          path: /\/1\.5\/organizations\/org-1$/,
+          status: 204,
+          body: null,
+        },
+      ]);
+    },
+  },
+  {
     toolName: "leadbay_update_custom_field",
     arguments: { id: "12", name: "Account Tier" },
     setupMocks: () => {

@@ -3799,6 +3799,31 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 `;
 // endregion: leadbay_set_pushback
 
+// region: leadbay_set_qualification_methods
+export const leadbay_set_qualification_methods: string = `Modify the organization's **qualification methods** — the AI-agent questions Leadbay scores every lead against. Use when the user wants to add, remove, or rewrite their qualification questions — e.g. "add a question about whether they run install crews", "remove the flooring question", "replace my questions with these three".
+
+The backend stores the list as a whole, so this tool reads the current questions and applies your change:
+
+- **\`add\`** — append questions (deduped against the current list).
+- **\`remove\`** — drop the exact question strings you pass.
+- **\`questions\`** — replace the ENTIRE list (mutually exclusive with add/remove).
+
+Leadbay allows **at most 5** qualification questions. If a change would exceed 5, the tool rejects with a clear limit message — remove some before adding.
+
+**Removing or shrinking the list is destructive** — it changes how every lead is scored. Any change that ends with FEWER questions than before requires \`confirm:true\`; without it the tool previews what would be removed and applies nothing. Adding questions does not need confirm.
+
+Returns the resulting \`{qualification_questions, count, previous_count, changed}\`. Phrase questions as the yes/no scoring prompts Leadbay uses (e.g. "Is the company likely to …?").
+
+WHEN TO USE: the user wants to change the org's qualification questions.
+
+WHEN NOT TO USE: to READ the questions (use leadbay_get_qualification_methods) or to change a single lead's data. This is org-level — it affects scoring for ALL leads.
+
+### RENDERING
+
+After a change, confirm in one line — e.g. **"Added 1 question — you now score leads against 4 questions."** or **"Removed 'the flooring question' — 3 questions remain."** Then list the resulting questions as a numbered list. On an unconfirmed shrink, surface the \`hint\` (what would be removed) and ask the user to confirm — do NOT auto-confirm.
+`;
+// endregion: leadbay_set_qualification_methods
+
 // region: leadbay_set_user_prompt
 export const leadbay_set_user_prompt: string = `Set the org's intelligence-refinement prompt — free-text instruction that steers Leadbay's lead recommendations beyond firmographics. Admin-only. Setting this clears any pending clarification and triggers a full intelligence regeneration (web search + high-reasoning). \`dry_run:true\` returns the call shape without contacting the backend.
 
@@ -4123,6 +4148,7 @@ export const TOOL_DESCRIPTIONS = {
   leadbay_set_active_lens,
   leadbay_set_epilogue_status,
   leadbay_set_pushback,
+  leadbay_set_qualification_methods,
   leadbay_set_user_prompt,
   leadbay_tour_plan,
   leadbay_unpin_contact,

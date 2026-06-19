@@ -101,6 +101,7 @@ import { campaignCallSheet } from "./composite/campaign-call-sheet.js";
 import { researchLeadById } from "./composite/research-lead-by-id.js";
 import { researchLeadByNameFuzzy } from "./composite/research-lead-by-name-fuzzy.js";
 import { getQualificationMethods } from "./composite/get-qualification-methods.js";
+import { setQualificationMethods } from "./composite/set-qualification-methods.js";
 import { getLeadCustomFields } from "./composite/get-lead-custom-fields.js";
 import { accountHistory } from "./composite/account-history.js";
 import { scanPortfolioSignals } from "./composite/scan-portfolio-signals.js";
@@ -169,6 +170,7 @@ export {
   pullLeads, pullFollowups, followupsMap, tourPlan, listCampaigns,
   campaignProgression, campaignCallSheet, researchLeadById, researchLeadByNameFuzzy,
   getQualificationMethods, getLeadCustomFields,
+  setQualificationMethods,
   accountHistory,
   recallOrderedTitles, accountStatus, scanPortfolioSignals,
   bulkEnrichStatus, qualifyStatus, importStatus, resolveImportRows,
@@ -361,10 +363,13 @@ export const compositeWriteTools: Tool[] = [
   createCustomField,
   // update/delete custom field — same default-surface rationale as create.
   // delete is destructive (requires confirm:true). Both gated behind
-  // LEADBAY_MCP_WRITE=1 in MCP. The qualification-questions counterpart has no
-  // API write endpoint, so there is intentionally no modify tool for those.
+  // LEADBAY_MCP_WRITE=1 in MCP.
   updateCustomField,
   deleteCustomField,
+  // Modify the org's qualification methods (AI-agent questions). Full-replace
+  // endpoint (POST /organizations/{orgId} {ai_agent_lead_questions:[...]}); the
+  // tool reads current + applies add/remove/set. Shrinking requires confirm.
+  setQualificationMethods,
   // addNote is granular-shaped but file-import prompts depend on it to preserve
   // meaningful source-file notes after imports return lead ids.
   addNote,
