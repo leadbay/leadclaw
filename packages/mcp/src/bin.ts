@@ -289,19 +289,24 @@ function oauthClientCachePath(): string {
 // Cache key includes the loopback PORT: the backend pins the exact registered
 // redirect_uri (port included), so a cached client_id is only reusable when the
 // listener binds the same port it was registered for.
-function getCachedOAuthClientId(authServerBaseUrl: string, port: number): string | undefined {
+// On-disk shape (per auth server): { byPort: { "<port>": "<client_id>" } }.
+// We retain a client_id for EVERY port we've registered on — not a single
+// overwriting entry — because the bound stable port can alternate across
+// launches (51789 busy → 51790, then 51789 free again). A single entry would
+// drop the other port's id and force a re-registration on each alternation,
+// recreating the ~10/hr 429 risk this cache exists to prevent.
+export function getCachedOAuthClientId(authServerBaseUrl: string, port: number): string | undefined {
   try {
     const { readFileSync } = require_("node:fs") as typeof import("node:fs");
     const parsed = JSON.parse(readFileSync(oauthClientCachePath(), "utf8"));
-    const entry = parsed?.clients?.[authServerBaseUrl];
-    if (!entry || entry.port !== port) return undefined; // port must match
-    const id = entry.client_id;
+    const byPort = parsed?.clients?.[authServerBaseUrl]?.byPort;
+    const id = byPort?.[String(port)];
     return typeof id === "string" && id.length > 0 ? id : undefined;
   } catch {
     return undefined;
   }
 }
-function cacheOAuthClientId(authServerBaseUrl: string, clientId: string, port: number): void {
+export function cacheOAuthClientId(authServerBaseUrl: string, clientId: string, port: number): void {
   try {
     const { readFileSync, writeFileSync, mkdirSync } = require_("node:fs") as typeof import("node:fs");
     const { dirname } = require_("node:path") as typeof import("node:path");
@@ -311,7 +316,13 @@ function cacheOAuthClientId(authServerBaseUrl: string, clientId: string, port: n
       data = JSON.parse(readFileSync(path, "utf8"));
       if (!data || typeof data !== "object" || typeof data.clients !== "object") data = { clients: {} };
     } catch { /* fresh file */ }
-    data.clients[authServerBaseUrl] = { client_id: clientId, port };
+    const server = data.clients[authServerBaseUrl];
+    const byPort =
+      server && typeof server === "object" && server.byPort && typeof server.byPort === "object"
+        ? server.byPort
+        : {};
+    byPort[String(port)] = clientId; // merge — keep ids for other ports
+    data.clients[authServerBaseUrl] = { byPort };
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(data, null, 2) + "\n", { mode: 0o600 });
   } catch {
