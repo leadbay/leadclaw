@@ -876,7 +876,9 @@ Aim for a 3+3+3 split if possible. If the customers bucket has fewer than 3, fil
 
 # PHASE 2 — RENDER THE MAP
 
-**ALWAYS** render the map. Pass the \`map_locations\` array from the \`leadbay_tour_plan\` response **directly** into \`places_map_display_v0\` (when the host exposes it) — each entry is already \`{name, address, latitude, longitude, notes}\`, server-shaped, with the mode badge (★ Customer / ★ Qualified / ✦ New) already baked into \`notes\`. Do NOT rebuild from \`location.pos\` or re-derive the notes.
+The map is the default surface for a tour — render it **automatically**. The user does not need to ask for a map, and you must NOT ask whether they want one ("would you like to see this on a map?" is wrong): a field-sales tour is inherently geographic, so the map is the answer, not an option.
+
+**ALWAYS** render the map. Pass the \`map_locations\` array from the \`leadbay_tour_plan\` response **directly** into \`places_map_display_v0\` (when the host exposes it) — each entry is already \`{name, address, latitude, longitude, notes}\`, server-shaped, with the mode badge (★ Customer / ★ Qualified / ✦ New) already baked into \`notes\`. Do NOT rebuild from \`location.pos\` or re-derive the notes. On a host without the widget, render the per-lead place-card blocks (which the chat host auto-detects into a map carousel) — still automatic, never a flat prose list.
 
 Coordinate-less leads are already omitted from \`map_locations\`. Use \`map_summary.leads_without_coords\` to footnote "+ N leads without coordinates" below the widget.
 
