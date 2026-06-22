@@ -32,7 +32,7 @@ The map is the default surface for a tour — render it **automatically**. The u
 
 Coordinate-less leads are already omitted from `map_locations`. Use `map_summary.leads_without_coords` to footnote "+ N leads without coordinates" below the widget.
 
-Below the widget, emit a chat-prose summary grouped by mode (Customers / Qualified / New), with LinkedIn-linked contact name + bare phone/email pills per lead. Use the canonical `linking/contact-linkedin` rules.
+Below the widget, emit a chat-prose summary grouped by mode (Customers / Qualified / New), with LinkedIn-linked contact name + bare phone/email pills per lead. Use the canonical `linking/contact-linkedin` rules. **Carry the mode badge (★ Customer / ★ Qualified / ✦ New) onto every lead in this prose too** — a leading `### ✦ New` group header or a `★`/`✦` prefix per lead. The badge must reach the user in the chat text, not only inside the widget notes: on a host that can't render `places_map_display_v0`, the prose is the only place the badge survives, so a flat narrative that drops the badges is wrong even when the map call was made.
 
 # PHASE 3 — DRAFT IN-AREA OUTREACH (optional, ask first)
 
