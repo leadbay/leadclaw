@@ -15,7 +15,7 @@
  * New file (existing oauth-browser-open.test.ts is left untouched).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { browserLaunchEnv } from "../../src/oauth.js";
 
 const isLinux = process.platform === "linux";
@@ -29,6 +29,7 @@ describe("browserLaunchEnv — Wayland/DBus reconstruction", () => {
     WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY,
     DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS,
     DISPLAY: process.env.DISPLAY,
+    XAUTHORITY: process.env.XAUTHORITY,
   };
 
   beforeEach(() => {
@@ -37,6 +38,7 @@ describe("browserLaunchEnv — Wayland/DBus reconstruction", () => {
     delete process.env.WAYLAND_DISPLAY;
     delete process.env.DBUS_SESSION_BUS_ADDRESS;
     delete process.env.DISPLAY;
+    delete process.env.XAUTHORITY;
   });
 
   afterEach(() => {
@@ -68,6 +70,12 @@ describe("browserLaunchEnv — Wayland/DBus reconstruction", () => {
     if (existsSync(`${runtimeDir}/bus`)) {
       expect(env.DBUS_SESSION_BUS_ADDRESS).toBe(`unix:path=${runtimeDir}/bus`);
     }
+    // X11/XWayland browsers need the X authority cookie or they can't connect to
+    // the display. Under Mutter/Wayland it lives at <runtimeDir>/.mutter-Xwaylandauth.*
+    const cookie = readdirSync(runtimeDir!).find((f) => /^\.mutter-Xwaylandauth\./.test(f));
+    if (cookie) {
+      expect(env.XAUTHORITY).toBe(`${runtimeDir}/${cookie}`);
+    }
   });
 
   it("does not override values already present in env (when the runtime dir exists)", () => {
@@ -78,10 +86,12 @@ describe("browserLaunchEnv — Wayland/DBus reconstruction", () => {
     process.env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/already/set";
     process.env.WAYLAND_DISPLAY = "wayland-9";
     process.env.DISPLAY = ":7";
+    process.env.XAUTHORITY = "/already/.Xauthority";
     const env = browserLaunchEnv();
     expect(env.XDG_RUNTIME_DIR).toBe(runtimeDir);
     expect(env.DBUS_SESSION_BUS_ADDRESS).toBe("unix:path=/already/set");
     expect(env.WAYLAND_DISPLAY).toBe("wayland-9");
     expect(env.DISPLAY).toBe(":7");
+    expect(env.XAUTHORITY).toBe("/already/.Xauthority");
   });
 });

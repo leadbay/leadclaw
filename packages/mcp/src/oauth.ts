@@ -626,6 +626,34 @@ export function browserLaunchEnv(debug?: (msg: string) => void): NodeJS.ProcessE
     debug?.(`browserLaunchEnv: injected DISPLAY=${env.DISPLAY}`);
   }
 
+  // An X11/XWayland browser (Chrome/Brave/Electron-based) needs the X authority
+  // cookie to connect to the display — without it the X server rejects the
+  // client ("Authorization required, but no authorization protocol specified")
+  // and the browser exits/segfaults, so no tab opens even though xdg-open
+  // returned 0. Claude Desktop strips XAUTHORITY; under Wayland/Mutter the
+  // Xwayland cookie lives at <runtimeDir>/.mutter-Xwaylandauth.* — reconstruct
+  // from there, falling back to ~/.Xauthority.
+  if (!env.XAUTHORITY) {
+    try {
+      let xauth: string | undefined;
+      if (runtimeDir) {
+        const cookie = readdirSync(runtimeDir).find((f) =>
+          /^\.mutter-Xwaylandauth\./.test(f)
+        );
+        if (cookie) xauth = `${runtimeDir}/${cookie}`;
+      }
+      if (!xauth && env.HOME && existsSync(`${env.HOME}/.Xauthority`)) {
+        xauth = `${env.HOME}/.Xauthority`;
+      }
+      if (xauth) {
+        env.XAUTHORITY = xauth;
+        debug?.(`browserLaunchEnv: injected XAUTHORITY=${xauth}`);
+      }
+    } catch {
+      /* runtime dir unreadable — proceed without (Wayland-native apps still work) */
+    }
+  }
+
   return env;
 }
 
