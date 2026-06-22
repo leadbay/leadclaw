@@ -105,8 +105,16 @@ function mockFanOut(monitorItems: unknown[], wishlistItems: unknown[]) {
 
 describe("leadbay_tour_plan — map_locations shaping (#3779)", () => {
   it("assigns ★ Customer / ★ Qualified / ✦ New badges and correct coordinates", async () => {
-    const customer = monitorLead({ id: "m-cust", name: "Acme Customer", last_monitor_action: "CONTACTED" });
-    const qualified = monitorLead({ id: "m-qual", name: "Beta Qualified" }); // no last_monitor_action
+    // Customer = monitor lead with real engagement history. The history
+    // fields that actually exist on the pull_followups payload are
+    // epilogue_status / last_prospecting_action_at / last_monitor_action_at.
+    const customer = monitorLead({
+      id: "m-cust",
+      name: "Acme Customer",
+      epilogue_status: "EPILOGUE_STILL_CHASING",
+      last_prospecting_action_at: "2026-06-01T00:00:00Z",
+    });
+    const qualified = monitorLead({ id: "m-qual", name: "Beta Qualified" }); // no history fields
     const fresh = discoverLead({ id: "d-new", name: "Gamma New" });
 
     mockFanOut([customer, qualified], [fresh]);
@@ -136,7 +144,7 @@ describe("leadbay_tour_plan — map_locations shaping (#3779)", () => {
   });
 
   it("omits leads without valid coordinates and counts them in map_summary", async () => {
-    const withCoords = monitorLead({ id: "m-ok", name: "Has Coords", last_monitor_action: "MEETING_BOOKED" });
+    const withCoords = monitorLead({ id: "m-ok", name: "Has Coords", last_monitor_action_at: "2026-05-01T00:00:00Z" });
     const nullPos = monitorLead({ id: "m-null", name: "No Coords", location: { pos: null, full: "Somewhere" } });
     const malformed = discoverLead({ id: "d-bad", name: "Bad Coords", location: { pos: [48.85], full: "Half, Paris", city: "Paris" } });
 
@@ -153,8 +161,13 @@ describe("leadbay_tour_plan — map_locations shaping (#3779)", () => {
     });
   });
 
-  it("a discover lead carrying a stray last_monitor_action is still ✦ New", async () => {
-    const sneaky = discoverLead({ id: "d-sneaky", name: "Sneaky New", last_monitor_action: "CONTACTED" });
+  it("a discover lead carrying stray monitor-history fields is still ✦ New", async () => {
+    const sneaky = discoverLead({
+      id: "d-sneaky",
+      name: "Sneaky New",
+      epilogue_status: "EPILOGUE_STILL_CHASING",
+      last_prospecting_action_at: "2026-06-01T00:00:00Z",
+    });
 
     mockFanOut([], [sneaky]);
 

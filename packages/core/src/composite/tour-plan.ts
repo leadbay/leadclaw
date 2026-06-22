@@ -108,14 +108,31 @@ function toMapLocation(lead: any, mode: TourMode): MapLocation | null {
 }
 
 /**
+ * A monitor (follow-up) lead is a "Customer" when it carries real engagement
+ * history, "Qualified" when it's a scored account with no recorded action yet.
+ * The fields that actually exist on the pull_followups payload (per the
+ * follow-up rendering contract in snippets/rendering/pull-followups-table.md)
+ * are `epilogue_status`, `last_prospecting_action_at`, and
+ * `last_monitor_action_at` — NOT a bare `last_monitor_action`. Any of those
+ * three being present means the account has been worked before.
+ */
+function hasMonitorHistory(lead: any): boolean {
+  return Boolean(
+    lead?.epilogue_status ||
+      lead?.last_prospecting_action_at ||
+      lead?.last_monitor_action_at,
+  );
+}
+
+/**
  * Build the union map payload + coverage summary from the two lead buckets.
- * Monitor leads split by `last_monitor_action` (Customer vs Qualified);
- * Discover leads are always New regardless of any stray monitor fields.
+ * Monitor leads split into Customer (has engagement history) vs Qualified
+ * (scored, untouched); Discover leads are always New.
  */
 function buildMap(monitorLeads: any[], discoverLeads: any[]) {
   const mapLocations = [
     ...monitorLeads.map((l) =>
-      toMapLocation(l, l?.last_monitor_action ? "★ Customer" : "★ Qualified"),
+      toMapLocation(l, hasMonitorHistory(l) ? "★ Customer" : "★ Qualified"),
     ),
     ...discoverLeads.map((l) => toMapLocation(l, "✦ New")),
   ].filter((m): m is MapLocation => m !== null);

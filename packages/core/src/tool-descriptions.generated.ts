@@ -3808,7 +3808,7 @@ Build a single-call mixed-mode itinerary for a field sales tour. Combines \`lead
 
 For reference, the badge the server already applied to each \`notes\`:
 
-- \`★ Customer\` — Monitor lead with an existing \`last_monitor_action\` history (engaged / past interaction).
+- \`★ Customer\` — Monitor lead with prior engagement history (\`epilogue_status\`, \`last_prospecting_action_at\`, or \`last_monitor_action_at\` set).
 - \`★ Qualified\` — Monitor lead with a high score but no recent action.
 - \`✦ New\` — Discover lead from \`discover_leads\`.
 

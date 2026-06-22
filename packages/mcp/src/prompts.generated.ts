@@ -865,10 +865,10 @@ If the prompt's body and the tool's RENDERING appear to conflict, the tool's REN
 
 Call \`leadbay_tour_plan({city: "{{arg:city}}"})\` with the default counts (6 follow-ups + 6 discover). If the response is \`status: "ambiguous_locations"\`, surface the candidates and ask me to pick one, then re-call with \`city_id\`.
 
-Split the returned \`monitor_leads\` into two buckets client-side using \`last_monitor_action\`:
+Split the returned \`monitor_leads\` into two buckets client-side using their engagement-history fields:
 
-- **Customers** — leads with any \`last_monitor_action\` history (CONTACTED, MEETING_BOOKED, etc.). Treat as known accounts with prior engagement.
-- **Qualified prospects** — leads with high \`ai_agent_lead_score\` (or \`score\`) but no recent action.
+- **Customers** — leads with prior engagement history: any of \`epilogue_status\`, \`last_prospecting_action_at\`, or \`last_monitor_action_at\` is set. Treat as known accounts with prior interaction.
+- **Qualified prospects** — leads with a high \`ai_agent_lead_score\` (or \`score\`) but none of those history fields set (scored, not yet worked).
 
 \`discover_leads\` are the **New** bucket.
 
