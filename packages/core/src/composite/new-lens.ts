@@ -120,7 +120,7 @@ export const newLens: Tool<NewLensParams> = {
       location_ambiguities: {
         type: "array",
         description:
-          "On 'ambiguous_locations': per text {location_text, matches:[{id,name,country,level,score}]}.",
+          "On 'ambiguous_locations': per text {location_text, matches:[{id,name,country,level,score}]}. Re-call the chosen id via the SAME axis the text came from — an include text → locations; a text from exclude_locations → exclude_locations (NOT locations, which would include the area the user asked to exclude). The `message` field names the correct param per text.",
         items: { type: "object" },
       },
       filter_applied: { type: "object", description: "On 'created': the FilterPayload POSTed to the new lens." },

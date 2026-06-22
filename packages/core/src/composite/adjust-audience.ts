@@ -340,7 +340,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
   outputSchema: {
     type: "object",
     description:
-      "Return shapes: 'applied' on success; 'ambiguous_sectors' when free-text sectors matched multiple candidates (re-call with sector_ids); 'ambiguous_locations' when free-text locations didn't resolve to one area (re-call with location_ids); 'lens_not_found' / 'ambiguous_lens' when a lensName didn't resolve to exactly one lens (re-call with lensId or an exact lensName).",
+      "Return shapes: 'applied' on success; 'ambiguous_sectors' when free-text sectors matched multiple candidates (re-call with sector_ids); 'ambiguous_locations' when free-text locations didn't resolve to one area — re-call with the chosen id via the SAME axis it came from (an include pick → location_ids; an EXCLUDE pick → exclude_locations, NOT location_ids, which would include it); 'lens_not_found' / 'ambiguous_lens' when a lensName didn't resolve to exactly one lens (re-call with lensId or an exact lensName).",
     properties: {
       status: {
         type: "string",
@@ -356,7 +356,7 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
       location_ambiguities: {
         type: "array",
         description:
-          "On 'ambiguous_locations': per text {location_text, matches:[{id, name, country, level, score}]}. Agent picks an id and re-calls with location_ids.",
+          "On 'ambiguous_locations': per text {location_text, matches:[{id, name, country, level, score}]}. Agent picks an id and re-calls via the SAME axis the text came from — an include text → location_ids; a text from exclude_locations → exclude_locations (NOT location_ids, which would include the area the user asked to exclude). The `message` field names the correct param per text.",
         items: { type: "object" },
       },
       lenses: {
