@@ -184,21 +184,35 @@ export const newLens: Tool<NewLensParams> = {
       ...excludeLocRes.ambiguities,
     ];
     if (locAmbiguities.length > 0) {
-      const noMatch = locAmbiguities.filter((a) => a.matches.length === 0);
-      const multi = locAmbiguities.filter((a) => a.matches.length > 0);
+      // Keep include vs exclude ambiguities separate: an INCLUDE pick retries
+      // through `locations`, an EXCLUDE pick through `exclude_locations`.
+      // Telling the agent to re-call an excluded area through `locations`
+      // would silently flip the exclusion into an inclusion.
+      const incMatch = includeLocRes.ambiguities.filter((a) => a.matches.length > 0);
+      const incNone = includeLocRes.ambiguities.filter((a) => a.matches.length === 0);
+      const excMatch = excludeLocRes.ambiguities.filter((a) => a.matches.length > 0);
+      const excNone = excludeLocRes.ambiguities.filter((a) => a.matches.length === 0);
+      const quote = (as: typeof locAmbiguities) =>
+        as.map((a) => `"${a.location_text}"`).join(", ");
       const parts: string[] = [];
-      if (noMatch.length > 0) {
+      if (incNone.length > 0) {
         parts.push(
-          `Couldn't find a location matching ${noMatch
-            .map((a) => `"${a.location_text}"`)
-            .join(", ")}. Pick a known area and re-call (lens not yet created).`
+          `Couldn't find a location matching ${quote(incNone)}. Pick a known area and re-call via locations (lens not yet created).`
         );
       }
-      if (multi.length > 0) {
+      if (incMatch.length > 0) {
         parts.push(
-          `${multi
-            .map((a) => `"${a.location_text}"`)
-            .join(", ")} matched multiple areas. Pick from the matches and re-call with the location id.`
+          `${quote(incMatch)} matched multiple areas. Pick from the matches and re-call with the chosen id in locations.`
+        );
+      }
+      if (excNone.length > 0) {
+        parts.push(
+          `Couldn't find a location to exclude matching ${quote(excNone)}. Pick a known area and re-call via exclude_locations (lens not yet created).`
+        );
+      }
+      if (excMatch.length > 0) {
+        parts.push(
+          `${quote(excMatch)} (to exclude) matched multiple areas. Pick from the matches and re-call with the chosen id in exclude_locations — NOT locations, which would include it.`
         );
       }
       return {

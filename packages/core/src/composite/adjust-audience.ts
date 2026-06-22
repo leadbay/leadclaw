@@ -492,19 +492,36 @@ export const adjustAudience: Tool<AdjustAudienceParams> = {
     ];
 
     if (locAmbiguities.length > 0) {
-      const noMatch = locAmbiguities.filter((a) => a.matches.length === 0);
-      const multi = locAmbiguities.filter((a) => a.matches.length > 0);
+      // Keep include vs exclude ambiguities separate: the retry parameter
+      // differs. An INCLUDE ambiguity retries via location_ids (which folds
+      // into the include set); an EXCLUDE ambiguity must retry via
+      // exclude_locations with the chosen id — routing it through
+      // location_ids would silently flip an exclusion into an inclusion.
+      const incMatch = includeLocRes.ambiguities.filter((a) => a.matches.length > 0);
+      const incNone = includeLocRes.ambiguities.filter((a) => a.matches.length === 0);
+      const excMatch = excludeLocRes.ambiguities.filter((a) => a.matches.length > 0);
+      const excNone = excludeLocRes.ambiguities.filter((a) => a.matches.length === 0);
+      const quote = (as: typeof locAmbiguities) =>
+        as.map((a) => `"${a.location_text}"`).join(", ");
       const parts: string[] = [];
-      if (noMatch.length > 0) {
-        const names = noMatch.map((a) => `"${a.location_text}"`).join(", ");
+      if (incNone.length > 0) {
         parts.push(
-          `Couldn't find a location matching ${names}. Ask the user to rephrase, then re-call with location_ids=...`
+          `Couldn't find a location matching ${quote(incNone)}. Ask the user to rephrase, then re-call with location_ids=...`
         );
       }
-      if (multi.length > 0) {
-        const names = multi.map((a) => `"${a.location_text}"`).join(", ");
+      if (incMatch.length > 0) {
         parts.push(
-          `${names} matched multiple areas. Pick from the matches and re-call with location_ids=...`
+          `${quote(incMatch)} matched multiple areas. Pick from the matches and re-call with location_ids=...`
+        );
+      }
+      if (excNone.length > 0) {
+        parts.push(
+          `Couldn't find a location to exclude matching ${quote(excNone)}. Ask the user to rephrase, then re-call with exclude_locations=... (the chosen id).`
+        );
+      }
+      if (excMatch.length > 0) {
+        parts.push(
+          `${quote(excMatch)} (to exclude) matched multiple areas. Pick from the matches and re-call with exclude_locations=... (the chosen id) — NOT location_ids, which would include it.`
         );
       }
       return {
