@@ -41,6 +41,7 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 27 | **Prior-context carry-over** — across turns the agent must reuse the lead_id it surfaced earlier rather than re-running discovery | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 28 | **Send feedback to the team** — "send feedback", "report a bug", "tell Leadbay…", or accepting an offer to report an error — delivers a user-authored message to the Leadbay team's Sentry feedback inbox (same destination as the web app's feedback form) | `leadbay_send_feedback` | "Send feedback to the team: lead scores feel off this week" |
 | 29 | **Audience build from dirty taxonomy (no-crash)** — "create a group for menuisiers, pergolas, vérandas" — `leadbay_adjust_audience` must tolerate a null-name sector-taxonomy row and ambiguous matches, returning a graceful ambiguous-sectors message rather than a TypeError (regression lock for the v0.17.3 sector-creation crash) | `leadbay_adjust_audience` | "Create a group for menuisiers, pergolas, vérandas" |
+| 30 | **Campaign builder from scratch (solo)** — "build me a campaign from scratch" — one guided flow: discover on the active lens → qualify/pick a cohort → enrich the contacts most likely to engage (data-driven titles) → persist via `leadbay_create_campaign` → render the ready-to-work `leadbay_campaign_call_sheet` view, then hand off to `leadbay_work_campaign`. Distinct from the team flow (`leadbay_setup_team_prospecting`) and the work-an-existing-one flow (`leadbay_work_campaign`). | `leadbay_build_campaign` | *(multi-turn — see `turns:` contract)* |
 
 ---
 
@@ -499,6 +500,47 @@ success_criteria:
 
 ```yaml scenario
 prompt: "Create a group for menuisiers, pergolas, vérandas"
+```
+
+```yaml expected
+workflow_name: Campaign builder — from scratch (solo)
+prompt_name: leadbay_build_campaign
+required_calls:
+  - leadbay_pull_leads
+  - leadbay_recall_ordered_titles
+  - leadbay_enrich_titles
+  - leadbay_bulk_enrich_status
+  - leadbay_create_campaign
+  - leadbay_campaign_call_sheet
+forbidden_calls:
+  - leadbay_report_outreach
+turns:
+  - prompt: "Build me a campaign from scratch from my active lens — only leads that are a strong fit for my ICP."
+    expect_calls:
+      - leadbay_account_status
+      - leadbay_pull_leads
+  - prompt: "Pick a cohort that's squarely in my ICP, then enrich the contacts who would actually buy what I sell — go ahead and spend, email + phone, up to 10 contacts."
+    expect_calls:
+      - leadbay_recall_ordered_titles
+      - leadbay_enrich_titles
+  - prompt: "Wait for enrichment to finish, then create the campaign and show me the full call sheet with everyone's phone and email."
+    expect_calls:
+      - leadbay_bulk_enrich_status
+      - leadbay_create_campaign
+      - leadbay_campaign_call_sheet
+    forbid_calls:
+      - leadbay_pull_leads
+    carry_over:
+      - "created the campaign with the lead_ids picked in turn 2 (did not re-run leadbay_pull_leads to rediscover them)"
+success_criteria:
+  - "every lead in the campaign is in the user's ICP (a company that would buy the user's product)"
+  - "derived the BUYER PERSONA for the user's product before choosing titles — the account sells a sales-prospecting tool (Leadbay), so the buyer is the revenue org (sales / business development / growth / marketing leadership), and the agent named that persona"
+  - "the enriched contacts are PREDOMINANTLY that buyer persona (VP/Head/Director of Sales, Business Development, Account/Carrier Sales, CRO, CMO, Head of Growth; founder/CEO only at small companies) — NOT operations / logistics / COO / finance / IT picked by seniority"
+  - "good coverage — the large majority of campaign leads have at least one persona-matching, actionable (email or phone) contact; leads with no persona match are named, not silently left empty"
+  - "surfaced credits_remaining + enrichable_contacts and named the persona before launching paid enrichment"
+  - "launched the paid enrichment (email + phone, up to 10 contacts) and polled leadbay_bulk_enrich_status until done before rendering"
+  - "created the campaign with the picked lead_ids and rendered the leadbay_campaign_call_sheet view with actionable contacts (phone tel: / email mailto: links)"
+  - "did NOT call leadbay_report_outreach (building a campaign is not outreaching)"
 ```
 
 ---
