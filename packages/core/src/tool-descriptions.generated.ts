@@ -3782,11 +3782,11 @@ Examples that should NOT invoke this tool (sound similar, route elsewhere):
 
 ## RENDER (quick)
 
-Route the union of monitor_leads + discover_leads into
-\`places_map_display_v0\` — same recipe as followups_map (lat/lng
-split, full address, short notes). Tag each entry's notes with a
-mode badge: "★ Customer" / "★ Qualified" / "✦ New" (split Monitor
-by last_monitor_action; Discover = New). Below the widget: one
+ALWAYS render the map first: pass the response's \`map_locations\`
+array verbatim into \`places_map_display_v0\` — it's already shaped
+({name, address, latitude, longitude, notes}) with the mode badge
+(★ Customer / ★ Qualified / ✦ New) baked into each \`notes\`. Do NOT
+reshape or re-derive from \`location.pos\`. Below the widget: one
 intro sentence + per-group chat-prose list with LinkedIn-linked
 contact names.
 
@@ -3802,21 +3802,23 @@ Build a single-call mixed-mode itinerary for a field sales tour. Combines \`lead
 
 ---
 
-## RENDER — host-native map widget (REQUIRED, preferred)
+## RENDER — host-native map widget (ALWAYS render first)
 
-Identical to \`leadbay_followups_map\`. Pass the union \`monitor_leads + discover_leads\` into \`places_map_display_v0\`. The mode information goes in the per-lead \`notes\` string as a **leading badge**:
+**ALWAYS** render the map first. Pass the response's **\`map_locations\`** array **directly** into \`places_map_display_v0\` — each entry is already \`{name, address, latitude, longitude, notes}\`, server-shaped, with the mode badge already in \`notes\`. **Do NOT** reshape, **do NOT** re-derive from \`location.pos\`, **do NOT** rebuild the notes string. The server has done all of that deterministically.
+
+For reference, the badge the server already applied to each \`notes\`:
 
 - \`★ Customer\` — Monitor lead with an existing \`last_monitor_action\` history (engaged / past interaction).
-- \`★ Qualified\` — Monitor lead with a high \`ai_agent_lead_score\` or \`score\` but no recent action.
+- \`★ Qualified\` — Monitor lead with a high score but no recent action.
 - \`✦ New\` — Discover lead from \`discover_leads\`.
 
-Then the rest of the notes string follows the standard recipe: ONE sentence, sector/fit + contact ask, bare phone + email auto-linkified. Example:
+Example of a server-built \`notes\` string you pass through unchanged:
 
 \`\`\`
 ✦ New — Strong mid-size hardware distributor fit. Reach Marie Dupont, Sales Director: +33 5 55 12 34 56, m.dupont@example.fr.
 \`\`\`
 
-Skip any lead whose \`location.pos\` is null (no lat/lng → no pin) — list them as a "+ N leads without coordinates" footer below the widget.
+Leads without coordinates are already omitted from \`map_locations\`. Use \`map_summary.leads_without_coords\` to footnote "+ N leads without coordinates" below the widget — no need to re-count.
 
 ## Chat prose AFTER the widget (where markdown DOES render)
 
@@ -3855,7 +3857,7 @@ WHEN TO USE: the user signals a *mixed* tour-planning intent — they want both 
 
 WHEN NOT TO USE: if the user only wants follow-ups (use \`leadbay_followups_map\`), only wants new leads (use \`leadbay_pull_leads\`), wants research on one specific account (\`leadbay_research_lead_by_id\`), or wants to persist the tour as a campaign artifact (chain into \`leadbay_create_campaign\` after this).
 
-**Response envelope**: \`{city, city_id, monitor_leads, discover_leads, discover_filter_note, _meta}\` on happy path; \`{status: "ambiguous_locations", location_ambiguities, ...}\` when the passed \`city\` matched multiple admin areas.
+**Response envelope**: \`{city, city_id, monitor_leads, discover_leads, discover_filter_note, map_locations, map_summary, _meta}\` on happy path; \`{status: "ambiguous_locations", location_ambiguities, ...}\` when the passed \`city\` matched multiple admin areas.
 
 ---
 `;

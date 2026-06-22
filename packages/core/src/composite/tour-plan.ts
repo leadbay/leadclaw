@@ -42,6 +42,88 @@ function cityMatches(lead: any, cityHint: string | undefined): boolean {
   return haystacks.some((h) => h.includes(hint) || hint.includes(h));
 }
 
+type TourMode = "★ Customer" | "★ Qualified" | "✦ New";
+
+interface MapLocation {
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  notes: string;
+}
+
+/**
+ * Pre-shape one lead into a `places_map_display_v0` entry, with the mode
+ * badge baked into the notes string. Returns null when the lead has no
+ * usable lat/lng — the caller filters those out and counts them in
+ * map_summary. Mirrors the proven builder in campaign-call-sheet.ts so the
+ * agent never has to hand-construct the widget payload (the #3779 fix).
+ */
+function toMapLocation(lead: any, mode: TourMode): MapLocation | null {
+  const pos = lead?.location?.pos;
+  const valid =
+    Array.isArray(pos) &&
+    pos.length === 2 &&
+    pos.every((n: unknown) => typeof n === "number");
+  if (!valid) return null;
+
+  const loc = lead.location;
+  const c = lead.recommended_contact;
+  const fullName = c ? [c.first_name, c.last_name].filter(Boolean).join(" ") : "";
+  const role = c?.job_title ? `, ${c.job_title}` : "";
+  const angle =
+    lead.split_ai_summary?.next_step ??
+    lead.split_ai_summary?.approach_angle ??
+    lead.short_description ??
+    "Worth a visit";
+
+  let reach: string;
+  if (c && fullName && c.phone_number) {
+    reach = `Reach ${fullName}${role}: ${c.phone_number}${c.email ? `, ${c.email}` : ""}.`;
+  } else if (c && fullName && c.email) {
+    reach = `Reach ${fullName}${role}: ${c.email}.`;
+  } else if (c && fullName) {
+    reach = `Reach ${fullName} (enrich a channel).`;
+  } else {
+    reach = "Enrich a contact to reach this account.";
+  }
+
+  const notes = `${mode} — ${angle}. ${reach}`.slice(0, 280);
+  return {
+    name: lead.name,
+    address:
+      loc.full ??
+      [loc.city, loc.state, loc.country].filter(Boolean).join(", "),
+    latitude: pos[0],
+    longitude: pos[1],
+    notes,
+  };
+}
+
+/**
+ * Build the union map payload + coverage summary from the two lead buckets.
+ * Monitor leads split by `last_monitor_action` (Customer vs Qualified);
+ * Discover leads are always New regardless of any stray monitor fields.
+ */
+function buildMap(monitorLeads: any[], discoverLeads: any[]) {
+  const mapLocations = [
+    ...monitorLeads.map((l) =>
+      toMapLocation(l, l?.last_monitor_action ? "★ Customer" : "★ Qualified"),
+    ),
+    ...discoverLeads.map((l) => toMapLocation(l, "✦ New")),
+  ].filter((m): m is MapLocation => m !== null);
+
+  const totalLeads = monitorLeads.length + discoverLeads.length;
+  return {
+    map_locations: mapLocations,
+    map_summary: {
+      total_leads: totalLeads,
+      leads_with_coords: mapLocations.length,
+      leads_without_coords: totalLeads - mapLocations.length,
+    },
+  };
+}
+
 export const tourPlan: Tool<TourPlanParams> = {
   name: "leadbay_tour_plan",
   annotations: {
@@ -98,6 +180,22 @@ export const tourPlan: Tool<TourPlanParams> = {
         description:
           "Human-readable summary of the client-side geo filter applied to Discover leads (e.g. 'matched 3/30 by city/state').",
       },
+      map_locations: {
+        type: "array",
+        description:
+          "Pre-shaped entries for `places_map_display_v0` — pass each one verbatim ({name, address, latitude, longitude, notes}); the mode badge (★ Customer / ★ Qualified / ✦ New) is already in `notes`. Do NOT reshape or re-derive from `location.pos`. One entry per lead with valid coordinates; coordinate-less leads are omitted and counted in `map_summary`.",
+        items: { type: "object" },
+      },
+      map_summary: {
+        type: "object",
+        description:
+          "Deterministic coverage counts so the agent can footnote '+ N leads without coordinates' without re-counting.",
+        properties: {
+          total_leads: { type: "number" },
+          leads_with_coords: { type: "number" },
+          leads_without_coords: { type: "number" },
+        },
+      },
       status: {
         type: "string",
         description:
@@ -115,7 +213,7 @@ export const tourPlan: Tool<TourPlanParams> = {
         },
       },
     },
-    required: ["monitor_leads", "discover_leads"],
+    required: ["monitor_leads", "discover_leads", "map_locations"],
   },
   execute: async (
     client: LeadbayClient,
@@ -151,6 +249,12 @@ export const tourPlan: Tool<TourPlanParams> = {
           discover_leads: [],
           discover_filter_note:
             "City was ambiguous; pick an id and re-call to proceed.",
+          map_locations: [],
+          map_summary: {
+            total_leads: 0,
+            leads_with_coords: 0,
+            leads_without_coords: 0,
+          },
           city: params.city ?? null,
           city_id: params.city_id ?? null,
           _meta: {
@@ -196,6 +300,7 @@ export const tourPlan: Tool<TourPlanParams> = {
       monitor_leads: monitorLeads,
       discover_leads: discoverLeads,
       discover_filter_note: filterNote,
+      ...buildMap(monitorLeads, discoverLeads),
       _meta: {
         region: client.region,
         latency_ms: client.lastMeta?.latency_ms ?? null,

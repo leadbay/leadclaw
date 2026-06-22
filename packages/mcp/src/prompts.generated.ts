@@ -876,13 +876,9 @@ Aim for a 3+3+3 split if possible. If the customers bucket has fewer than 3, fil
 
 # PHASE 2 — RENDER THE MAP
 
-Route the union of \`monitor_leads + discover_leads\` into \`places_map_display_v0\` (when the host exposes it). Per-lead \`notes\` string:
+**ALWAYS** render the map. Pass the \`map_locations\` array from the \`leadbay_tour_plan\` response **directly** into \`places_map_display_v0\` (when the host exposes it) — each entry is already \`{name, address, latitude, longitude, notes}\`, server-shaped, with the mode badge (★ Customer / ★ Qualified / ✦ New) already baked into \`notes\`. Do NOT rebuild from \`location.pos\` or re-derive the notes.
 
-- \`★ Customer — <one-sentence sector + why-now>. Reach <name>, <role>: <bare phone>, <bare email>.\`
-- \`★ Qualified — <one-sentence>. Reach <name>...\`
-- \`✦ New — <one-sentence>. Reach <name>...\`
-
-Skip leads with \`location.pos === null\` (no coordinates → no pin) — list them as "+ N leads without coordinates" below the widget.
+Coordinate-less leads are already omitted from \`map_locations\`. Use \`map_summary.leads_without_coords\` to footnote "+ N leads without coordinates" below the widget.
 
 Below the widget, emit a chat-prose summary grouped by mode (Customers / Qualified / New), with LinkedIn-linked contact name + bare phone/email pills per lead. Use the canonical \`linking/contact-linkedin\` rules.
 
