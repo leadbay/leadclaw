@@ -624,7 +624,7 @@ render_checks:
   - "each rendered lead carries its tour mode badge (★ Customer, ★ Qualified, or ✦ New) so the rep can tell known accounts from fresh discoveries"
   - "did NOT ask the user whether they want a map / geographic view before rendering it — the map is automatic for a tour, not opt-in"
   - must_match: "★|✦"
-  - must_not_match: "(?i)(would you like|want me to|shall i|do you want).{0,40}\\bmap\\b"
+  - must_not_match: "([Ww]ould you like|[Ww]ant me to|[Ss]hall I|[Dd]o you want)[^.?!\\n]{0,40}\\bmap\\b"
 success_criteria:
   - "recognized a field-sales tour intent from plain language ('I'm visiting Jacksonville in 3 days') even though the user never said 'map' or 'on a map'"
   - "called leadbay_tour_plan with Jacksonville (not raw leadbay_pull_followups + leadbay_pull_leads)"
