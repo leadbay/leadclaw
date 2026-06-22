@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 
 import { leadbay_update_custom_field as UPDATE_CUSTOM_FIELD_DESCRIPTION } from "../tool-descriptions.generated.js";
+import { sanitizeConfigForType } from "./_custom-field-config.js";
 
 interface UpdateCustomFieldParams {
   id: string;
@@ -117,11 +118,11 @@ export const updateCustomField: Tool<UpdateCustomFieldParams> = {
       );
     }
     const type = params.type !== undefined ? params.type : current.type;
-    const config =
+    const rawConfig =
       params.config !== undefined ? params.config : (current.config ?? null);
 
     if (type === "EXTERNAL_ID") {
-      const urlTemplate = config?.url_template ?? config?.urlTemplate;
+      const urlTemplate = rawConfig?.url_template ?? rawConfig?.urlTemplate;
       if (!urlTemplate || !urlTemplate.includes("{value}")) {
         throw client.makeError(
           "CUSTOM_FIELD_EXTERNAL_ID_TEMPLATE_REQUIRED",
@@ -131,6 +132,13 @@ export const updateCustomField: Tool<UpdateCustomFieldParams> = {
         );
       }
     }
+
+    // Narrow config to exactly the key(s) the target type accepts. The backend
+    // deserializer is strict — extra keys (e.g. a stale `format` left from the
+    // previous type, or both url_template + urlTemplate) cause a 500. This is
+    // critical on a type CHANGE, where `current.config` may carry keys the new
+    // type rejects.
+    const config = sanitizeConfigForType(type, rawConfig);
 
     const body = {
       name,

@@ -7,6 +7,7 @@ import type {
 } from "../types.js";
 
 import { leadbay_create_custom_field as CREATE_CUSTOM_FIELD_DESCRIPTION } from "../tool-descriptions.generated.js";
+import { sanitizeConfigForType } from "./_custom-field-config.js";
 interface CreateCustomFieldParams {
   name: string;
   type?: CustomCrmFieldKind;
@@ -85,10 +86,10 @@ export const createCustomField: Tool<CreateCustomFieldParams> = {
     }
 
     const type = params.type ?? "TEXT";
-    const config = params.config ?? null;
+    const rawConfig = params.config ?? null;
 
     if (type === "EXTERNAL_ID") {
-      const urlTemplate = config?.url_template ?? config?.urlTemplate;
+      const urlTemplate = rawConfig?.url_template ?? rawConfig?.urlTemplate;
       if (!urlTemplate || !urlTemplate.includes("{value}")) {
         throw client.makeError(
           "CUSTOM_FIELD_EXTERNAL_ID_TEMPLATE_REQUIRED",
@@ -113,6 +114,11 @@ export const createCustomField: Tool<CreateCustomFieldParams> = {
         };
       }
     }
+
+    // Narrow config to exactly the key(s) the type accepts — the backend
+    // deserializer rejects extra keys (e.g. urlTemplate camelCase, or a
+    // currency on a non-PRICE field) with a 500.
+    const config = sanitizeConfigForType(type, rawConfig);
 
     const body = {
       name,
