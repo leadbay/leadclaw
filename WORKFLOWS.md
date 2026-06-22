@@ -41,7 +41,11 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 27 | **Prior-context carry-over** — across turns the agent must reuse the lead_id it surfaced earlier rather than re-running discovery | `leadbay_daily_check_in` | *(multi-turn — see `turns:` contract)* |
 | 28 | **Send feedback to the team** — "send feedback", "report a bug", "tell Leadbay…", or accepting an offer to report an error — delivers a user-authored message to the Leadbay team's Sentry feedback inbox (same destination as the web app's feedback form) | `leadbay_send_feedback` | "Send feedback to the team: lead scores feel off this week" |
 | 29 | **Audience build from dirty taxonomy (no-crash)** — "create a group for menuisiers, pergolas, vérandas" — `leadbay_adjust_audience` must tolerate a null-name sector-taxonomy row and ambiguous matches, returning a graceful ambiguous-sectors message rather than a TypeError (regression lock for the v0.17.3 sector-creation crash) | `leadbay_adjust_audience` | "Create a group for menuisiers, pergolas, vérandas" |
-| 30 | **Campaign builder from scratch (solo)** — "build me a campaign from scratch" — one guided flow: discover on the active lens → qualify/pick a cohort → enrich the contacts most likely to engage (data-driven titles) → persist via `leadbay_create_campaign` → render the ready-to-work `leadbay_campaign_call_sheet` view, then hand off to `leadbay_work_campaign`. Distinct from the team flow (`leadbay_setup_team_prospecting`) and the work-an-existing-one flow (`leadbay_work_campaign`). | `leadbay_build_campaign` | *(multi-turn — see `turns:` contract)* |
+| 30 | **Account status — silent on unreadable quota** — on an org whose `quota_status` 401s (no billing plan, `plan: null`), `leadbay_account_status` must answer user + org WITHOUT mentioning quota, an error, a 401, or telling the user to reconnect / re-authenticate (the token is valid — the same response read the user fine). Regression lock for the product#3761 401-hallucination | `leadbay_account_status` | "What account am I connected to?" |
+| 31 | **Account status — never volunteers the lens, name not id** — `leadbay_account_status` must NOT mention the active lens unprompted; and if asked which lens is active, must answer with the lens NAME, never the raw numeric id (e.g. `40005`). Regression lock for the product#3761 lens-hygiene fix | `leadbay_account_status` | "What account am I connected to, and which lens is active?" |
+| 32 | **Build an interactive artifact** — "build me a call sheet / interactive lead board with a campaign dropdown, notes, statuses, likes per lead" — the agent fetches headless view-models + usage guide via `leadbay_artifact_kit`, then assembles a single-file HTML artifact whose `lb.field`/`lb.action` view-models POPULATE a dropdown from `leadbay_list_campaigns` and submit `leadbay_report_outreach` / `leadbay_add_leads_to_campaign` / `leadbay_like_lead` (carrying `verification` + `_triggered_by` where required); the artifact owns all rendering | `leadbay_artifact_kit` *(no dedicated prompt)* | "Build me an interactive call sheet for these leads." |
+| 33 | **Manager team-activity view** — "how is my team doing", "top performers this month", "activity by rep" — `leadbay_team_activity` returns a per-rep leaderboard (`reps`, sorted by `total_activities`) + an activity time-series (`trend`) for a look-back window, the data behind the web Dashboard-Manager screen. Feeds a manager artifact (`lb.teamActivity` → table + Chart.js); quota/remaining stays on `leadbay_account_status` | `leadbay_team_activity` *(no dedicated prompt)* | "How is my team doing this month?" |
+| 34 | **Campaign builder from scratch (solo)** — "build me a campaign from scratch" — one guided flow: discover on the active lens → qualify/pick a cohort → enrich the BUYER PERSONA of the user's product (revenue org, not seniority) with a coverage guarantee → persist via `leadbay_create_campaign` → render the ready-to-work `leadbay_campaign_call_sheet` view, then hand off to `leadbay_work_campaign`. Distinct from the team flow (`leadbay_setup_team_prospecting`) and the work-an-existing-one flow (`leadbay_work_campaign`). | `leadbay_build_campaign` | *(multi-turn — see `turns:` contract)* |
 
 ---
 
@@ -171,7 +175,7 @@ forbidden_calls:
 success_criteria:
   - "called leadbay_account_status at least once"
   - "reported remaining quota figures without fabrication"
-  - "proposed a concrete next step"
+  - "IF a next step is proposed, it is a concrete action routed through the native choice widget (ask_user_input_v0 / AskUserQuestion), not reflexive prose filler — and proposing none is acceptable when the status read is a complete answer"
   - "did NOT call leadbay_report_outreach or any mutating tool"
 ```
 
@@ -501,6 +505,60 @@ success_criteria:
 ```yaml scenario
 prompt: "Create a group for menuisiers, pergolas, vérandas"
 ```
+
+#### Workflow 30 — Account status: silent on unreadable quota
+
+```yaml expected
+workflow_name: Account status — silent on unreadable quota
+prompt_name: leadbay_account_status
+required_calls:
+  - leadbay_account_status
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "did NOT mention quota, usage, limits, credits, a plan-read failure, an error, a 401, or any auth/login/token problem"
+  - "did NOT tell the user to reconnect, re-authenticate, refresh the session, or sign in again"
+  - "did NOT volunteer the active lens — the user asked only what account they are connected to, not about the lens"
+  - must_not_match: "[Rr]econnect|[Rr]e-?authenticate|[Ee]xpired|401|[Rr]efresh your (session|credential)|[Ss]ign in again"
+  - must_not_match: "[Qq]uota|usage|credits? remaining|[Pp]lan-read"
+  - must_not_match: "[Ll]ens"
+success_criteria:
+  - "called leadbay_account_status"
+  - "reported the user and organization (e.g. account name / org)"
+  - "stayed completely SILENT about quota: did not mention quota, usage, an error, a 401, or any auth problem — the quota_status 401 is an internal diagnostic on a plan-less org and the user must never see it (enforced in code: account_status withholds a 401/403 quota_error from the payload entirely)"
+  - "did NOT tell the user to reconnect or re-authenticate (the same token read the user/org fine, so the login is valid)"
+  - "did NOT volunteer the active lens (enforced in code: the lens is withheld from the payload unless the trigger text asks about it)"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "What account am I connected to?"
+```
+
+#### Workflow 31 — Account status: lens by name, never the raw id
+
+```yaml expected
+workflow_name: Account status — lens by name not id
+prompt_name: leadbay_account_status
+required_calls:
+  - leadbay_account_status
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "when naming the active lens, used the human-readable lens NAME, never the raw numeric id"
+  - must_not_match: "\\blens\\b[^.\\n]{0,40}\\b\\d{4,}\\b"
+success_criteria:
+  - "called leadbay_account_status"
+  - "answered which lens is active using the lens NAME (a human-readable string from last_requested_lens_name), NEVER the raw numeric id like 40005"
+  - "did NOT surface the bare numeric lens id to the user"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "What account am I connected to, and which lens is active?"
+```
+
+#### Workflow 34 — Campaign builder — from scratch (solo)
 
 ```yaml expected
 workflow_name: Campaign builder — from scratch (solo)

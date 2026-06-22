@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.0 — 2026-06-18 — Build-a-campaign guided flow
+## 0.23.0 — 2026-06-21 — Build-a-campaign guided flow
 
 - Added the `leadbay_build_campaign` prompt (and auto-generated Claude skill):
   one guided on-ramp that takes a solo user from intent to a ready-to-work
@@ -19,7 +19,7 @@
   company, or any contact appearing on >1 lead, so the rep doesn't email a
   mis-attributed address. Polls enrichment to completion before rendering.
 - Pure orchestration of existing composites — no new tool or endpoint.
-- Added eval workflow #30 (multi-turn) in `WORKFLOWS.md`. Tuned over 4 live
+- Added eval workflow #34 (multi-turn) in `WORKFLOWS.md`. Tuned over 4 live
   eval cycles against the test account (campaign quality 3/7 → 11/11 leads with
   a real revenue buyer reachable).
 
