@@ -45,6 +45,7 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 31 | **Account status — never volunteers the lens, name not id** — `leadbay_account_status` must NOT mention the active lens unprompted; and if asked which lens is active, must answer with the lens NAME, never the raw numeric id (e.g. `40005`). Regression lock for the product#3761 lens-hygiene fix | `leadbay_account_status` | "What account am I connected to, and which lens is active?" |
 | 32 | **Build an interactive artifact** — "build me a call sheet / interactive lead board with a campaign dropdown, notes, statuses, likes per lead" — the agent fetches headless view-models + usage guide via `leadbay_artifact_kit`, then assembles a single-file HTML artifact whose `lb.field`/`lb.action` view-models POPULATE a dropdown from `leadbay_list_campaigns` and submit `leadbay_report_outreach` / `leadbay_add_leads_to_campaign` / `leadbay_like_lead` (carrying `verification` + `_triggered_by` where required); the artifact owns all rendering | `leadbay_artifact_kit` *(no dedicated prompt)* | "Build me an interactive call sheet for these leads." |
 | 33 | **Manager team-activity view** — "how is my team doing", "top performers this month", "activity by rep" — `leadbay_team_activity` returns a per-rep leaderboard (`reps`, sorted by `total_activities`) + an activity time-series (`trend`) for a look-back window, the data behind the web Dashboard-Manager screen. Feeds a manager artifact (`lb.teamActivity` → table + Chart.js); quota/remaining stays on `leadbay_account_status` | `leadbay_team_activity` *(no dedicated prompt)* | "How is my team doing this month?" |
+| 34 | **Campaign builder from scratch (solo)** — "build me a campaign from scratch" — one guided flow: discover on the active lens → qualify/pick a cohort → enrich the BUYER PERSONA of the user's product (revenue org, not seniority) with a coverage guarantee → persist via `leadbay_create_campaign` → render the ready-to-work `leadbay_campaign_call_sheet` view, then hand off to `leadbay_work_campaign`. Distinct from the team flow (`leadbay_setup_team_prospecting`) and the work-an-existing-one flow (`leadbay_work_campaign`). | `leadbay_build_campaign` | *(multi-turn — see `turns:` contract)* |
 
 ---
 
@@ -555,6 +556,49 @@ success_criteria:
 
 ```yaml scenario
 prompt: "What account am I connected to, and which lens is active?"
+```
+
+#### Workflow 34 — Campaign builder — from scratch (solo)
+
+```yaml expected
+workflow_name: Campaign builder — from scratch (solo)
+prompt_name: leadbay_build_campaign
+required_calls:
+  - leadbay_pull_leads
+  - leadbay_recall_ordered_titles
+  - leadbay_enrich_titles
+  - leadbay_bulk_enrich_status
+  - leadbay_create_campaign
+  - leadbay_campaign_call_sheet
+forbidden_calls:
+  - leadbay_report_outreach
+turns:
+  - prompt: "Build me a campaign from scratch from my active lens — only leads that are a strong fit for my ICP."
+    expect_calls:
+      - leadbay_account_status
+      - leadbay_pull_leads
+  - prompt: "Pick a cohort that's squarely in my ICP, then enrich the contacts who would actually buy what I sell — go ahead and spend, email + phone, up to 10 contacts."
+    expect_calls:
+      - leadbay_recall_ordered_titles
+      - leadbay_enrich_titles
+  - prompt: "Wait for enrichment to finish, then create the campaign and show me the full call sheet with everyone's phone and email."
+    expect_calls:
+      - leadbay_bulk_enrich_status
+      - leadbay_create_campaign
+      - leadbay_campaign_call_sheet
+    forbid_calls:
+      - leadbay_pull_leads
+    carry_over:
+      - "created the campaign with the lead_ids picked in turn 2 (did not re-run leadbay_pull_leads to rediscover them)"
+success_criteria:
+  - "every lead in the campaign is in the user's ICP (a company that would buy the user's product)"
+  - "derived the BUYER PERSONA for the user's product before choosing titles — the account sells a sales-prospecting tool (Leadbay), so the buyer is the revenue org (sales / business development / growth / marketing leadership), and the agent named that persona"
+  - "the enriched contacts are PREDOMINANTLY that buyer persona (VP/Head/Director of Sales, Business Development, Account/Carrier Sales, CRO, CMO, Head of Growth; founder/CEO only at small companies) — NOT operations / logistics / COO / finance / IT picked by seniority"
+  - "good coverage — the large majority of campaign leads have at least one persona-matching, actionable (email or phone) contact; leads with no persona match are named, not silently left empty"
+  - "surfaced credits_remaining + enrichable_contacts and named the persona before launching paid enrichment"
+  - "launched the paid enrichment (email + phone, up to 10 contacts) and polled leadbay_bulk_enrich_status until done before rendering"
+  - "created the campaign with the picked lead_ids and rendered the leadbay_campaign_call_sheet view with actionable contacts (phone tel: / email mailto: links)"
+  - "did NOT call leadbay_report_outreach (building a campaign is not outreaching)"
 ```
 
 ---

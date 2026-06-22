@@ -1,5 +1,13 @@
 # Changelog — @leadbay/mcp
 
+## 0.23.0 — 2026-06-21
+
+Guided campaign builder.
+
+- **`leadbay_build_campaign`** (new prompt + auto-generated Claude skill) — one guided on-ramp from "build me a campaign" to a ready-to-work campaign: discover on the active lens → qualify → pick an ICP pool → enrich the BUYER PERSONA of the user's product (a sales tool's buyer is the revenue org — VP/Head/Dir Sales, BD, CRO, CMO, growth — not whoever is most senior) → create the campaign → render the `leadbay_campaign_call_sheet` view → hand off to `leadbay_work_campaign`.
+- **Coverage guarantee** — drops/swaps any lead with no enrichable buyer-persona contact for the highest-score in-ICP lead that has one (never trading ICP for coverage), and a ⚠ flag for suspect emails (domain ≠ company, or a contact on >1 lead). Polls enrichment to completion before rendering.
+- Pure orchestration of existing composites — no new tool. Eval workflow #34 added; tuned over 4 live eval cycles (campaign quality 3/7 → 11/11 leads with a real revenue buyer reachable).
+
 ## 0.22.0 — 2026-06-20
 
 Headless artifact SDK + two always-on read tools, so the user's Claude (cowork) can build interactive HTML artifacts that call Leadbay.
