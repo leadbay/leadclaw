@@ -46,6 +46,8 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 32 | **Build an interactive artifact** — "build me a call sheet / interactive lead board with a campaign dropdown, notes, statuses, likes per lead" — the agent fetches headless view-models + usage guide via `leadbay_artifact_kit`, then assembles a single-file HTML artifact whose `lb.field`/`lb.action` view-models POPULATE a dropdown from `leadbay_list_campaigns` and submit `leadbay_report_outreach` / `leadbay_add_leads_to_campaign` / `leadbay_like_lead` (carrying `verification` + `_triggered_by` where required); the artifact owns all rendering | `leadbay_artifact_kit` *(no dedicated prompt)* | "Build me an interactive call sheet for these leads." |
 | 33 | **Manager team-activity view** — "how is my team doing", "top performers this month", "activity by rep" — `leadbay_team_activity` returns a per-rep leaderboard (`reps`, sorted by `total_activities`) + an activity time-series (`trend`) for a look-back window, the data behind the web Dashboard-Manager screen. Feeds a manager artifact (`lb.teamActivity` → table + Chart.js); quota/remaining stays on `leadbay_account_status` | `leadbay_team_activity` *(no dedicated prompt)* | "How is my team doing this month?" |
 | 34 | **Campaign builder from scratch (solo)** — "build me a campaign from scratch" — one guided flow: discover on the active lens → qualify/pick a cohort → enrich the BUYER PERSONA of the user's product (revenue org, not seniority) with a coverage guarantee → persist via `leadbay_create_campaign` → render the ready-to-work `leadbay_campaign_call_sheet` view, then hand off to `leadbay_work_campaign`. Distinct from the team flow (`leadbay_setup_team_prospecting`) and the work-an-existing-one flow (`leadbay_work_campaign`). | `leadbay_build_campaign` | *(multi-turn — see `turns:` contract)* |
+| 35 | **Tour map always renders (underdeliver guard)** — planning a city tour must ALWAYS surface the geographic itinerary, not drop it to a plain prose list. `leadbay_tour_plan` pre-shapes `map_locations[]` server-side; the agent renders the map (or, on a host without the widget, the per-lead place-card blocks the carousel auto-detects) with mode badges (★ Customer / ★ Qualified / ✦ New). Regression lock for product#3779. | `leadbay_plan_tour_in_city` | "I'm visiting Jacksonville in 3 days — plan my visits on a map" |
+| 36 | **Tour map no-fabrication (overdeliver guard)** — when rendering the tour the agent must pass the server's `map_locations` through verbatim: never invent coordinates / pins for leads that lack them, never fabricate addresses, and never re-emit a competing raw lat/lng table alongside the place cards. Companion to #35. | `leadbay_plan_tour_in_city` | "I'm visiting Jacksonville in 3 days — show me everyone I should meet, on a map" |
 
 ---
 
@@ -599,6 +601,55 @@ success_criteria:
   - "launched the paid enrichment (email + phone, up to 10 contacts) and polled leadbay_bulk_enrich_status until done before rendering"
   - "created the campaign with the picked lead_ids and rendered the leadbay_campaign_call_sheet view with actionable contacts (phone tel: / email mailto: links)"
   - "did NOT call leadbay_report_outreach (building a campaign is not outreaching)"
+```
+
+#### Workflow 35 — Tour map always renders (underdeliver guard)
+
+```yaml expected
+workflow_name: Tour map always renders
+prompt_name: leadbay_plan_tour_in_city
+required_calls:
+  - leadbay_tour_plan
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "rendered the itinerary geographically — either the places map widget OR per-lead place-card blocks (a heading per company with its city/area), NOT a single flat prose paragraph that drops the locations"
+  - "each rendered lead carries its tour mode badge (★ Customer, ★ Qualified, or ✦ New) so the rep can tell known accounts from fresh discoveries"
+  - must_match: "★|✦"
+success_criteria:
+  - "called leadbay_tour_plan with Jacksonville (not raw leadbay_pull_followups + leadbay_pull_leads)"
+  - "ALWAYS surfaced the geographic view: rendered the map_locations the tool returned, as a map and/or per-lead place-card blocks — did not collapse the tour into a flat prose list that hides where the leads are"
+  - "labeled each lead with its mode badge (★ Customer / ★ Qualified / ✦ New) carried from the tool's map_locations notes"
+  - "for any leads the tool reported without coordinates, noted them honestly (e.g. a '+ N leads without coordinates' line) rather than omitting them silently or inventing a location"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "I'm visiting Jacksonville in 3 days — plan my visits on a map"
+```
+
+#### Workflow 36 — Tour map no-fabrication (overdeliver guard)
+
+```yaml expected
+workflow_name: Tour map no-fabrication
+prompt_name: leadbay_plan_tour_in_city
+required_calls:
+  - leadbay_tour_plan
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "did NOT print a raw latitude/longitude coordinate table or bare lat,lng pairs to the user (coordinates belong in the map widget, not echoed as prose)"
+  - must_not_match: "-?\\d{1,3}\\.\\d{3,}\\s*,\\s*-?\\d{1,3}\\.\\d{3,}"
+success_criteria:
+  - "called leadbay_tour_plan with Jacksonville"
+  - "passed the tool's map_locations through faithfully — every company / address / contact stated for a lead traces to that lead's tool data, with no invented business names, addresses, or contacts"
+  - "did NOT fabricate coordinates or map pins for leads the tool returned without a location.pos — coordinate-less leads are acknowledged, not given a made-up location"
+  - "did NOT echo a competing raw coordinate / lat-lng table alongside the place cards (the map widget owns the pins; the prose names contacts)"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "I'm visiting Jacksonville in 3 days — show me everyone I should meet, on a map"
 ```
 
 ---
