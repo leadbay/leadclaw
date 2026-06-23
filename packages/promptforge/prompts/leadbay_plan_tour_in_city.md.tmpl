@@ -60,7 +60,12 @@ Make it a genuine yes/no offer (route it through `ask_user_input_v0` / `AskUserQ
 
 When the user says yes (or asked for the map in their original message), render it now. Two ways — you MUST do one, never a flat prose paragraph:
 
-**Path A — `places_map_display_v0` is in your tool set.** Pass the `map_locations` array from the `leadbay_tour_plan` response **directly** into it — each entry is already `{name, address, latitude, longitude, notes}`, server-shaped, with the mode badge baked into `notes`. Do NOT rebuild from `location.pos` or re-derive the notes.
+**Path A — `places_search` + `places_map_display_v0` are in your tool set.** Use the **two-step** host flow (this is what draws a real street map, not a schematic scatter):
+
+1. **`places_search` first, once per lead** — query = each `map_locations` entry's `name` + full street `address` (e.g. "Brooklyn Brewery, 79 N 11th St, Brooklyn, NY"). Resolve all stops up front to get real `place_id`s + verified coords/ratings.
+2. **`places_map_display_v0` second**, fed those resolved places, in **Itinerary mode** (a tour is a multi-stop route — show order, optionally arrival times / stop durations). Carry each lead's ★/✦ badge + one-line pitch from its `notes` into the place note.
+
+Do NOT push raw `latitude`/`longitude` straight into the display widget without `places_search` — that degrades to the neighborhood-dot scatter. `map_locations` already carries `name`, full `address`, coords, and badge-tagged `notes`; don't shorten the address to the city.
 
 **Path B — the widget is NOT in your tool set (e.g. Claude Desktop).** Emit one **place-card block per lead** in EXACTLY this shape so the chat host auto-detects the address and renders its own Google-Place-card map carousel — the `### Company · City, State` heading + address is what triggers it:
 

@@ -39,11 +39,11 @@ annotations:
   idempotentHint: true
   openWorldHint: true
 ---
-Prepare a single-lead outreach brief: the full `lead` block (score, `split_ai_summary`, `location`, `size`, `phone_numbers`, `website`, `description`, `social_urls`, `social_presence`), the `recommended_contact` (always in the post-enrichment shape — `contact_id`, `first_name`, `last_name`, `job_title`, `email`, `phone_number`, `linkedin_page`, `is_org_contact` — with nulls where data isn't yet enriched), `additional_contacts_count`, and an `enrichment` block describing async state.
+Prepare a single-lead outreach brief: the full `lead` block (score, `split_ai_summary`, `location`, `size`, `phone_numbers`, `website`, `description`, `social_urls`, `social_presence`), the `recommended_contact` in post-enrichment shape (`contact_id`, names, `job_title`, `email`, `phone_number`, `linkedin_page`, `is_org_contact` — nulls where not yet enriched), `additional_contacts_count`, and an `enrichment` block describing async state.
 
 Optionally trigger contact enrichment in-flight with `enrich:true`. Enrichment is async (~60s). **Self-polling pattern (no separate tool needed):** re-call `leadbay_prepare_outreach(leadId)` without `enrich`; check `enrichment.complete`. When `complete: true`, the recommended contact now carries `email` and/or `phone_number`.
 
-The first call to this tool on a lead records a `LEAD_VIEWED`-style prospecting action server-side (one per lead per session — deduped) so the lead ages out of the Discover "new" view.
+The first call on a lead records a `LEAD_VIEWED`-style prospecting action server-side (deduped, one per lead per session) so it ages out of the Discover "new" view.
 
 {{include:iron-laws/outcome-after-outreach}}
 
