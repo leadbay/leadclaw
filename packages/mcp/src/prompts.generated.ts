@@ -861,9 +861,24 @@ GATE — DEFER TO TOOL RENDERING. When you call a Leadbay composite that ships i
 If the prompt's body and the tool's RENDERING appear to conflict, the tool's RENDERING wins for the structural layout; the prompt's voice wins for the commentary that surrounds it.
 
 
-# PHASE 1 — BUILD THE ITINERARY
+# PHASE 1 — CLARIFY SCOPE FIRST (ask before building)
 
-Call \`leadbay_tour_plan({city: "{{arg:city}}"})\` with the default counts (6 follow-ups + 6 discover). If the response is \`status: "ambiguous_locations"\`, surface the candidates and ask me to pick one, then re-call with \`city_id\`.
+Before calling \`leadbay_tour_plan\`, ask me what the tour should cover — a field tour is high-intent and the scope changes what lands on the map. Use your host's interactive question widget (\`ask_user_input_v0\` in Claude chat — \`{questions:[{question, type:"single_select", options:[…]}]}\`; or \`AskUserQuestion\` in cowork / Claude Code — \`{questions:[{question, header, multiSelect, options:[{label, description}]}]}\`). Ask at most 2 short tap-to-answer questions:
+
+1. **Who to include?** — options: "Mix — known accounts + fresh prospects" (default), "Only my known accounts (follow-ups)", "Only fresh new prospects".
+2. **Enrich contacts that have no phone/email?** — options: "Yes, enrich the top stops", "No, just plan the tour".
+
+Skip a question only if I already answered it in my request (e.g. "plan a tour of just my new leads in NYC" → who-to-include is already "only new"; don't re-ask). If I gave the full scope up front, skip PHASE 1 entirely and go to PHASE 2.
+
+Map my answers to the \`leadbay_tour_plan\` call:
+- **Mix** → defaults (\`followups_count: 6, discover_count: 6\`).
+- **Only known accounts** → \`discover_count: 0\`.
+- **Only new prospects** → \`followups_count: 0\`.
+- **Enrich = yes** → after the tour is planned (PHASE 2), call \`leadbay_enrich_titles\` / \`leadbay_prepare_outreach(enrich:true)\` on the top stops that have no \`recommended_contact\` channel, before drafting outreach.
+
+# PHASE 2 — BUILD THE ITINERARY
+
+Call \`leadbay_tour_plan({city: "{{arg:city}}", …scope from PHASE 1})\`. If the response is \`status: "ambiguous_locations"\`, surface the candidates and ask me to pick one, then re-call with \`city_id\`.
 
 Split the returned \`monitor_leads\` into two buckets client-side using their engagement-history fields:
 
@@ -874,7 +889,7 @@ Split the returned \`monitor_leads\` into two buckets client-side using their en
 
 Aim for a 3+3+3 split if possible. If the customers bucket has fewer than 3, fill from qualified. If discover_filter_note indicates a low match ratio for the city, mention it: "Only N/30 fresh leads matched your city" — better honest than padded.
 
-# PHASE 2 — PRESENT THE ITINERARY + OFFER THE MAP
+# PHASE 3 — PRESENT THE ITINERARY + OFFER THE MAP
 
 Show the planned tour as a concise per-lead list grouped by mode (Customers → Qualified → New), each line carrying its \`★\`/\`✦\` badge, the company, city, and best contact. Keep it tight — this is the summary, not the map.
 
@@ -882,9 +897,9 @@ Then **ALWAYS offer the map as the immediate next step** — a tour is inherentl
 
 > **Want me to put these <N> stops on a map?** I'll plot them so you can see the route for your <city> day.
 
-Make it a genuine yes/no offer (route it through \`ask_user_input_v0\` / \`AskUserQuestion\` when that's in your tool set, so it's a tappable choice; otherwise the one-line question above). Do NOT render the map yet, and do NOT bury the offer — proposing the map is mandatory on every tour, for BOTH "plan a prospecting tour in <city>" and "who's worth meeting in <city>" phrasings. If the user already said "show me on a map" / "give me the map" in their request, skip the offer and go straight to PHASE 3.
+Make it a genuine yes/no offer (route it through \`ask_user_input_v0\` / \`AskUserQuestion\` when that's in your tool set, so it's a tappable choice; otherwise the one-line question above). Do NOT render the map yet, and do NOT bury the offer — proposing the map is mandatory on every tour, for BOTH "plan a prospecting tour in <city>" and "who's worth meeting in <city>" phrasings. If the user already said "show me on a map" / "give me the map" in their request, skip the offer and go straight to PHASE 4 (render).
 
-# PHASE 3 — RENDER THE MAP (when the user accepts, or asked for it up front)
+# PHASE 4 — RENDER THE MAP (when the user accepts, or asked for it up front)
 
 When the user says yes (or asked for the map in their original message), render it now. Two ways — you MUST do one, never a flat prose paragraph:
 
@@ -907,19 +922,19 @@ One block per lead in \`map_locations\`, grouped by mode. Pull company, city/sta
 
 Coordinate-less leads are already omitted from \`map_locations\`; footnote them with \`map_summary.leads_without_coords\` ("+ N leads without coordinates").
 
-# PHASE 4 — DRAFT IN-AREA OUTREACH (optional, ask first)
+# PHASE 5 — DRAFT IN-AREA OUTREACH (optional, ask first)
 
 After the map, ask me ONCE: "Want me to draft 'I'll be in {{arg:city}}{{arg:date_paren}}' outreach for the top accounts?" If I say yes, for each of the top 3 leads (1 Customer / 1 Qualified / 1 New), call \`leadbay_prepare_outreach(leadId)\` and route the draft through \`message_compose_v1\` with a single variant labeled "In-area visit" — body opens with the visit context, references the AI-summary angle, ends with a clear ask (15-min coffee / on-site stopover).
 
 Serialize the prepare_outreach calls (max 3 in parallel — see the long-running-tools rule).
 
-# PHASE 5 — PERSIST AS A CAMPAIGN (optional, ask first)
+# PHASE 6 — PERSIST AS A CAMPAIGN (optional, ask first)
 
 After drafts, ask me ONCE: "Save these 9 accounts as a campaign called '**{{arg:city}} Tour{{arg:date_dash}}**'?" If I say yes, call \`leadbay_create_campaign({lead_ids: [...all_nine_lead_ids], name: "{{arg:city}} Tour{{arg:date_dash}}"})\`. Surface the returned \`id\` + \`name\` as a confirmation line, and offer the NEXT STEPS chip "View progression" (which routes to \`leadbay_campaign_progression\`).
 
 If I declined the campaign step, end the turn — the map + drafts are enough for an ad-hoc trip.
 
-# PHASE 6 — STOP
+# PHASE 7 — STOP
 
 Done. The map is the surface; the drafts are the action; the campaign is the persistence layer for managerial follow-up after the trip.
 `;
