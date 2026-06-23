@@ -58,7 +58,7 @@ export const setQualificationQuestions: Tool<SetQualificationQuestionsParams> = 
       confirm: {
         type: "boolean",
         description:
-          "Required when the resulting list is SHORTER than the current one (removing questions changes how every lead is scored). Without it, such a change is previewed and not applied.",
+          "Required whenever the change DROPS ANY existing question — including a same-count swap or a `questions` replacement that omits a current question, not only when the list gets shorter (removing a question changes how every lead is scored). Without it, such a change is previewed and not applied. Pure additions never need confirm.",
       },
     },
     additionalProperties: false,

@@ -3864,7 +3864,7 @@ The backend stores the list as a whole, so this tool reads the current questions
 
 Leadbay allows **at most 5** qualification questions. If a change would exceed 5, the tool rejects with a clear limit message — remove some before adding.
 
-**Removing or shrinking the list is destructive** — it changes how every lead is scored. Any change that ends with FEWER questions than before requires \`confirm:true\`; without it the tool previews what would be removed and applies nothing. Adding questions does not need confirm.
+**Dropping any existing question is destructive** — it changes how every lead is scored. Any change that removes a current question requires \`confirm:true\` — including a same-count **swap** (remove one + add one) or a \`questions\` replacement that omits a current question, not only when the list gets shorter. Without \`confirm\`, the tool previews what would be removed and applies nothing. Pure additions never need confirm.
 
 Returns the resulting \`{qualification_questions, count, previous_count, changed}\`. Phrase questions as the yes/no scoring prompts Leadbay uses (e.g. "Is the company likely to …?").
 
@@ -3874,7 +3874,7 @@ WHEN NOT TO USE: to READ the questions (use leadbay_get_qualification_questions)
 
 ### RENDERING
 
-After a change, confirm in one line — e.g. **"Added 1 question — you now score leads against 4 questions."** or **"Removed 'the flooring question' — 3 questions remain."** Then list the resulting questions as a numbered list. On an unconfirmed shrink, surface the \`hint\` (what would be removed) and ask the user to confirm — do NOT auto-confirm.
+After a change, confirm in one line — e.g. **"Added 1 question — you now score leads against 4 questions."** or **"Removed 'the flooring question' — 3 questions remain."** Then list the resulting questions as a numbered list. When the result is a non-changing preview (a removal awaiting confirmation), surface the \`hint\` (what would be removed) and ask the user to confirm — do NOT auto-confirm.
 `;
 // endregion: leadbay_set_qualification_questions
 
