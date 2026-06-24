@@ -17,6 +17,11 @@ import {
 import { inferRegionViaStargate, oauthLogin } from "../src/oauth.js";
 
 
+// Replaced at build time by tsup with the package.json version string.
+// Falls back to a dev sentinel when the global is undefined (raw ts-node runs).
+declare const __LEADBAY_MCP_VERSION__: string;
+const VERSION = typeof __LEADBAY_MCP_VERSION__ !== "undefined" ? __LEADBAY_MCP_VERSION__ : "0.0.0-dev";
+
 type InstallRequest = { sessionId?: string; clientIds?: string[]; includeWrite?: boolean; telemetryEnabled?: boolean };
 type LoginSession = { token: string; region: "us" | "fr"; accountLabel: string; createdAt: number };
 type InstallResult = { id: string; label: string; ok: boolean; message: string };
@@ -310,7 +315,7 @@ async function streamUninstall(url: URL, res: ServerResponse, onDone?: () => voi
   finish("Restart your MCP client(s) to complete the removal.");
 }
 
-function pageUninstallHtml(): string {
+export function pageUninstallHtml(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -360,6 +365,7 @@ function pageUninstallHtml(): string {
     .result-note { font-size:12.5px; color:var(--muted); text-align:center; margin-top:-6px; }
     @keyframes draw { to { stroke-dashoffset:0; } }
     @keyframes pop { 0%{transform:scale(.5);opacity:0;} 60%{transform:scale(1.06);} 100%{transform:scale(1);opacity:1;} }
+    .version { text-align:center; color:var(--muted); font-size:11px; margin:14px 0 0; letter-spacing:.02em; }
     @media (max-width:520px) { .actions{flex-direction:column;} button{width:100%;} }
   </style>
 </head>
@@ -391,6 +397,7 @@ function pageUninstallHtml(): string {
         <button class="danger" id="next">Remove selected</button>
       </div>
     </div>
+    <p class="version">v${VERSION}</p>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -430,7 +437,7 @@ function pageUninstallHtml(): string {
 </html>`;
 }
 
-function pageHtml(): string {
+export function pageHtml(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -484,6 +491,7 @@ function pageHtml(): string {
     .result-note { font-size:12.5px; color:var(--muted); text-align:center; margin-top:-6px; }
     @keyframes draw { to { stroke-dashoffset:0; } }
     @keyframes pop { 0%{transform:scale(.5);opacity:0;} 60%{transform:scale(1.06);} 100%{transform:scale(1);opacity:1;} }
+    .version { text-align:center; color:var(--muted); font-size:11px; margin:14px 0 0; letter-spacing:.02em; }
     @media (max-width:520px) { .actions{flex-direction:column;} button{width:100%;} }
   </style>
 </head>
@@ -515,6 +523,7 @@ function pageHtml(): string {
         <button class="primary" id="next">Sign in with Leadbay</button>
       </div>
     </div>
+    <p class="version">v${VERSION}</p>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
