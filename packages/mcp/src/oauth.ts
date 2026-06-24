@@ -22,7 +22,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { request as httpsRequestRaw } from "node:https";
 import { spawn } from "node:child_process";
 import { AddressInfo } from "node:net";
-import { readdirSync } from "node:fs";
+import { readdirSync, existsSync } from "node:fs";
 
 // Stable loopback port for the OAuth callback. The Leadbay backend requires the
 // authorize redirect_uri to EXACTLY match the registered one (no RFC 8252
@@ -567,7 +567,24 @@ export function browserLaunchEnv(debug?: (msg: string) => void): NodeJS.ProcessE
   const env = { ...process.env };
   if (process.platform !== "linux") return env;
 
-  const runtimeDir = env.XDG_RUNTIME_DIR;
+  // Claude Desktop spawns the .dxt server with a sanitized env that often
+  // strips XDG_RUNTIME_DIR too — which breaks the WAYLAND_DISPLAY/DBUS
+  // reconstruction below (both live under that dir). Rebuild it from the uid:
+  // /run/user/<uid> is the systemd-standard runtime dir on every modern Linux.
+  let runtimeDir = env.XDG_RUNTIME_DIR;
+  if (!runtimeDir || !existsSync(runtimeDir)) {
+    try {
+      const uid = process.getuid?.();
+      const candidate = uid !== undefined ? `/run/user/${uid}` : undefined;
+      if (candidate && existsSync(candidate)) {
+        runtimeDir = candidate;
+        env.XDG_RUNTIME_DIR = candidate;
+        debug?.(`browserLaunchEnv: injected XDG_RUNTIME_DIR=${candidate}`);
+      }
+    } catch {
+      /* getuid unavailable — fall through */
+    }
+  }
 
   if (!env.WAYLAND_DISPLAY && runtimeDir) {
     // Find a wayland-N socket in the runtime dir (wayland-0 is the default).
@@ -579,6 +596,18 @@ export function browserLaunchEnv(debug?: (msg: string) => void): NodeJS.ProcessE
       }
     } catch {
       /* runtime dir unreadable — fall through to X11 */
+    }
+  }
+
+  // Snap/Flatpak browsers (the common default on Ubuntu — firefox is a Snap)
+  // need the session bus to hand the URL to a running instance. Claude Desktop
+  // strips DBUS_SESSION_BUS_ADDRESS; reconstruct it from the standard socket
+  // at <runtimeDir>/bus so `xdg-open` doesn't silently no-op.
+  if (!env.DBUS_SESSION_BUS_ADDRESS && runtimeDir) {
+    const busPath = `${runtimeDir}/bus`;
+    if (existsSync(busPath)) {
+      env.DBUS_SESSION_BUS_ADDRESS = `unix:path=${busPath}`;
+      debug?.(`browserLaunchEnv: injected DBUS_SESSION_BUS_ADDRESS=unix:path=${busPath}`);
     }
   }
 
@@ -595,6 +624,34 @@ export function browserLaunchEnv(debug?: (msg: string) => void): NodeJS.ProcessE
       env.DISPLAY = ":0";
     }
     debug?.(`browserLaunchEnv: injected DISPLAY=${env.DISPLAY}`);
+  }
+
+  // An X11/XWayland browser (Chrome/Brave/Electron-based) needs the X authority
+  // cookie to connect to the display — without it the X server rejects the
+  // client ("Authorization required, but no authorization protocol specified")
+  // and the browser exits/segfaults, so no tab opens even though xdg-open
+  // returned 0. Claude Desktop strips XAUTHORITY; under Wayland/Mutter the
+  // Xwayland cookie lives at <runtimeDir>/.mutter-Xwaylandauth.* — reconstruct
+  // from there, falling back to ~/.Xauthority.
+  if (!env.XAUTHORITY) {
+    try {
+      let xauth: string | undefined;
+      if (runtimeDir) {
+        const cookie = readdirSync(runtimeDir).find((f) =>
+          /^\.mutter-Xwaylandauth\./.test(f)
+        );
+        if (cookie) xauth = `${runtimeDir}/${cookie}`;
+      }
+      if (!xauth && env.HOME && existsSync(`${env.HOME}/.Xauthority`)) {
+        xauth = `${env.HOME}/.Xauthority`;
+      }
+      if (xauth) {
+        env.XAUTHORITY = xauth;
+        debug?.(`browserLaunchEnv: injected XAUTHORITY=${xauth}`);
+      }
+    } catch {
+      /* runtime dir unreadable — proceed without (Wayland-native apps still work) */
+    }
   }
 
   return env;
