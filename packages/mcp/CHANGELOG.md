@@ -1,5 +1,9 @@
 # Changelog — @leadbay/mcp
 
+## 0.23.2 — 2026-06-24
+
+- **Installer GUI shows the version** (product#3799) — the installer and uninstaller GUI cards now display the MCP version (e.g. `v0.23.2`) as a small muted-grey footer. Sourced from the build-time `__LEADBAY_MCP_VERSION__` define, so it tracks `package.json` with no manual upkeep.
+
 ## 0.23.1 — 2026-06-22
 
 Retrieve + modify qualification questions and CRM custom fields over MCP (product#3768).
