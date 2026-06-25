@@ -20,7 +20,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { request as httpsRequestRaw } from "node:https";
-import { spawn } from "node:child_process";
+import { spawn, type SpawnOptions } from "node:child_process";
 import { AddressInfo } from "node:net";
 import { readdirSync, existsSync } from "node:fs";
 
@@ -534,14 +534,20 @@ export function browserOpenCandidates(url: string): Array<{ cmd: string; args: s
     ];
   }
   if (platform === "win32") {
-    // `start` is a cmd builtin; double-quotes around an empty title prevent
-    // start from treating the URL as the window title. %SystemRoot% points at
-    // the Windows dir; fall back to the literal default + bare `cmd`.
+    // `start` is a cmd builtin; the empty-title `""` keeps start from treating
+    // the URL as the window title. The URL itself MUST be double-quoted: an
+    // OAuth authorize URL is wall-to-wall `&` (query-param separators), and cmd
+    // treats a bare `&` as a command separator — so an unquoted URL opens only
+    // the fragment before the first `&`. Wrapping it in quotes makes cmd pass
+    // the whole URL through literally (paired with windowsVerbatimArguments at
+    // spawn so Node doesn't strip the quotes). %SystemRoot% points at the
+    // Windows dir; fall back to the literal default + bare `cmd`.
     const sysRoot = process.env.SystemRoot || process.env.windir || "C:\\Windows";
     const cmdExe = `${sysRoot}\\System32\\cmd.exe`;
+    const quoted = `"${url}"`;
     return [
-      { cmd: cmdExe, args: ["/c", "start", '""', url] },
-      { cmd: "cmd", args: ["/c", "start", '""', url] },
+      { cmd: cmdExe, args: ["/c", "start", '""', quoted] },
+      { cmd: "cmd", args: ["/c", "start", '""', quoted] },
     ];
   }
   // Linux / other: xdg-open is conventionally in /usr/bin (sometimes /usr/local/bin).
@@ -679,7 +685,12 @@ export async function openInBrowser(
   for (const { cmd, args } of candidates) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(cmd, args, { stdio: "ignore", detached: true, env: launchEnv });
+        const spawnOpts: SpawnOptions = { stdio: "ignore", detached: true, env: launchEnv };
+        // On Windows the candidate args carry a pre-quoted "<url>" (see
+        // browserOpenCandidates); verbatim mode stops Node's arg-quoter from
+        // mangling those quotes, so cmd sees the whole URL as one token.
+        if (process.platform === "win32") spawnOpts.windowsVerbatimArguments = true;
+        const child = spawn(cmd, args, spawnOpts);
         child.on("error", reject);
         child.on("spawn", () => {
           debug?.(`spawn OK: ${cmd} (pid=${child.pid})`);
