@@ -686,7 +686,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -1049,7 +1049,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -1311,7 +1311,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -2014,7 +2014,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -2149,7 +2149,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -2295,11 +2295,11 @@ email. Do NOT paste the email body into chat prose alongside.
 
 ---
 
-Prepare a single-lead outreach brief: the full \`lead\` block (score, \`split_ai_summary\`, \`location\`, \`size\`, \`phone_numbers\`, \`website\`, \`description\`, \`social_urls\`, \`social_presence\`), the \`recommended_contact\` (always in the post-enrichment shape — \`contact_id\`, \`first_name\`, \`last_name\`, \`job_title\`, \`email\`, \`phone_number\`, \`linkedin_page\`, \`is_org_contact\` — with nulls where data isn't yet enriched), \`additional_contacts_count\`, and an \`enrichment\` block describing async state.
+Prepare a single-lead outreach brief: the full \`lead\` block (score, \`split_ai_summary\`, \`location\`, \`size\`, \`phone_numbers\`, \`website\`, \`description\`, \`social_urls\`, \`social_presence\`), the \`recommended_contact\` in post-enrichment shape (\`contact_id\`, names, \`job_title\`, \`email\`, \`phone_number\`, \`linkedin_page\`, \`is_org_contact\` — nulls where not yet enriched), \`additional_contacts_count\`, and an \`enrichment\` block describing async state.
 
 Optionally trigger contact enrichment in-flight with \`enrich:true\`. Enrichment is async (~60s). **Self-polling pattern (no separate tool needed):** re-call \`leadbay_prepare_outreach(leadId)\` without \`enrich\`; check \`enrichment.complete\`. When \`complete: true\`, the recommended contact now carries \`email\` and/or \`phone_number\`.
 
-The first call to this tool on a lead records a \`LEAD_VIEWED\`-style prospecting action server-side (one per lead per session — deduped) so the lead ages out of the Discover "new" view.
+The first call on a lead records a \`LEAD_VIEWED\`-style prospecting action server-side (deduped, one per lead per session) so it ages out of the Discover "new" view.
 
 IRON LAW — OUTCOME AFTER OUTREACH. The moment the user reports outreach happened ("I sent it", "she didn't pick up", "left a voicemail", "they replied", a forwarded email thread, a calendar invite), you MUST (1) call leadbay_report_outreach with verification (gmail_message_id, calendar_event_id, or the user's literal one-sentence confirmation as user_confirmed.ref) AND (2) ask the user about the outcome and set epilogue_status to one of the 4 canonical values: EPILOGUE_INTEREST_VALIDATED_OR_MEETING_PLANED ("Meeting booked"), EPILOGUE_COULD_NOT_REACH_STILL_TRYING ("Trying to reach"), EPILOGUE_NOT_INTERESTED_LOST ("Not interested"), EPILOGUE_STILL_CHASING ("In progress"). Use the user-facing labels in dialogue ("What's the outcome — meeting booked, trying to reach, not interested, or in progress?"); never say "epilogue" out loud. Skipping this step silently de-ranks every future follow-up suggestion because pull_followups depends on honest, current outcomes.
 
@@ -2314,7 +2314,7 @@ WHEN NOT TO USE: across many leads — use leadbay_enrich_titles for bulk; for g
 
 Route every draft through \`message_compose_v1\` (Claude's email composer). Above it, emit ONE short markdown context paragraph: score callout + sector fit + linked contact name + bare phone/email pills. Do NOT paste the email body into chat prose alongside — the composer IS the visual.
 
-Variant shape: 1–3 entries. Labels describe **strategy** ("Push for alignment", "Reference the M&A signal", "Soft intro — peer reference"), not tone. \`kind: "email"\` requires \`subject\`; phone/call openers use \`kind: "other"\` with the opener in \`body\`.
+Variant shape: 1–3 entries. Labels describe **strategy** ("Push for alignment", "Reference the M&A signal"), not tone. \`kind: "email"\` requires \`subject\`; phone/call openers use \`kind: "other"\` with the opener in \`body\`.
 
 ## GATE — PREFER BUILT-IN HOST WIDGETS
 
@@ -2324,7 +2324,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -2665,7 +2665,7 @@ Trigger phrases: "show me leads", "show me new leads", "show me today's leads", 
 
 **Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
 
-Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_followups_map\`; "leads I should reach out to" → \`leadbay_pull_followups\`; "leads to get back to" → \`leadbay_pull_followups\`; "leads to contact today" → \`leadbay_pull_followups\`; "should I contact" → \`leadbay_pull_followups\`; "reconnect with" → \`leadbay_pull_followups\`; "re-engage" → \`leadbay_pull_followups\`.
+Do NOT use for: "leads I should follow up with" → \`leadbay_pull_followups\`; "I'm going to <city>" → \`leadbay_tour_plan\`; "I'm in <city> next week — who's worth meeting" → \`leadbay_tour_plan\`; "who should I meet in <city>" → \`leadbay_tour_plan\`; "visiting <city> — who's worth meeting / seeing" → \`leadbay_tour_plan\`; "leads I should reach out to" → \`leadbay_pull_followups\`; "leads to get back to" → \`leadbay_pull_followups\`; "leads to contact today" → \`leadbay_pull_followups\`; "should I contact" → \`leadbay_pull_followups\`; "reconnect with" → \`leadbay_pull_followups\`; "re-engage" → \`leadbay_pull_followups\`.
 
 Prefer when: fresh Discover leads; if a lens is named, pass \`lensId\` and pin it
 
@@ -2676,6 +2676,7 @@ Examples that SHOULD invoke this tool:
 Examples that should NOT invoke this tool (sound similar, route elsewhere):
 - "Which leads should I follow up with this week?"
 - "I'm flying to Berlin Thursday — who should I meet?"
+- "I'm in San Francisco next Tuesday — who's worth meeting?"
 - "Show me leads I should reach out to today."
 - "Who should I get back to today?"
 - "Leads I should contact today."
@@ -3945,7 +3946,7 @@ WHEN NOT TO USE: the user wants a lead list (leadbay_pull_leads / leadbay_pull_f
 // region: leadbay_tour_plan
 export const leadbay_tour_plan: string = `## WHEN TO USE
 
-Trigger phrases: "visiting <city> in <N> days", "field tour in <city>", "plan a tour in <city>", "who should I meet in <city>", "customers plus prospects in <city>", "tour itinerary".
+Trigger phrases: "visiting <city> in <N> days", "I'm in <city> next week / Tuesday — who's worth meeting", "I'm going to <city> — who should I see", "who's worth meeting in <city>", "field tour in <city>", "plan a tour in <city>", "who should I meet in <city>", "customers plus prospects in <city>", "tour itinerary".
 
 **Memory:** recall + capture via \`leadbay_agent_memory_*\` tools.
 
@@ -3955,6 +3956,7 @@ Prefer when: user wants known accounts plus new discoveries in one geographic it
 
 Examples that SHOULD invoke this tool:
 - "I'm flying to Limoges in 4 days — give me 3 customers, 3 qualified prospects, and 3 new high-potential."
+- "I'm in San Francisco next Tuesday. Who's worth meeting?"
 - "Plan my tour next Tuesday in Lyon: known accounts plus discoveries."
 - "Build a mixed itinerary for Berlin — I want both follow-ups and fresh leads."
 
@@ -3965,15 +3967,17 @@ Examples that should NOT invoke this tool (sound similar, route elsewhere):
 
 ## RENDER (quick)
 
-Route the union of monitor_leads + discover_leads into
-\`places_map_display_v0\` — same recipe as followups_map (lat/lng
-split, full address, short notes). Tag each entry's notes with a
-mode badge: "★ Customer" / "★ Qualified" / "✦ New" (split Monitor
-by last_monitor_action; Discover = New). Below the widget: one
-intro sentence + per-group chat-prose list with LinkedIn-linked
-contact names.
+Present the leads grouped by mode (★ Customer / ★ Qualified / ✦ New),
+then ALWAYS offer to plot them on a map ("Want me to put these on a
+map?"). On yes (or if the user asked for a map up front), render it:
+pass \`map_locations\` verbatim into \`places_map_display_v0\`, or on a
+host without the widget emit one \`### Company · City, State\` place-card
+block per lead so the host's address carousel renders. Never a flat
+prose paragraph. Full recipe below.
 
 ---
+
+**BEFORE YOU CALL — clarify scope with a tap-to-answer question.** A field tour is high-intent, so unless the user already said it, ASK first (via \`ask_user_input_v0\` / \`AskUserQuestion\` — whichever is in your tool set) and wait for the answer before calling this tool: (1) **Who to include?** — "Mix — known accounts + fresh prospects" (default) / "Only my known accounts" / "Only fresh new prospects"; (2) **Enrich contacts with no phone/email?** — "Yes, enrich the top stops" / "No, just plan". Map answers to args: only-known → \`discover_count: 0\`; only-new → \`followups_count: 0\`; mix → defaults; enrich=yes → after planning, run \`leadbay_enrich_titles\` / \`leadbay_prepare_outreach(enrich:true)\` on top stops missing a channel. Skip the question only if the request already states scope ("plan a tour of just my new leads" → only-new, don't ask). Do NOT skip straight to building + mapping without this.
 
 Build a single-call mixed-mode itinerary for a field sales tour. Combines \`leadbay_pull_followups\` (Monitor leads in the city — known accounts) with \`leadbay_pull_leads\` (Discover wishlist — new prospects, then client-side filtered by city) so the agent can answer the canonical #3630 US1 ask: *"I'm visiting Limoges in 4 days — propose 3 customers + 3 qualified prospects + 3 new high-potential discoveries."*
 
@@ -3985,21 +3989,30 @@ Build a single-call mixed-mode itinerary for a field sales tour. Combines \`lead
 
 ---
 
-## RENDER — host-native map widget (REQUIRED, preferred)
+## RENDER — present the leads, then OFFER the map (render on yes)
 
-Identical to \`leadbay_followups_map\`. Pass the union \`monitor_leads + discover_leads\` into \`places_map_display_v0\`. The mode information goes in the per-lead \`notes\` string as a **leading badge**:
+First present the leads grouped by mode as a tight per-lead list (badge + company + city + best contact). Then **ALWAYS offer the map** as the next step — "Want me to put these on a map?" — and render it only when the user accepts (or asked for a map in their original message). The map is mandatory to *offer* on every tour; it is *rendered* on acceptance.
 
-- \`★ Customer\` — Monitor lead with an existing \`last_monitor_action\` history (engaged / past interaction).
-- \`★ Qualified\` — Monitor lead with a high \`ai_agent_lead_score\` or \`score\` but no recent action.
+When rendering, use the **two-step host flow** — this is what produces a real interactive street map instead of a schematic neighborhood scatter:
+
+1. **\`places_search\` first, once per lead.** For each entry in \`map_locations\`, call \`places_search\` with a natural query built from the lead's \`name\` + \`address\` (the full street address, e.g. "Brooklyn Brewery, 79 N 11th St, Brooklyn, NY"). This resolves a real \`place_id\` + verified coordinates/ratings from the host's place index. Run them up front (resolve all stops first), as the host's own guidance prescribes.
+2. **\`places_map_display_v0\` second**, fed the resolved places. Use **Itinerary mode** for a tour (multi-stop, route order, optional arrival times / stop durations) — a field-sales day IS an itinerary; Markers mode is only for a plain "show me X on a map". Carry each lead's mode badge (★/✦) + one-line pitch from \`map_locations[i].notes\` into the place's note.
+
+Do NOT skip \`places_search\` and push raw \`latitude\`/\`longitude\` straight into the display widget — that's exactly what falls back to the schematic relative scatter (dots by neighborhood, no streets). The \`map_locations\` array already gives you everything \`places_search\` needs (\`name\`, full \`address\`, \`latitude\`, \`longitude\`, badge-tagged \`notes\`); do NOT shorten the address to just the city.
+
+For reference, the badge the server already applied to each \`notes\`:
+
+- \`★ Customer\` — Monitor lead with prior engagement history (\`epilogue_status\`, \`last_prospecting_action_at\`, or \`last_monitor_action_at\` set).
+- \`★ Qualified\` — Monitor lead with a high score but no recent action.
 - \`✦ New\` — Discover lead from \`discover_leads\`.
 
-Then the rest of the notes string follows the standard recipe: ONE sentence, sector/fit + contact ask, bare phone + email auto-linkified. Example:
+Example of a server-built \`notes\` string you pass through unchanged:
 
 \`\`\`
 ✦ New — Strong mid-size hardware distributor fit. Reach Marie Dupont, Sales Director: +33 5 55 12 34 56, m.dupont@example.fr.
 \`\`\`
 
-Skip any lead whose \`location.pos\` is null (no lat/lng → no pin) — list them as a "+ N leads without coordinates" footer below the widget.
+Leads without coordinates are already omitted from \`map_locations\`. Use \`map_summary.leads_without_coords\` to footnote "+ N leads without coordinates" below the widget — no need to re-count.
 
 ## Chat prose AFTER the widget (where markdown DOES render)
 
@@ -4007,9 +4020,17 @@ Group the leads into THREE sections (Customers / Qualified Prospects / New Disco
 
 If the user said something like "3+3+3", honor that split. If \`followups_count\` returned fewer Customers than asked, fill from Qualified.
 
-## RENDER — fallback for hosts without \`places_map_display_v0\`
+## RENDER — fallback for hosts without \`places_map_display_v0\` (still a map, never a prose list)
 
-Emit per-lead markdown blocks grouped by mode, in the standard place-card-friendly format (\`### **Company** · City, State\`, mode badge + score, contact line, channel lines). Hosts that auto-detect addresses (Claude.ai web, cowork) build their own carousel from these blocks.
+When the widget isn't in your tool set (e.g. Claude Desktop), you MUST still produce a map by emitting one place-card block per \`map_locations\` entry in EXACTLY this shape — the \`### Company · City, State\` heading with the address is what makes the host auto-detect it and render its own Google-Place-card carousel:
+
+\`\`\`
+### <Company Name> · <City>, <State>
+
+<★ Customer | ★ Qualified | ✦ New> — <one-sentence fit>. Reach **[<Contact>](<LinkedIn URL>)**, <role>. ☎ <bare phone>.
+\`\`\`
+
+Group the blocks by mode (Customers → Qualified → New). A flat narrative paragraph ("Brooklyn Brewery — Broadway, 10018 (Midtown). Contact: …") does NOT auto-detect into cards and is WRONG — the per-lead heading with the city is mandatory.
 
 ## GATE — PREFER BUILT-IN HOST WIDGETS
 
@@ -4019,7 +4040,7 @@ Modern chat hosts (Claude, ChatGPT) expose first-party widgets the agent can rou
 
 | Host widget | Use when | Field map (from Leadbay payload) |
 |---|---|---|
-| \`places_map_display_v0\` (Claude) | Result has ≥2 leads with \`location.city\` set, and the user's intent is geographic / "in person" / travel | \`{name: lead.company_name, address: "<city>, <country>", place_id: lead.location.place_id ?? omit, notes: <one-sentence pitch>}\` per location |
+| \`places_map_display_v0\` + \`places_search\` (Claude) | ≥2 leads with coords / \`location.city\`, geographic / "in person" / travel intent | **Two-step**: \`places_search\` each lead (query = company + full street address) → real \`place_id\`/coords, THEN render with \`places_map_display_v0\` (Itinerary mode for a tour). Skipping \`places_search\` → schematic scatter, not a street map. |
 | \`message_compose_v1\` (Claude) | You're about to draft outreach (email / message / call opener) | \`{kind: "email", summary_title, variants: [{label, body, subject}]}\` — 2–3 variants, labels describe STRATEGY ("Push for alignment", "Reference the M&A signal"), not tone ("Friendly", "Formal") |
 | \`ask_user_input_v0\` (Claude chat / ChatGPT) **or** \`AskUserQuestion\` (Claude cowork / Claude Code) — whichever is in your tool set; their schemas differ, match the one you have | The tool's NEXT STEPS block has 2–4 mutually-exclusive next moves and the user hasn't already chosen | Per-tool schema in the server instructions + NEXT STEPS routing block. Max 3 questions. |
 
@@ -4038,7 +4059,7 @@ WHEN TO USE: the user signals a *mixed* tour-planning intent — they want both 
 
 WHEN NOT TO USE: if the user only wants follow-ups (use \`leadbay_followups_map\`), only wants new leads (use \`leadbay_pull_leads\`), wants research on one specific account (\`leadbay_research_lead_by_id\`), or wants to persist the tour as a campaign artifact (chain into \`leadbay_create_campaign\` after this).
 
-**Response envelope**: \`{city, city_id, monitor_leads, discover_leads, discover_filter_note, _meta}\` on happy path; \`{status: "ambiguous_locations", location_ambiguities, ...}\` when the passed \`city\` matched multiple admin areas.
+**Response envelope**: \`{city, city_id, monitor_leads, discover_leads, discover_filter_note, map_locations, map_summary, _meta}\` on happy path; \`{status: "ambiguous_locations", location_ambiguities, ...}\` when the passed \`city\` matched multiple admin areas.
 
 ---
 `;

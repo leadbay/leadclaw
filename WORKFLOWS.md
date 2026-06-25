@@ -51,6 +51,8 @@ The table is the human-readable index. The `yaml expected` + `yaml scenario` blo
 | 37 | **Modify qualification questions** — "add a qualification question", "remove the X question", "change my qualification questions" — write the org's AI-agent questions. Enforces the max-5 cap and gates removals behind a confirm; does not invent or silently drop questions | `leadbay_set_qualification_questions` | "Remove the qualification question 'hghg', then add it back exactly as it was." |
 | 38 | **Modify custom fields** — "create a custom field", "rename the X field", "delete the Y field" — manage the org CRM custom-field catalog. Update renames/retypes in place; delete is destructive and gated behind a confirm | `leadbay_create_custom_field`, `leadbay_update_custom_field`, `leadbay_delete_custom_field` | "Create a custom field called 'Eval Probe Field', then rename it to 'Eval Probe Renamed', then delete it." |
 | 39 | **Territory scoping — net-new accounts in a region** — "create a lens for net-new accounts in <département/région/state>", "scope discovery to <territory>", "restrict my rep's lens to <place>" — geography is set on the DISCOVER lens (not just Monitor): `leadbay_new_lens` / `leadbay_adjust_audience` accept `locations` (free text auto-resolved via /geo/search, or admin-area ids), writing a `location_ids` lens-filter criterion. Place names go to `locations`, never `sectors`/`refine_prompt`. Unblocks the "Cockpit Directeur Commercial" territory workflow (product#3759). | `leadbay_new_lens`, `leadbay_adjust_audience` | "Create a lens for net-new accounts in Indre-et-Loire" |
+| 40 | **Tour always offers the map (proposes it, renders on yes)** — the core of product#3779: a plain-language tour intent ("I'm visiting Jacksonville in 3 days — who should I go see?") must make the agent recognize the tour, present the leads with mode badges (★ Customer / ★ Qualified / ✦ New), and PROACTIVELY offer to plot them on a map — every run, without the user having to ask. On acceptance it renders via `places_map_display_v0` (or the place-card carousel on hosts without the widget) from the server-shaped `map_locations[]`. | `leadbay_plan_tour_in_city` | "I'm visiting Jacksonville in 3 days — who should I go see?" |
+| 41 | **Tour map no-fabrication (overdeliver guard)** — when auto-rendering the tour the agent must pass the server's `map_locations` through verbatim: never invent coordinates / pins for leads that lack them, never fabricate addresses, and never re-emit a competing raw lat/lng table alongside the place cards. Companion to #40. | `leadbay_plan_tour_in_city` | "I'm visiting Jacksonville in 3 days — show me everyone I should meet" |
 
 ---
 
@@ -698,6 +700,63 @@ success_criteria:
   - "launched the paid enrichment (email + phone, up to 10 contacts) and polled leadbay_bulk_enrich_status until done before rendering"
   - "created the campaign with the picked lead_ids and rendered the leadbay_campaign_call_sheet view with actionable contacts (phone tel: / email mailto: links)"
   - "did NOT call leadbay_report_outreach (building a campaign is not outreaching)"
+```
+
+#### Workflow 35 — Tour always OFFERS the map (proposes it, renders on yes)
+
+The point of #3779: when the user states a tour intent in plain language and
+NEVER says "map", the agent must still recognize the tour, present the leads,
+and PROACTIVELY OFFER to plot them on a map — every run — rather than dump a
+prose list and move on. The map is proposed automatically (the user shouldn't
+have to think to ask), then rendered when they accept. This scenario checks the
+single-turn shape: tour recognized → leads presented → map explicitly offered.
+
+```yaml expected
+workflow_name: Tour offers the map
+prompt_name: leadbay_plan_tour_in_city
+required_calls:
+  - leadbay_tour_plan
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "presented the planned tour as a per-lead list (not an empty stub), each lead carrying its mode badge (★ Customer, ★ Qualified, or ✦ New)"
+  - "PROACTIVELY OFFERED to put the stops on a map — a clear yes/no proposal the user did not have to ask for (e.g. 'Want me to put these on a map?')"
+  - must_match: "★|✦"
+  - must_match: "[Mm]ap"
+success_criteria:
+  - "recognized a field-sales tour intent from plain language ('I'm visiting Jacksonville in 3 days') even though the user never said 'map' or 'on a map'"
+  - "called leadbay_tour_plan with Jacksonville (not raw leadbay_pull_followups + leadbay_pull_leads)"
+  - "presented the leads grouped/labeled by mode (★ Customer / ★ Qualified / ✦ New) carried from the tool's map_locations notes"
+  - "PROACTIVELY offered the map as a next step (a yes/no proposal to plot the stops), without the user having to ask — the offer is the deterministic behavior the tour must always produce"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "I'm visiting Jacksonville in 3 days — who should I go see?"
+```
+
+#### Workflow 36 — Tour map no-fabrication (overdeliver guard)
+
+```yaml expected
+workflow_name: Tour map no-fabrication
+prompt_name: leadbay_plan_tour_in_city
+required_calls:
+  - leadbay_tour_plan
+forbidden_calls:
+  - leadbay_report_outreach
+render_checks:
+  - "did NOT print a raw latitude/longitude coordinate table or bare lat,lng pairs to the user (coordinates belong in the map widget, not echoed as prose)"
+  - must_not_match: "-?\\d{1,3}\\.\\d{3,}\\s*,\\s*-?\\d{1,3}\\.\\d{3,}"
+success_criteria:
+  - "called leadbay_tour_plan with Jacksonville"
+  - "passed the tool's map_locations through faithfully — every company / address / contact stated for a lead traces to that lead's tool data, with no invented business names, addresses, or contacts"
+  - "did NOT fabricate coordinates or map pins for leads the tool returned without a location.pos — coordinate-less leads are acknowledged, not given a made-up location"
+  - "did NOT echo a competing raw coordinate / lat-lng table alongside the place cards (the map widget owns the pins; the prose names contacts)"
+  - "did NOT call leadbay_report_outreach"
+```
+
+```yaml scenario
+prompt: "I'm visiting Jacksonville in 3 days — show me everyone I should meet"
 ```
 
 ---
