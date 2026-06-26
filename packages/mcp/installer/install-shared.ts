@@ -5,6 +5,30 @@ import { homedir } from "node:os";
 
 export const HOSTED_MCP_URL = "https://leadbay-mcp-prod.fly.dev/mcp";
 
+/**
+ * Print the actionable fallback block. The guided installer ALWAYS tries to
+ * open a browser; this is only printed by the entrypoint watchdog (#3805) when
+ * nothing ever opened, so the user isn't left staring at a hang. It covers the
+ * two no-local-browser paths to Leadbay's hosted HTTP MCP (Claude does OAuth
+ * in-app — no localhost callback):
+ *   - Claude web / Cowork web: add it as a custom Connector in the UI.
+ *   - A terminal with the `claude` CLI: one `claude mcp add` command.
+ */
+export function printHostedMcpHelp(write: (s: string) => void = (s) => process.stderr.write(s)): void {
+  write(
+    "\nThe guided installer couldn't complete (no browser opened in time).\n" +
+      "You can add Leadbay's hosted MCP directly — Claude signs in in-app,\n" +
+      "no localhost callback needed:\n\n" +
+      "  • Claude web / Cowork web:\n" +
+      "      Customize → Connectors → \"+\" → Add custom connector\n" +
+      `      Name: Leadbay   URL: ${HOSTED_MCP_URL}\n\n` +
+      "  • A terminal with the Claude Code CLI:\n" +
+      `      claude mcp add --transport http leadbay ${HOSTED_MCP_URL}\n\n` +
+      "  • Or re-run the terminal install flow:\n" +
+      "      npx -y @leadbay/mcp@latest install --oauth\n\n"
+  );
+}
+
 export interface DesktopMode {
   legacy: boolean;
   dxt: boolean;

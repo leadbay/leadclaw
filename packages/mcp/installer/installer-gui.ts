@@ -14,7 +14,7 @@ import {
   HOSTED_MCP_URL,
   type DetectedClient,
 } from "./install-shared.js";
-import { inferRegionViaStargate, oauthLogin } from "../src/oauth.js";
+import { inferRegionViaStargate, oauthLogin, openInBrowser } from "../src/oauth.js";
 
 
 // Replaced at build time by tsup with the package.json version string.
@@ -303,7 +303,13 @@ async function clientsWithConfiguredStatus(): Promise<Array<DetectedClient & { c
     }))
   );
 }
-export type InstallerGuiHandle = { url: string; close: () => Promise<void>; done: Promise<void> };
+export type InstallerGuiHandle = {
+  url: string;
+  close: () => Promise<void>;
+  done: Promise<void>;
+  /** Resolves on the first allowed GUI request — proof a browser reached us. */
+  activity: Promise<void>;
+};
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const raw = JSON.stringify(body);
@@ -346,10 +352,26 @@ async function loginWithOAuth(): Promise<{ ok: boolean; sessionId?: string; regi
   try {
     const region = await inferRegionViaStargate({ staging: false });
     const { hostname } = await import("node:os");
+    // Do NOT use failFastOnOpenError here: it throws before waitForCallback(),
+    // whose finally closes the loopback listener — so an "open this URL
+    // manually" link would point at a dead 127.0.0.1 callback and could never
+    // complete sign-in. Instead, if the browser can't open, print the
+    // still-live authorize URL and keep waiting for the callback, so the manual
+    // link actually works. The install watchdog (entrypoint) bounds the
+    // truly-headless case where nobody ever opens it.
     const { accessToken } = await oauthLogin({
       authServerBaseUrl: OAUTH_BASE_URLS.prod[region],
       clientName: `Leadbay MCP installer @ ${hostname()}`,
       log: () => undefined,
+      // Wrap the opener so a launch failure surfaces the (still-reachable) URL
+      // on stderr instead of silently dropping it, while the listener stays up.
+      openBrowser: async (u) => {
+        try {
+          await openInBrowser(u);
+        } catch {
+          process.stderr.write(`\n  Open this URL in your browser to sign in:\n  ${u}\n\n`);
+        }
+      },
     });
     const sessionId = randomUUID();
     const accountLabel = `Leadbay OAuth (${region.toUpperCase()})`;
@@ -836,45 +858,6 @@ export function pageHtml(locale: Locale = "en"): string {
 </html>`;
 }
 
-async function openBrowser(url: string): Promise<void> {
-  const { spawn } = await import("node:child_process");
-
-  // Returns true only if the process exits 0. On Linux, xdg-open and friends
-  // may be installed but exit non-zero when they cannot find a browser or
-  // display — treating those as failures lets the loop fall through to the
-  // next candidate and ultimately print the manual URL hint.
-  const trySpawn = (command: string, args: string[]): Promise<boolean> =>
-    new Promise((resolve) => {
-      try {
-        const child = spawn(command, args, { stdio: "ignore", detached: true });
-        child.unref();
-        child.on("error", () => resolve(false));
-        child.on("close", (code) => resolve(code === 0));
-      } catch {
-        resolve(false);
-      }
-    });
-
-  if (process.platform === "darwin") {
-    await trySpawn("open", [url]);
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await trySpawn("cmd", ["/c", "start", "", url]);
-    return;
-  }
-
-  // Linux: try candidates in order.
-  const candidates = ["xdg-open", "sensible-browser", "google-chrome", "chromium-browser", "firefox"];
-  for (const cmd of candidates) {
-    if (await trySpawn(cmd, [url])) return;
-  }
-
-  // Nothing worked — print a prominent hint so the user knows what to do.
-  process.stderr.write(`\n  Open this URL in your browser to continue:\n  ${url}\n\n`);
-}
-
 function makeGuiServer(
   options: InstallerGuiOptions,
   pageContent: () => string | Promise<string>,
@@ -887,8 +870,17 @@ function makeGuiServer(
   // Give the browser 1.5 s to render the final message before we kill the server.
   const onDone = () => setTimeout(() => { resolveDone(); }, 1500);
 
+  // Fires on the first allowed request — i.e. a browser actually loaded the
+  // GUI, proving one is reachable. The entrypoint uses this to DISARM the
+  // startup watchdog so a slow-but-active OAuth/MFA install (the existing flow
+  // allows 5 min) is never cut off; the watchdog only guards the no-browser
+  // case (#3805) where nothing ever connects.
+  let resolveActivity!: () => void;
+  const activity = new Promise<void>((r) => { resolveActivity = r; });
+
   const server = createServer(async (req, res) => {
     if (!isAllowedOrigin(req, expectedHost)) { sendJson(res, 403, { ok: false, error: "forbidden" }); return; }
+    resolveActivity();
     try {
       if (req.method === "GET" && req.url === "/") {
         const raw = await pageContent();
@@ -912,8 +904,18 @@ function makeGuiServer(
       expectedHost = `127.0.0.1:${port}`;
       const url = `http://127.0.0.1:${port}/`;
       process.stderr.write(`Leadbay MCP ${logLabel} GUI: ${url}\n`);
-      if (options.openBrowser !== false) await openBrowser(url).catch(() => undefined);
-      resolve({ url, done, close: () => new Promise((res, rej) => server.close((e) => e ? rej(e) : res())) });
+      // Resolve the handle as soon as the server is listening — the GUI is
+      // usable now. Opening the browser is fire-and-forget: a detached opener
+      // that never exits (the old `await` waited on `close` and could hang the
+      // whole startup forever, #3805) must not gate readiness. openInBrowser
+      // resolves on `spawn`, not `close`, and throws only if every launcher
+      // candidate is missing — then we print the manual URL hint.
+      if (options.openBrowser !== false) {
+        openInBrowser(url).catch(() => {
+          process.stderr.write(`\n  Open this URL in your browser to continue:\n  ${url}\n\n`);
+        });
+      }
+      resolve({ url, done, activity, close: () => new Promise((res, rej) => server.close((e) => e ? rej(e) : res())) });
     });
   });
 }
