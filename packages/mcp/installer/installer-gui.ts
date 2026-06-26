@@ -14,7 +14,7 @@ import {
   HOSTED_MCP_URL,
   type DetectedClient,
 } from "./install-shared.js";
-import { BrowserOpenFailedError, inferRegionViaStargate, oauthLogin, openInBrowser } from "../src/oauth.js";
+import { inferRegionViaStargate, oauthLogin, openInBrowser } from "../src/oauth.js";
 
 
 // Replaced at build time by tsup with the package.json version string.
@@ -352,27 +352,32 @@ async function loginWithOAuth(): Promise<{ ok: boolean; sessionId?: string; regi
   try {
     const region = await inferRegionViaStargate({ staging: false });
     const { hostname } = await import("node:os");
-    let authorizeUrl: string | undefined;
+    // Do NOT use failFastOnOpenError here: it throws before waitForCallback(),
+    // whose finally closes the loopback listener — so an "open this URL
+    // manually" link would point at a dead 127.0.0.1 callback and could never
+    // complete sign-in. Instead, if the browser can't open, print the
+    // still-live authorize URL and keep waiting for the callback, so the manual
+    // link actually works. The install watchdog (entrypoint) bounds the
+    // truly-headless case where nobody ever opens it.
     const { accessToken } = await oauthLogin({
       authServerBaseUrl: OAUTH_BASE_URLS.prod[region],
       clientName: `Leadbay MCP installer @ ${hostname()}`,
       log: () => undefined,
-      // If the browser can't be opened, fail immediately with the live
-      // authorize URL instead of dangling on the 5-minute callback wait.
-      failFastOnOpenError: true,
-      onAuthorizeUrl: (u) => { authorizeUrl = u; },
+      // Wrap the opener so a launch failure surfaces the (still-reachable) URL
+      // on stderr instead of silently dropping it, while the listener stays up.
+      openBrowser: async (u) => {
+        try {
+          await openInBrowser(u);
+        } catch {
+          process.stderr.write(`\n  Open this URL in your browser to sign in:\n  ${u}\n\n`);
+        }
+      },
     });
     const sessionId = randomUUID();
     const accountLabel = `Leadbay OAuth (${region.toUpperCase()})`;
     sessions.set(sessionId, { token: accessToken, region, accountLabel, createdAt: Date.now() });
     return { ok: true, sessionId, region, accountLabel };
   } catch (err: any) {
-    if (err instanceof BrowserOpenFailedError) {
-      return {
-        ok: false,
-        error: `Could not open a browser for sign-in. Open this URL manually to continue:\n${err.authorizeUrl}`,
-      };
-    }
     return { ok: false, error: err?.message ?? String(err) };
   }
 }
