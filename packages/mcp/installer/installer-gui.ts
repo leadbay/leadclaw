@@ -14,7 +14,7 @@ import {
   HOSTED_MCP_URL,
   type DetectedClient,
 } from "./install-shared.js";
-import { inferRegionViaStargate, oauthLogin } from "../src/oauth.js";
+import { BrowserOpenFailedError, inferRegionViaStargate, oauthLogin, openInBrowser } from "../src/oauth.js";
 
 
 // Replaced at build time by tsup with the package.json version string.
@@ -346,16 +346,27 @@ async function loginWithOAuth(): Promise<{ ok: boolean; sessionId?: string; regi
   try {
     const region = await inferRegionViaStargate({ staging: false });
     const { hostname } = await import("node:os");
+    let authorizeUrl: string | undefined;
     const { accessToken } = await oauthLogin({
       authServerBaseUrl: OAUTH_BASE_URLS.prod[region],
       clientName: `Leadbay MCP installer @ ${hostname()}`,
       log: () => undefined,
+      // If the browser can't be opened, fail immediately with the live
+      // authorize URL instead of dangling on the 5-minute callback wait.
+      failFastOnOpenError: true,
+      onAuthorizeUrl: (u) => { authorizeUrl = u; },
     });
     const sessionId = randomUUID();
     const accountLabel = `Leadbay OAuth (${region.toUpperCase()})`;
     sessions.set(sessionId, { token: accessToken, region, accountLabel, createdAt: Date.now() });
     return { ok: true, sessionId, region, accountLabel };
   } catch (err: any) {
+    if (err instanceof BrowserOpenFailedError) {
+      return {
+        ok: false,
+        error: `Could not open a browser for sign-in. Open this URL manually to continue:\n${err.authorizeUrl}`,
+      };
+    }
     return { ok: false, error: err?.message ?? String(err) };
   }
 }
@@ -836,45 +847,6 @@ export function pageHtml(locale: Locale = "en"): string {
 </html>`;
 }
 
-async function openBrowser(url: string): Promise<void> {
-  const { spawn } = await import("node:child_process");
-
-  // Returns true only if the process exits 0. On Linux, xdg-open and friends
-  // may be installed but exit non-zero when they cannot find a browser or
-  // display — treating those as failures lets the loop fall through to the
-  // next candidate and ultimately print the manual URL hint.
-  const trySpawn = (command: string, args: string[]): Promise<boolean> =>
-    new Promise((resolve) => {
-      try {
-        const child = spawn(command, args, { stdio: "ignore", detached: true });
-        child.unref();
-        child.on("error", () => resolve(false));
-        child.on("close", (code) => resolve(code === 0));
-      } catch {
-        resolve(false);
-      }
-    });
-
-  if (process.platform === "darwin") {
-    await trySpawn("open", [url]);
-    return;
-  }
-
-  if (process.platform === "win32") {
-    await trySpawn("cmd", ["/c", "start", "", url]);
-    return;
-  }
-
-  // Linux: try candidates in order.
-  const candidates = ["xdg-open", "sensible-browser", "google-chrome", "chromium-browser", "firefox"];
-  for (const cmd of candidates) {
-    if (await trySpawn(cmd, [url])) return;
-  }
-
-  // Nothing worked — print a prominent hint so the user knows what to do.
-  process.stderr.write(`\n  Open this URL in your browser to continue:\n  ${url}\n\n`);
-}
-
 function makeGuiServer(
   options: InstallerGuiOptions,
   pageContent: () => string | Promise<string>,
@@ -912,7 +884,17 @@ function makeGuiServer(
       expectedHost = `127.0.0.1:${port}`;
       const url = `http://127.0.0.1:${port}/`;
       process.stderr.write(`Leadbay MCP ${logLabel} GUI: ${url}\n`);
-      if (options.openBrowser !== false) await openBrowser(url).catch(() => undefined);
+      // Resolve the handle as soon as the server is listening — the GUI is
+      // usable now. Opening the browser is fire-and-forget: a detached opener
+      // that never exits (the old `await` waited on `close` and could hang the
+      // whole startup forever, #3805) must not gate readiness. openInBrowser
+      // resolves on `spawn`, not `close`, and throws only if every launcher
+      // candidate is missing — then we print the manual URL hint.
+      if (options.openBrowser !== false) {
+        openInBrowser(url).catch(() => {
+          process.stderr.write(`\n  Open this URL in your browser to continue:\n  ${url}\n\n`);
+        });
+      }
       resolve({ url, done, close: () => new Promise((res, rej) => server.close((e) => e ? rej(e) : res())) });
     });
   });
