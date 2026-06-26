@@ -13,11 +13,13 @@
  *     completes and is never cut off — guards the OAuth/MFA regression.
  *   - With `watchdogMs = null` (the UNINSTALL flow), NO timeout racer exists, so
  *     a slow user is never cut off and never sees install guidance.
+ *   - `shouldArmWatchdog` only arms the auto-open install flow — never for
+ *     `--uninstall` or `--no-open` (the user opted out of auto-open).
  *
  * New file (existing installer tests are left untouched).
  */
 import { describe, it, expect } from "vitest";
-import { runInstallerLoop } from "../../installer/installer-electron.js";
+import { runInstallerLoop, shouldArmWatchdog } from "../../installer/installer-electron.js";
 import type { InstallerGuiHandle } from "../../installer/installer-gui.js";
 
 function fakeHandle(
@@ -58,5 +60,23 @@ describe("runInstallerLoop — watchdog", () => {
     const slowDone = new Promise<void>((resolve) => setTimeout(resolve, 40));
     const result = await runInstallerLoop(fakeHandle(slowDone), null);
     expect(result.outcome).toBe("completed");
+  });
+});
+
+describe("shouldArmWatchdog — only the auto-open install flow is bounded", () => {
+  it("arms for a plain install run", () => {
+    expect(shouldArmWatchdog([])).toBe(true);
+  });
+
+  it("does NOT arm for --uninstall (no browser step)", () => {
+    expect(shouldArmWatchdog(["--uninstall"])).toBe(false);
+  });
+
+  it("does NOT arm for --no-open (user opens the printed URL by hand)", () => {
+    expect(shouldArmWatchdog(["--no-open"])).toBe(false);
+  });
+
+  it("does NOT arm when both flags are present", () => {
+    expect(shouldArmWatchdog(["--uninstall", "--no-open"])).toBe(false);
   });
 });

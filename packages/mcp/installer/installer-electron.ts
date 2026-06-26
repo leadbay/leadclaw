@@ -16,6 +16,18 @@ export interface InstallerLoopResult {
 }
 
 /**
+ * The startup watchdog only guards the auto-open INSTALL flow — where we try to
+ * open a browser that might never connect (#3805). Disable it for runs where
+ * nothing is expected to connect on its own:
+ *   • `--uninstall` — no browser step; waits for the user to select clients.
+ *   • `--no-open` — the user explicitly chose to open the printed URL by hand
+ *     (possibly later), so a 2-minute ceiling would abort a valid manual flow.
+ */
+export function shouldArmWatchdog(args: string[]): boolean {
+  return !args.includes("--uninstall") && !args.includes("--no-open");
+}
+
+/**
  * Race the GUI's done signal against an interrupt and an optional STARTUP
  * watchdog. The watchdog is a grace period that only fires when NOTHING ever
  * connects to the GUI — the no-browser case (#3805) where the run would
@@ -61,10 +73,11 @@ export async function runInstallerLoop(
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
-  // Always try to launch the GUI + open the browser — the installer does the
-  // whole job once a browser is up, and a chat-agent terminal (Claude Cowork)
-  // can often open one. We do NOT guess "headless" and refuse to start: the
-  // watchdog below is the safety net for the case where nothing ever opens.
+  // Always launch the GUI — the installer does the whole job once a browser is
+  // up, and a chat-agent terminal (Claude Cowork) can often open one. We do NOT
+  // guess "headless" and refuse to start; the watchdog below is the safety net
+  // for the auto-open case where nothing ever connects (disabled when the user
+  // opted out of auto-open or is uninstalling — see armWatchdog below).
   const { startInstallerGui, startUninstallerGui } = await import("./installer-gui.js");
   const opts = { openBrowser: !args.includes("--no-open") };
   const isUninstall = args.includes("--uninstall");
@@ -72,10 +85,7 @@ async function main(): Promise<void> {
     ? await startUninstallerGui(opts)
     : await startInstallerGui(opts);
 
-  // The watchdog only guards the install flow (OAuth + browser can dangle when
-  // no browser opens). Uninstall has no browser step and legitimately waits for
-  // the user to review/select clients, so it stays open until done or Ctrl+C.
-  const { outcome } = await runInstallerLoop(handle, isUninstall ? null : WATCHDOG_MS);
+  const { outcome } = await runInstallerLoop(handle, shouldArmWatchdog(args) ? WATCHDOG_MS : null);
   await handle.close().catch(() => undefined);
 
   if (outcome === "timeout") {
