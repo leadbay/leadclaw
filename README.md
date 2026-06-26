@@ -228,8 +228,9 @@ leadbay_import_leads → leadbay_bulk_qualify_leads                             
 The Leadbay MCP server accesses your Leadbay account data (leads, contacts,
 campaigns, notes) on your behalf through the Leadbay API, using a token you
 authorize via OAuth. It does not read your conversation history, Claude memory,
-or local files. Data handling is governed by the Leadbay privacy policy:
-**https://leadbay.ai/privacy**.
+or local files. Data handling is governed by the Leadbay
+[privacy policy](https://www.leadbay.ai/privacy-policy) and
+[terms of use](https://www.leadbay.ai/terms-of-use).
 
 ## Building from source
 
