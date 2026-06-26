@@ -57,7 +57,12 @@ jobs:
         id: tags
         run: |
           set -euo pipefail
-          SHA="${{ github.sha }}"
+          # Resolve the SHA from the actually-checked-out commit, NOT github.sha:
+          # on a workflow_dispatch with a custom `ref`, github.sha points at the
+          # run's ref, not the built commit — which would tag the image with a
+          # SHA whose contents it doesn't contain (Argo CD would then deploy the
+          # wrong revision). git rev-parse HEAD is always the built commit.
+          SHA="$(git rev-parse HEAD)"
           SERVER="${{ vars.DOCKER_REGISTRY_HOSTNAME }}"
           # Full 40-char commit SHA — the tag format Argo CD Image Updater
           # matches (regexp:^[0-9a-f]{40}$). Also push :latest for humans.
