@@ -15,27 +15,37 @@ export interface InstallerLoopResult {
 }
 
 /**
- * Race the GUI's done signal against an interrupt and an overall watchdog.
- * Without the watchdog, a headless run whose GUI nobody can reach dangles
- * forever until the host kills it ("timeout" in Claude). The watchdog turns
- * that into a clean exit with the hosted-MCP fallback guidance.
+ * Race the GUI's done signal against an interrupt and an optional overall
+ * watchdog. The watchdog only makes sense for the INSTALL flow: without it, a
+ * headless run whose OAuth/browser GUI nobody can reach dangles forever until
+ * the host kills it ("timeout" in Claude), and the watchdog turns that into a
+ * clean exit with the hosted-MCP fallback guidance.
+ *
+ * Pass `watchdogMs = null` to disable it — the UNINSTALL flow has no
+ * OAuth/browser step and legitimately waits for the user to review and select
+ * clients to remove, so it must stay open until the user finishes or interrupts.
  */
 export async function runInstallerLoop(
   handle: InstallerGuiHandle,
-  watchdogMs: number = WATCHDOG_MS
+  watchdogMs: number | null = WATCHDOG_MS
 ): Promise<InstallerLoopResult> {
   let timer: NodeJS.Timeout | undefined;
   try {
-    return await Promise.race<InstallerLoopResult>([
+    const racers: Array<Promise<InstallerLoopResult>> = [
       handle.done.then(() => ({ outcome: "completed" as const })),
       new Promise<InstallerLoopResult>((resolve) => {
         process.once("SIGINT", () => resolve({ outcome: "signal" }));
         process.once("SIGTERM", () => resolve({ outcome: "signal" }));
       }),
-      new Promise<InstallerLoopResult>((resolve) => {
-        timer = setTimeout(() => resolve({ outcome: "timeout" }), watchdogMs);
-      }),
-    ]);
+    ];
+    if (watchdogMs !== null) {
+      racers.push(
+        new Promise<InstallerLoopResult>((resolve) => {
+          timer = setTimeout(() => resolve({ outcome: "timeout" }), watchdogMs);
+        })
+      );
+    }
+    return await Promise.race<InstallerLoopResult>(racers);
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -50,12 +60,15 @@ async function main(): Promise<void> {
   // watchdog below is the safety net for the case where nothing ever opens.
   const { startInstallerGui, startUninstallerGui } = await import("./installer-gui.js");
   const opts = { openBrowser: !args.includes("--no-open") };
-  const handle = args.includes("--uninstall")
+  const isUninstall = args.includes("--uninstall");
+  const handle = isUninstall
     ? await startUninstallerGui(opts)
     : await startInstallerGui(opts);
 
-  // Exit when install completes, on Ctrl+C, or when the watchdog fires.
-  const { outcome } = await runInstallerLoop(handle);
+  // The watchdog only guards the install flow (OAuth + browser can dangle when
+  // no browser opens). Uninstall has no browser step and legitimately waits for
+  // the user to review/select clients, so it stays open until done or Ctrl+C.
+  const { outcome } = await runInstallerLoop(handle, isUninstall ? null : WATCHDOG_MS);
   await handle.close().catch(() => undefined);
 
   if (outcome === "timeout") {
@@ -63,7 +76,8 @@ async function main(): Promise<void> {
     printHostedMcpHelp();
     process.exit(1);
   }
-  process.stderr.write(outcome === "completed" ? "\nInstallation complete. Exiting.\n" : "\nExiting.\n");
+  const verb = isUninstall ? "Uninstall" : "Installation";
+  process.stderr.write(outcome === "completed" ? `\n${verb} complete. Exiting.\n` : "\nExiting.\n");
 }
 
 const isEntrypoint = (() => {

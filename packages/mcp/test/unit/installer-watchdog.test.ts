@@ -8,6 +8,8 @@
  *   - When the GUI `done` promise never resolves, the watchdog wins with
  *     outcome "timeout" after watchdogMs.
  *   - When `done` resolves first, outcome is "completed" (happy path unaffected).
+ *   - With `watchdogMs = null` (the UNINSTALL flow), NO timeout racer exists, so
+ *     a slow user is never cut off and never sees install guidance.
  *
  * New file (existing installer tests are left untouched).
  */
@@ -29,6 +31,15 @@ describe("runInstallerLoop — watchdog", () => {
 
   it("returns 'completed' when the install finishes before the watchdog", async () => {
     const result = await runInstallerLoop(fakeHandle(Promise.resolve()), 5_000);
+    expect(result.outcome).toBe("completed");
+  });
+
+  it("never times out the uninstall flow (watchdogMs = null)", async () => {
+    // The uninstaller has no browser step and waits for the user to pick
+    // clients. With the watchdog disabled, a `done` that takes a while still
+    // resolves as "completed" — there is no timeout racer to cut it off.
+    const slowDone = new Promise<void>((resolve) => setTimeout(resolve, 40));
+    const result = await runInstallerLoop(fakeHandle(slowDone), null);
     expect(result.outcome).toBe("completed");
   });
 });
