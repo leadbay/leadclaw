@@ -21,7 +21,7 @@ describe("campaign_call_sheet composite", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/campaigns/camp-1/contacts",
+        path: "/1.6/campaigns/camp-1/contacts",
         status: 200,
         body: [
           {
@@ -75,7 +75,7 @@ describe("campaign_call_sheet composite", () => {
       },
       {
         method: "GET",
-        path: "/1.5/campaigns/camp-1/leads?count=2&page=1",
+        path: "/1.6/campaigns/camp-1/leads?count=2&page=1",
         status: 200,
         body: {
           items: [

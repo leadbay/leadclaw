@@ -87,7 +87,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           email: "test@example.com",
@@ -107,7 +107,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org-1/quota_status",
+        path: "/1.6/organizations/org-1/quota_status",
         status: 200,
         body: {
           plan: "PRO",
@@ -137,7 +137,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           email: "test@example.com",
@@ -151,7 +151,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
       },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: {
           id: "imp-async-1",
@@ -185,12 +185,12 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/selection/select?leadIds=lead-1",
+        path: "/1.6/leads/selection/select?leadIds=lead-1",
         status: 204,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/web_fetch?force_fetch=false",
+        path: "/1.6/leads/selection/web_fetch?force_fetch=false",
         status: 200,
         body: {
           queued: 1,
@@ -202,7 +202,7 @@ describe("outputSchema on top 5 composites (P2: structured output)", () => {
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/clear",
+        path: "/1.6/leads/selection/clear",
         status: 204,
       },
     ]);

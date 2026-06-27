@@ -19,7 +19,7 @@
 // fixtures lives in
 // packages/core/test/unit/composite/adjust-audience-dirty-taxonomy-regression.test.ts.
 
-const P = (path: string) => `/1.5${path}`; // LeadbayClient prepends /1.5
+const P = (path: string) => `/1.6${path}`; // LeadbayClient prepends /1.6
 
 const ME = {
   id: "u-1",

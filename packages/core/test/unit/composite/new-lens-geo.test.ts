@@ -31,7 +31,7 @@ describe("leadbay_new_lens — geographic scoping", () => {
       // resolveLocations → /geo/search (single exact-name match resolves cleanly)
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=Indre-et-Loire/,
+        path: /\/1\.6\/geo\/search\?q=Indre-et-Loire/,
         status: 200,
         body: {
           results: [
@@ -40,8 +40,8 @@ describe("leadbay_new_lens — geographic scoping", () => {
           parents: [],
         },
       },
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 555, name: "Touraine", user_id: "u-1" } },
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 555, name: "Touraine", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 200, body: {} },
     ]);
 
     const result: any = await newLens.execute(newClient(), {
@@ -53,7 +53,7 @@ describe("leadbay_new_lens — geographic scoping", () => {
 
     expect(result.status).toBe("created");
     const filterPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/555/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/555/filter"
     );
     const body = JSON.parse(filterPost!.body!);
     // Unwrapped write shape; criterion carries the resolved admin-area id.
@@ -67,7 +67,7 @@ describe("leadbay_new_lens — geographic scoping", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=Pa/,
+        path: /\/1\.6\/geo\/search\?q=Pa/,
         status: 200,
         body: {
           results: [
@@ -91,15 +91,15 @@ describe("leadbay_new_lens — geographic scoping", () => {
     expect(result.location_ambiguities[0].location_text).toBe("Pa");
     // No lens was created.
     const createPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     expect(createPost).toBeUndefined();
   });
 
   it("admin-area id passes through without a /geo/search call", async () => {
     mockHttp([
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 556, name: "ById", user_id: "u-1" } },
-      { method: "POST", path: "/1.5/lenses/556/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 556, name: "ById", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses/556/filter", status: 200, body: {} },
     ]);
 
     const result: any = await newLens.execute(newClient(), {
@@ -111,10 +111,10 @@ describe("leadbay_new_lens — geographic scoping", () => {
 
     expect(result.status).toBe("created");
     // Numeric id forwarded as-is — resolver never hits the network.
-    const geo = getHttpRequests().find((r) => /\/1\.5\/geo\/search/.test(r.path));
+    const geo = getHttpRequests().find((r) => /\/1\.6\/geo\/search/.test(r.path));
     expect(geo).toBeUndefined();
     const filterPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/556/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/556/filter"
     );
     const locCrit = JSON.parse(filterPost!.body!).items[0].criteria.find(
       (c: any) => c.type === "location_ids"
@@ -126,7 +126,7 @@ describe("leadbay_new_lens — geographic scoping", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=Indre-et-Loire/,
+        path: /\/1\.6\/geo\/search\?q=Indre-et-Loire/,
         status: 200,
         body: {
           results: [
@@ -146,7 +146,7 @@ describe("leadbay_new_lens — geographic scoping", () => {
     expect(result.status).toBe("preview");
     expect(result.will_create.locations).toContain("477");
     const createPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     expect(createPost).toBeUndefined();
   });

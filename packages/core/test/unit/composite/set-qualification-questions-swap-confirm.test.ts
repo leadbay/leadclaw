@@ -13,7 +13,7 @@ beforeEach(() => resetHttpMock());
 
 const me = () => ({
   method: "GET" as const,
-  path: "/1.5/users/me",
+  path: "/1.6/users/me",
   status: 200,
   body: { id: "u", organization: { id: ORG, name: "Acme" } },
 });
@@ -22,11 +22,11 @@ const Q2 = "Q two?";
 const Q3 = "Q three?";
 const current = (qs: string[]) => ({
   method: "GET" as const,
-  path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`),
+  path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`),
   status: 200,
   body: qs.map((q) => ({ question: q, created_at: "2026-01-01T00:00:00Z", lang: "en" })),
 });
-const postOrg = () => ({ method: "POST" as const, path: new RegExp(`/1\\.5/organizations/${ORG}$`), status: 204, body: null });
+const postOrg = () => ({ method: "POST" as const, path: new RegExp(`/1\\.6/organizations/${ORG}$`), status: 204, body: null });
 const didPost = () => getHttpRequests().some((r) => r.method === "POST" && new RegExp(`/organizations/${ORG}$`).test(r.path));
 
 // Regression: a remove+add (or `set`) that keeps the COUNT the same still drops

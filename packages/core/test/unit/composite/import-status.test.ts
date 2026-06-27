@@ -50,7 +50,7 @@ describe("leadbay_import_status", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/imports/imp-1",
+        path: "/1.6/imports/imp-1",
         status: 200,
         body: importPayload({
           id: "imp-1",
@@ -79,7 +79,7 @@ describe("leadbay_import_status", () => {
       },
     });
     expect(getHttpRequests().map((r) => `${r.method} ${r.path}`)).toEqual([
-      "GET /1.5/imports/imp-1",
+      "GET /1.6/imports/imp-1",
     ]);
   });
 
@@ -96,7 +96,7 @@ describe("leadbay_import_status", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/imports/imp-pre",
+        path: "/1.6/imports/imp-pre",
         status: 200,
         body: importPayload({
           id: "imp-pre",
@@ -150,7 +150,7 @@ describe("leadbay_import_status", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/imports/imp-legacy",
+        path: "/1.6/imports/imp-legacy",
         status: 200,
         body: importPayload({
           id: "imp-legacy",
@@ -208,7 +208,7 @@ describe("leadbay_import_status", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/imports/imp-restart",
+        path: "/1.6/imports/imp-restart",
         status: 200,
         body: importPayload({
           id: "imp-restart",

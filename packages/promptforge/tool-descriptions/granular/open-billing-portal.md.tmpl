@@ -11,7 +11,7 @@ annotations:
   idempotentHint: false
   openWorldHint: true
 ---
-Generate a one-shot Stripe customer-portal URL. Wraps `GET /1.5/stripe/portal` → `{url}`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
+Generate a one-shot Stripe customer-portal URL. Wraps `GET /1.6/stripe/portal` → `{url}`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
 
 Sibling of `leadbay_create_topup_link`. Use cases differ:
 

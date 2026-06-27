@@ -221,7 +221,7 @@ describe("update surfacing — account_status keeps top-level field", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -232,7 +232,7 @@ describe("update surfacing — account_status keeps top-level field", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/organizations\/org-1\/quota_status/,
+        path: /\/1\.6\/organizations\/org-1\/quota_status/,
         status: 200,
         body: { plan: "pro", org: { spend: [], resources: [] } },
       },
@@ -258,13 +258,13 @@ describe("update surfacing — account_status keeps top-level field", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { email: "a@b.co", name: "T", organization: { id: "org-1", name: "Org" } },
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org-1/quota_status",
+        path: "/1.6/organizations/org-1/quota_status",
         status: 200,
         body: { plan: "pro" },
       },

@@ -22,7 +22,7 @@ describe("remove_leads_from_campaign composite", () => {
     mockHttp([
       {
         method: "DELETE",
-        path: "/1.5/campaigns/camp-1/leads",
+        path: "/1.6/campaigns/camp-1/leads",
         status: 204,
         body: "",
       },
@@ -38,7 +38,7 @@ describe("remove_leads_from_campaign composite", () => {
     const reqs = getHttpRequests();
     expect(reqs).toHaveLength(1);
     expect(reqs[0].method).toBe("DELETE");
-    expect(reqs[0].path).toBe("/1.5/campaigns/camp-1/leads");
+    expect(reqs[0].path).toBe("/1.6/campaigns/camp-1/leads");
     expect(JSON.parse(reqs[0].body ?? "{}")).toEqual({
       lead_ids: ["lead-a", "lead-b", "lead-c"],
     });
@@ -49,7 +49,7 @@ describe("remove_leads_from_campaign composite", () => {
     mockHttp([
       {
         method: "DELETE",
-        path: "/1.5/campaigns/camp-9/leads",
+        path: "/1.6/campaigns/camp-9/leads",
         status: 204,
         body: "",
       },
@@ -81,7 +81,7 @@ describe("remove_leads_from_campaign composite", () => {
     mockHttp([
       {
         method: "DELETE",
-        path: "/1.5/campaigns/missing/leads",
+        path: "/1.6/campaigns/missing/leads",
         status: 404,
         body: { error: "campaign not found" },
       },

@@ -1,5 +1,11 @@
 # Changelog — @leadbay/mcp
 
+## 0.23.9 — 2026-06-27
+
+MCP data plane now targets backend **/1.6** (was /1.5).
+
+- **`client`** — every request path is built from a single `API_VERSION = "1.6"` constant (exported as `API_PREFIX`). `LeadbayClient` (request / requestVoid / requestRawBinary + mock-mode paths) and `bin.ts`'s login probe all reference it, so future backend version bumps are a one-line change. Verified live on `api-us` before shipping: `/1.6` mirrors `/1.5` across the full route surface probed (monitor, lenses, auth/login, kpi, geo) — identical status on every call. Tool-description prose and route-doc comments updated to /1.6 to match.
+
 ## 0.23.8 — 2026-06-26
 
 Installer no longer hangs in Claude Cowork / headless terminals (product#3805).

@@ -101,7 +101,7 @@ describe("elicitation/create round-trip (P2 elicitInput)", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           email: "admin@example.com",
@@ -112,13 +112,13 @@ describe("elicitation/create round-trip (P2 elicitInput)", () => {
       },
       {
         method: "POST",
-        path: "/1.5/organizations/org-1/user_prompt",
+        path: "/1.6/organizations/org-1/user_prompt",
         status: 200,
         body: {},
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org-1/clarifications",
+        path: "/1.6/organizations/org-1/clarifications",
         status: 200,
         body: {
           id: "clar-1",
@@ -132,7 +132,7 @@ describe("elicitation/create round-trip (P2 elicitInput)", () => {
       },
       {
         method: "POST",
-        path: "/1.5/organizations/org-1/pick_clarification",
+        path: "/1.6/organizations/org-1/pick_clarification",
         status: 200,
         body: {},
       },

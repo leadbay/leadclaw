@@ -33,11 +33,11 @@ beforeEach(() => resetHttpMock());
 describe("account_status — quota 401 withheld (product#3761)", () => {
   it("a 401 on quota_status is NOT surfaced: quota_error stays null", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me("40005") },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me("40005") }, // retry tolerance
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 401, body: {} },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me("40005") },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me("40005") }, // retry tolerance
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 401, body: {} },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
     ]);
     const r: any = await accountStatus.execute(newClient(), {});
     expect(r.quota).toBeNull();
@@ -46,11 +46,11 @@ describe("account_status — quota 401 withheld (product#3761)", () => {
 
   it("a 403 on quota_status is also withheld", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me("40005") },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me("40005") },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 403, body: {} },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 403, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me("40005") },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me("40005") },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 403, body: {} },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 403, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
     ]);
     const r: any = await accountStatus.execute(newClient(), {});
     expect(r.quota_error).toBeNull();
@@ -58,9 +58,9 @@ describe("account_status — quota 401 withheld (product#3761)", () => {
 
   it("a genuine non-auth failure (500) DOES surface as quota_error", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me("40005") },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 500, body: { code: "SERVER_ERROR", message: "boom" } },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me("40005") },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 500, body: { code: "SERVER_ERROR", message: "boom" } },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] },
     ]);
     const r: any = await accountStatus.execute(newClient(), {});
     expect(r.quota_error).not.toBeNull();
@@ -74,9 +74,9 @@ describe("account_status — lens gated on the trigger (product#3761)", () => {
 
   it("asked: resolves last_requested_lens to its name with string-id normalization", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me(40005) }, // number from /me
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] }, // string id server-side
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me(40005) }, // number from /me
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: "40005", name: "Autom Lens" }] }, // string id server-side
     ]);
     const r: any = await accountStatus.execute(newClient(), {}, ASKED as any);
     // returned id is normalized to a string, matching the schema
@@ -89,8 +89,8 @@ describe("account_status — lens gated on the trigger (product#3761)", () => {
     // A plain account question — note NO /lenses mock declared; the harness
     // throws if the code calls an undeclared endpoint, proving /lenses is skipped.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me(40005) },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me(40005) },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
     ]);
     const r: any = await accountStatus.execute(newClient(), {}, { triggered_by: "what account am I connected to?" } as any);
     expect(r.last_requested_lens).toBeNull();
@@ -99,8 +99,8 @@ describe("account_status — lens gated on the trigger (product#3761)", () => {
 
   it("no trigger at all: lens withheld (default safe)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me(40005) },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me(40005) },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
     ]);
     const r: any = await accountStatus.execute(newClient(), {});
     expect(r.last_requested_lens_name).toBeNull();
@@ -108,8 +108,8 @@ describe("account_status — lens gated on the trigger (product#3761)", () => {
 
   it("asked but null lens id → null name, no /lenses call", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: me(null) },
-      { method: "GET", path: `/1.5/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: me(null) },
+      { method: "GET", path: `/1.6/organizations/${ORG}/quota_status`, status: 200, body: { org: { resources: {} } } },
     ]);
     const r: any = await accountStatus.execute(newClient(), {}, ASKED as any);
     expect(r.last_requested_lens).toBeNull();

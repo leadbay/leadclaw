@@ -57,7 +57,7 @@ eval/
 ```ts
 const ORG_ID = "org_xyz_001";
 const LENS_ID = 42;
-const P = (path: string) => `/1.5${path}`; // LeadbayClient prepends /1.5
+const P = (path: string) => `/1.6${path}`; // LeadbayClient prepends /1.6
 
 export const SCENARIO = {
   name: "my-scenario",

@@ -2,7 +2,7 @@
  * Unit tests for leadbay_bulk_qualify_leads async handle mode.
  *
  * The launch path uses the SELECTION-based bulk endpoint
- * (`POST /1.5/leads/selection/web_fetch`) so the backend creates one
+ * (`POST /1.6/leads/selection/web_fetch`) so the backend creates one
  * progress notification per call — see backend/docs/adr/notifications.md
  * §4. We expect: select(leadIds) → bulk web_fetch → clear, with
  * BulkWebFetchResponsePayload.notification_id captured on the tracker
@@ -40,12 +40,12 @@ describe("leadbay_bulk_qualify_leads", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/selection/select?leadIds=lead-1&leadIds=lead-2",
+        path: "/1.6/leads/selection/select?leadIds=lead-1&leadIds=lead-2",
         status: 204,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/web_fetch?force_fetch=false",
+        path: "/1.6/leads/selection/web_fetch?force_fetch=false",
         status: 200,
         body: {
           queued: 2,
@@ -57,7 +57,7 @@ describe("leadbay_bulk_qualify_leads", () => {
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/clear",
+        path: "/1.6/leads/selection/clear",
         status: 204,
       },
     ]);
@@ -86,9 +86,9 @@ describe("leadbay_bulk_qualify_leads", () => {
       notification_id: NOTIF_ID,
     });
     expect(getHttpRequests().map((r) => `${r.method} ${r.path}`)).toEqual([
-      "POST /1.5/leads/selection/select?leadIds=lead-1&leadIds=lead-2",
-      "POST /1.5/leads/selection/web_fetch?force_fetch=false",
-      "POST /1.5/leads/selection/clear",
+      "POST /1.6/leads/selection/select?leadIds=lead-1&leadIds=lead-2",
+      "POST /1.6/leads/selection/web_fetch?force_fetch=false",
+      "POST /1.6/leads/selection/clear",
     ]);
 
     const record = await tracker.getQualify(out.qualify_id);

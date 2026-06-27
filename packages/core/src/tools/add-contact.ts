@@ -38,7 +38,7 @@ interface AddContactResult {
  * Add a single contact to a known company — the in-conversation
  * "create_contact" the reporter asked for (leadbay/product#3703).
  *
- * Backend route: `POST /1.5/leads/{leadId}/contacts` → 200 with the created
+ * Backend route: `POST /1.6/leads/{leadId}/contacts` → 200 with the created
  * contact (incl. its new `id`). This is the SAME direct endpoint the Leadbay
  * web UI uses to add a contact — distinct from, and lighter than, the CSV
  * import pipeline (`leadbay_import_and_qualify`), which 401s on some accounts

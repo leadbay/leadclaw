@@ -275,7 +275,7 @@ async function connect(
 describe("telemetry — opt-out", () => {
   it("LEADBAY_TELEMETRY_ENABLED=false → no PostHog/Sentry init or capture", async () => {
     process.env.LEADBAY_TELEMETRY_ENABLED = "false";
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([sumTool, throwTool]);
     await identityDone;
     await mcpClient.callTool({ name: "leadbay_test_sum", arguments: { a: 1, b: 2 } });
@@ -289,7 +289,7 @@ describe("telemetry — opt-out", () => {
 
 describe("telemetry — tool call events", () => {
   it("successful JSON tool call fires one 'mcp tool called' event with ok=true, format=json", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([sumTool]);
     await identityDone;
     await mcpClient.callTool({ name: "leadbay_test_sum", arguments: { a: 1, b: 2 } });
@@ -317,7 +317,7 @@ describe("telemetry — tool call events", () => {
     // captureToolCall, captureQuotaHit, captureTopupLink, captureStartup
     // ALL must emit events tagged with source="mcp" so they can be
     // filtered apart from the web-app's own PostHog stream.
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone, telemetry } = await connect([
       sumTool,
       quotaTool,
@@ -341,7 +341,7 @@ describe("telemetry — tool call events", () => {
   });
 
   it("QUOTA_EXCEEDED envelope fires PostHog 'mcp quota hit' + 'mcp tool called' AND Sentry capture (3 events)", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([quotaTool]);
     await identityDone;
     await mcpClient.callTool({ name: "leadbay_test_quota", arguments: {} });
@@ -376,7 +376,7 @@ describe("telemetry — tool call events", () => {
   });
 
   it("NOT_FOUND envelope fires PostHog 'mcp tool called' AND Sentry with full envelope tags + extras", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([notFoundTool]);
     await identityDone;
     await mcpClient.callTool({ name: "leadbay_test_not_found", arguments: {} });
@@ -420,7 +420,7 @@ describe("telemetry — tool call events", () => {
   });
 
   it("thrown LeadbayError (catch path) fires Sentry with source=business and full envelope", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([throwBusinessTool]);
     await identityDone;
     await mcpClient.callTool({
@@ -443,7 +443,7 @@ describe("telemetry — tool call events", () => {
   });
 
   it("unexpected throw fires Sentry with source=unexpected and no error_code tag", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([throwTool]);
     await identityDone;
     await mcpClient.callTool({ name: "leadbay_test_throw", arguments: {} });
@@ -468,10 +468,10 @@ describe("telemetry — tool call events", () => {
 
   it("leadbay_create_topup_link success fires 'mcp topup link created' without leaking URL", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE },
       {
         method: "POST",
-        path: "/1.5/stripe/topup_checkout",
+        path: "/1.6/stripe/topup_checkout",
         status: 200,
         body: JSON.stringify({ url: STRIPE_TOPUP_URL }),
       },
@@ -491,7 +491,7 @@ describe("telemetry — tool call events", () => {
 
 describe("telemetry — identity & buffering", () => {
   it("identify() calls PostHog.identify with me.email as distinctId + leadbay_* person props", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { identityDone } = await connect([sumTool]);
     await identityDone;
     expect(posthogState.identify).toHaveBeenCalledTimes(1);
@@ -508,7 +508,7 @@ describe("telemetry — identity & buffering", () => {
   });
 
   it("events captured before identity resolves are buffered and emit with the resolved email", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([sumTool]);
     // Call the tool BEFORE awaiting identityDone — captureToolCall should
     // buffer because `me` hasn't landed yet. mcpClient.callTool returns
@@ -531,7 +531,7 @@ describe("telemetry — identity & buffering", () => {
 
 describe("telemetry — shutdown", () => {
   it("shutdown() awaits posthog.shutdown(2000) and Sentry.close(2000)", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { telemetry, identityDone } = await connect([sumTool]);
     await identityDone;
     await telemetry.shutdown();
@@ -542,7 +542,7 @@ describe("telemetry — shutdown", () => {
 
 describe("telemetry — privacy", () => {
   it("tool argument values do not leak into captured event properties", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: ME_RESPONSE }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: ME_RESPONSE }]);
     const { mcpClient, identityDone } = await connect([sumTool]);
     await identityDone;
     // Args here are numbers; switch to a string sentinel that we can grep

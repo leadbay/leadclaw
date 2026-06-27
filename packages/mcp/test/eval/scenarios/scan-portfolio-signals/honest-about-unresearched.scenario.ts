@@ -10,7 +10,7 @@
 //
 // Authored to the README scenario shape (test/eval/README.md).
 
-const P = (path: string) => `/1.5${path}`;
+const P = (path: string) => `/1.6${path}`;
 
 const MONITOR_LEADS = [
   {
@@ -51,7 +51,7 @@ export const SCENARIO = {
     { method: "GET", path: P("/monitor/filter"), status: 200, body: { criteria: [] } },
     {
       method: "GET",
-      path: /\/1\.5\/monitor\?/,
+      path: /\/1\.6\/monitor\?/,
       status: 200,
       body: { items: MONITOR_LEADS, pagination: { page: 0, pages: 1, total: 3 } },
     },

@@ -79,7 +79,7 @@ describe("notifications inbox surfaces on every tool response", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -90,7 +90,7 @@ describe("notifications inbox surfaces on every tool response", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/organizations\/org-1\/quota_status/,
+        path: /\/1\.6\/organizations\/org-1\/quota_status/,
         status: 200,
         body: { plan: "free", org: { spend: [], resources: [] } },
       },
@@ -98,7 +98,7 @@ describe("notifications inbox surfaces on every tool response", () => {
       // any inbox catch-up that the composite triggers).
       {
         method: "GET",
-        path: /\/1\.5\/notifications\?archived=false/,
+        path: /\/1\.6\/notifications\?archived=false/,
         status: 200,
         body: { items: [], total_unseen: 0, pagination: { page: 0, pages: 1, total: 0 } },
       },
@@ -129,7 +129,7 @@ describe("notifications inbox surfaces on every tool response", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -139,7 +139,7 @@ describe("notifications inbox surfaces on every tool response", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/organizations\/org-1\/quota_status/,
+        path: /\/1\.6\/organizations\/org-1\/quota_status/,
         status: 200,
         body: { plan: "free", org: { spend: [], resources: [] } },
       },
@@ -163,7 +163,7 @@ describe("notifications inbox surfaces on every tool response", () => {
     mockHttp([
       {
         method: "POST",
-        path: `/1.5/notifications/${NOTIF_ID}/seen`,
+        path: `/1.6/notifications/${NOTIF_ID}/seen`,
         status: 204,
       },
     ]);

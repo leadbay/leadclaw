@@ -69,10 +69,10 @@ function terminalNotification(): Notification {
 // Mirror the happy-path HTTP for research_lead_by_id (lensId 42, lead-1).
 function mockResearchLeadHttp(): void {
   mockHttp([
-    { method: "POST", path: "/1.5/interactions", status: 200, body: {} },
+    { method: "POST", path: "/1.6/interactions", status: 200, body: {} },
     {
       method: "GET",
-      path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,
+      path: /\/1\.6\/lenses\/42\/leads\/lead-1$/,
       status: 200,
       body: {
         id: "lead-1",
@@ -100,7 +100,7 @@ function mockResearchLeadHttp(): void {
     },
     {
       method: "GET",
-      path: "/1.5/leads/lead-1/ai_agent_responses",
+      path: "/1.6/leads/lead-1/ai_agent_responses",
       status: 200,
       body: [
         {
@@ -115,13 +115,13 @@ function mockResearchLeadHttp(): void {
     },
     {
       method: "GET",
-      path: /\/1\.5\/leads\/lead-1\/enrich\/contacts/,
+      path: /\/1\.6\/leads\/lead-1\/enrich\/contacts/,
       status: 200,
       body: [],
     },
     {
       method: "GET",
-      path: "/1.5/leads/lead-1/web_fetch",
+      path: "/1.6/leads/lead-1/web_fetch",
       status: 200,
       body: { signals: [], status: "complete" },
     },

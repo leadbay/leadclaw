@@ -10,6 +10,7 @@ import {
   NotificationsWsClient,
   resolveRegion,
   REGIONS,
+  API_PREFIX,
   type CreateClientConfig,
   LeadbayClient,
   type LeadbayError,
@@ -1102,7 +1103,7 @@ export async function loginAt(baseUrl: string, email: string, password: string):
   const https = await import("node:https");
   return await new Promise<string>((resolve, reject) => {
     const body = JSON.stringify({ email, password });
-    const u = new URL(baseUrl + "/1.5/auth/login");
+    const u = new URL(baseUrl + `${API_PREFIX}/auth/login`);
     const r = https.request(
       {
         hostname: u.hostname,

@@ -15,7 +15,7 @@ interface PinContactResult {
 
 /**
  * Pin a contact — marks it as a priority/favourite on the company so it
- * surfaces first. Backend: `POST /1.5/contacts/{contactId}/pin` → 204.
+ * surfaces first. Backend: `POST /1.6/contacts/{contactId}/pin` → 204.
  * Keyed by the contact's own id. The inverse is leadbay_unpin_contact.
  */
 export const pinContact: Tool<PinContactParams, PinContactResult> = {

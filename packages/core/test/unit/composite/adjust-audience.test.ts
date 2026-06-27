@@ -37,7 +37,7 @@ const EMPTY_FILTER = {
 };
 
 const SECTORS_PATH =
-  "/1.5/sectors/all?lang=fr&includeInvisible=false";
+  "/1.6/sectors/all?lang=fr&includeInvisible=false";
 
 beforeEach(() => resetHttpMock());
 
@@ -46,7 +46,7 @@ describe("leadbay_adjust_audience", () => {
     // Pre-fix this threw "Cannot read properties of undefined (reading
     // 'toLowerCase')" while scanning the taxonomy, regardless of the clean input.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
         path: SECTORS_PATH,
@@ -57,16 +57,16 @@ describe("leadbay_adjust_audience", () => {
           { id: "3" }, // missing name entirely
         ],
       },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: LENS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: LENS },
       {
         method: "GET",
-        path: "/1.5/lenses/4242/filter",
+        path: "/1.6/lenses/4242/filter",
         status: 200,
         body: EMPTY_FILTER,
       },
       {
         method: "POST",
-        path: "/1.5/lenses/4242/filter",
+        path: "/1.6/lenses/4242/filter",
         status: 200,
         body: {},
       },
@@ -88,7 +88,7 @@ describe("leadbay_adjust_audience", () => {
   it("logs a warning when the taxonomy carries null-name sectors", async () => {
     const { logger, logs } = createLogger();
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
         path: SECTORS_PATH,
@@ -98,14 +98,14 @@ describe("leadbay_adjust_audience", () => {
           { id: "2", name: null },
         ],
       },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: LENS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: LENS },
       {
         method: "GET",
-        path: "/1.5/lenses/4242/filter",
+        path: "/1.6/lenses/4242/filter",
         status: 200,
         body: EMPTY_FILTER,
       },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(
@@ -123,7 +123,7 @@ describe("leadbay_adjust_audience", () => {
 
   it("no-match — surfaces a clear 'couldn't find' message, not 'matched multiple'", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
         path: SECTORS_PATH,
@@ -152,7 +152,7 @@ describe("leadbay_adjust_audience", () => {
   it("ambiguous — multiple close matches → 'pick from the matches' message", async () => {
     // "bois" overlaps two distinct multi-word sectors equally → no confident pick.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
         path: SECTORS_PATH,
@@ -179,7 +179,7 @@ describe("leadbay_adjust_audience", () => {
 
   it("happy path — confident single match resolves and applies to the lens", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
         path: SECTORS_PATH,
@@ -189,14 +189,14 @@ describe("leadbay_adjust_audience", () => {
           { id: "2", name: "Plomberie" },
         ],
       },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: LENS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: LENS },
       {
         method: "GET",
-        path: "/1.5/lenses/4242/filter",
+        path: "/1.6/lenses/4242/filter",
         status: 200,
         body: EMPTY_FILTER,
       },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -207,7 +207,7 @@ describe("leadbay_adjust_audience", () => {
     expect(result.lens_used.id).toBe(4242);
     // A POST to the lens filter actually happened.
     const posted = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     expect(posted).toBeDefined();
   });

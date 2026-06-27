@@ -56,7 +56,7 @@ function mockFanOut(monitorItems: unknown[], wishlistItems: unknown[]) {
     // pullFollowups city flow (city = "Paris")
     {
       method: "GET",
-      path: /\/1\.5\/geo\/search/,
+      path: /\/1\.6\/geo\/search/,
       status: 200,
       body: {
         results: [
@@ -65,16 +65,16 @@ function mockFanOut(monitorItems: unknown[], wishlistItems: unknown[]) {
         parents: [],
       },
     },
-    { method: "POST", path: "/1.5/monitor/filter", status: 204, body: "" },
+    { method: "POST", path: "/1.6/monitor/filter", status: 204, body: "" },
     {
       method: "GET",
-      path: "/1.5/monitor/filter",
+      path: "/1.6/monitor/filter",
       status: 200,
       body: { criteria: [{ type: "location_ids", is_excluded: false, locations: ["100"] }] },
     },
     {
       method: "GET",
-      path: /\/1\.5\/monitor\?/,
+      path: /\/1\.6\/monitor\?/,
       status: 200,
       body: { items: monitorItems },
     },
@@ -84,19 +84,19 @@ function mockFanOut(monitorItems: unknown[], wishlistItems: unknown[]) {
     // so the parallel fan-out never races on a consumed mock.
     {
       method: "GET",
-      path: "/1.5/users/me",
+      path: "/1.6/users/me",
       status: 200,
       body: { last_requested_lens: 5 },
     },
     {
       method: "GET",
-      path: "/1.5/users/me",
+      path: "/1.6/users/me",
       status: 200,
       body: { last_requested_lens: 5 },
     },
     {
       method: "GET",
-      path: /\/1\.5\/lenses\/5\/leads\/wishlist/,
+      path: /\/1\.6\/lenses\/5\/leads\/wishlist/,
       status: 200,
       body: { items: wishlistItems, computing_wishlist: false, computing_scoring: false },
     },
@@ -181,7 +181,7 @@ describe("leadbay_tour_plan — map_locations shaping (#3779)", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search/,
+        path: /\/1\.6\/geo\/search/,
         status: 200,
         body: {
           results: [
@@ -193,11 +193,11 @@ describe("leadbay_tour_plan — map_locations shaping (#3779)", () => {
         },
       },
       // pullLeads still runs in parallel; mock its flow so allSettled resolves.
-      { method: "GET", path: "/1.5/users/me", status: 200, body: { last_requested_lens: 5 } },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: { last_requested_lens: 5 } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: { last_requested_lens: 5 } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: { last_requested_lens: 5 } },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/5\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/5\/leads\/wishlist/,
         status: 200,
         body: { items: [], computing_wishlist: false, computing_scoring: false },
       },

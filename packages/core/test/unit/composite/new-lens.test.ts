@@ -32,12 +32,12 @@ describe("leadbay_new_lens", () => {
   it("happy path — creates the lens then applies the resolved sector", async () => {
     mockHttp([
       // resolveSectors → resolveMe (lang) + /sectors/all
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
       // create
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 555, name: "Joinery", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 555, name: "Joinery", user_id: "u-1" } },
       // apply filter
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 200, body: {} },
     ]);
 
     const result: any = await newLens.execute(newClient(), {
@@ -51,12 +51,12 @@ describe("leadbay_new_lens", () => {
     expect(result.lens).toEqual({ id: 555, name: "Joinery" });
     // The created lens id appears in the POSTed filter path.
     const filterPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/555/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/555/filter"
     );
     expect(filterPost).toBeDefined();
     // The clone POST carried base + name.
     const createPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     // base is coerced to a STRING — backend rejects numeric base (400).
     expect(JSON.parse(createPost!.body!)).toMatchObject({ base: "42", name: "Joinery" });
@@ -66,8 +66,8 @@ describe("leadbay_new_lens", () => {
     // "finance" overlaps two sectors equally → ambiguous, so we must bail
     // before POST /lenses (no half-built lens).
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: [
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: [
         { id: "10", name: "Finance corporate" },
         { id: "11", name: "Finance retail" },
       ] },
@@ -83,14 +83,14 @@ describe("leadbay_new_lens", () => {
     expect(result.sector_ambiguities[0].sector_text).toBe("finance");
     // Critically: no lens was created.
     expect(
-      getHttpRequests().some((r) => r.method === "POST" && r.path === "/1.5/lenses")
+      getHttpRequests().some((r) => r.method === "POST" && r.path === "/1.6/lenses")
     ).toBe(false);
   });
 
   it("no sectors — bare create, no filter POST", async () => {
     mockHttp([
       // resolveSectors with empty arrays returns early — no /sectors/all hit.
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 777, name: "Empty lens", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 777, name: "Empty lens", user_id: "u-1" } },
     ]);
 
     const result: any = await newLens.execute(newClient(), {
@@ -109,21 +109,21 @@ describe("leadbay_new_lens", () => {
 
   it("explicit base — clones from the given lens, not the default", async () => {
     mockHttp([
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 888, name: "From 123", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 888, name: "From 123", user_id: "u-1" } },
     ]);
 
     await newLens.execute(newClient(), { name: "From 123", base: 123, confirm: true });
 
     const createPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     expect(JSON.parse(createPost!.body!)).toMatchObject({ base: "123" });
   });
 
   it("preview — without confirm, returns the plan and creates NOTHING", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
       // No POST mocks — if the tool tried to create, the harness would throw.
     ]);
 

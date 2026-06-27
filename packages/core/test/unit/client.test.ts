@@ -50,7 +50,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
   it.each(cases)(
     "HTTP %i → error code %s",
     async (status, expectedCode, body) => {
-      mockHttp([{ method: "GET", path: "/1.5/lenses", status, body }]);
+      mockHttp([{ method: "GET", path: "/1.6/lenses", status, body }]);
       const client = new LeadbayClient(BASE, "u.test-token");
       await expect(client.request("GET", "/lenses")).rejects.toMatchObject({
         error: true,
@@ -61,7 +61,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
 
   it("quota_exceeded body with non-429 status still maps to QUOTA_EXCEEDED", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/x", status: 400, body: { error: "quota_exceeded" } },
+      { method: "GET", path: "/1.6/x", status: 400, body: { error: "quota_exceeded" } },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await expect(client.request("GET", "/x")).rejects.toMatchObject({
@@ -71,7 +71,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
 
   it("error envelope carries _meta with region + endpoint", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 404, body: { message: "no" } },
+      { method: "GET", path: "/1.6/lenses", status: 404, body: { message: "no" } },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token", "us");
     try {
@@ -85,7 +85,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
   });
 
   it("status 204 → returns null (no JSON parse attempted)", async () => {
-    mockHttp([{ method: "POST", path: "/1.5/leads/x/web_fetch", status: 204 }]);
+    mockHttp([{ method: "POST", path: "/1.6/leads/x/web_fetch", status: 204 }]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await expect(client.request("POST", "/leads/x/web_fetch")).resolves.toBeNull();
   });
@@ -94,7 +94,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "user-1", email: "a@b.com", organization: { id: "org-1", name: "X" } },
       },
@@ -119,7 +119,7 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
       code: "NOT_AUTHENTICATED",
     });
 
-    mockHttp([{ method: "POST", path: "/1.5/x", status: 401, body: {} }]);
+    mockHttp([{ method: "POST", path: "/1.6/x", status: 401, body: {} }]);
     const client2 = new LeadbayClient(BASE, "u.test-token");
     await expect(client2.requestVoid("POST", "/x")).rejects.toMatchObject({
       code: "AUTH_EXPIRED",
@@ -128,8 +128,8 @@ describe("LeadbayClient.request — HTTP status → error code mapping", () => {
 
   it("Content-Type is set only when a body is provided", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/a", status: 200, body: {} },
-      { method: "POST", path: "/1.5/b", status: 200, body: {} },
+      { method: "GET", path: "/1.6/a", status: 200, body: {} },
+      { method: "POST", path: "/1.6/b", status: 200, body: {} },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await client.request("GET", "/a");
@@ -146,7 +146,7 @@ describe("LeadbayClient.requestRawBinary", () => {
     const { requests } = mockHttp([
       {
         method: "POST",
-        path: "/1.5/imports?file_name=x.csv",
+        path: "/1.6/imports?file_name=x.csv",
         status: 200,
         body: { id: "imp-1" },
       },
@@ -180,7 +180,7 @@ describe("LeadbayClient.requestRawBinary", () => {
     [404, "NOT_FOUND"],
   ])("HTTP %i → %s (mirrors request())", async (status, expected) => {
     mockHttp([
-      { method: "POST", path: "/1.5/imports?file_name=x", status, body: {} },
+      { method: "POST", path: "/1.6/imports?file_name=x", status, body: {} },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await expect(
@@ -197,7 +197,7 @@ describe("LeadbayClient.requestRawBinary", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/imports?file_name=x",
+        path: "/1.6/imports?file_name=x",
         status: 200,
         body: { id: "imp-1" },
       },
@@ -216,7 +216,7 @@ describe("LeadbayClient.resolveDefaultLens", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u", email: "a@b.com",
@@ -233,7 +233,7 @@ describe("LeadbayClient.resolveDefaultLens", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u", email: "a@b.com",
@@ -243,7 +243,7 @@ describe("LeadbayClient.resolveDefaultLens", () => {
       },
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: [
           { id: 1, name: "A", is_last_active: false, is_default: true },
@@ -259,14 +259,14 @@ describe("LeadbayClient.resolveDefaultLens", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u", organization: { id: "org-1", name: "X" },
           last_requested_lens: null,
         },
       },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [] },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [] },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await expect(client.resolveDefaultLens()).rejects.toMatchObject({
@@ -285,7 +285,7 @@ describe("LeadbayClient.resolveMe — 60s TTL + invalidateMe", () => {
 
   it("caches within 60s TTL", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBody },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBody },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await client.resolveMe();
@@ -295,8 +295,8 @@ describe("LeadbayClient.resolveMe — 60s TTL + invalidateMe", () => {
 
   it("invalidateMe() forces next call to re-fetch", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBody },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: { ...meBody, last_requested_lens: 99 } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBody },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: { ...meBody, last_requested_lens: 99 } },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     const first = await client.resolveMe();
@@ -311,8 +311,8 @@ describe("LeadbayClient.resolveMe — 60s TTL + invalidateMe", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-20T00:00:00Z"));
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBody },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBody },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBody },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBody },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await client.resolveMe();
@@ -323,7 +323,7 @@ describe("LeadbayClient.resolveMe — 60s TTL + invalidateMe", () => {
 
   it("resolveOrgId() now flows through resolveMe cache", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBody },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBody },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await expect(client.resolveOrgId()).resolves.toBe("org-1");
@@ -343,7 +343,7 @@ describe("Granular write tools invalidate /me cache", () => {
       // resolveOrgId pulls /me first
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -354,13 +354,13 @@ describe("Granular write tools invalidate /me cache", () => {
       // Then the POST /user_prompt
       {
         method: "POST",
-        path: "/1.5/organizations/org-1/user_prompt",
+        path: "/1.6/organizations/org-1/user_prompt",
         status: 204,
       },
       // Subsequent resolveMe MUST hit the network again — this script catches the regression.
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -374,7 +374,7 @@ describe("Granular write tools invalidate /me cache", () => {
     const me = await client.resolveMe();
     expect(me.organization.computing_intelligence).toBe(true);
     // Two /me requests = cache was correctly invalidated.
-    const meReqs = requests.filter((r) => r.path === "/1.5/users/me");
+    const meReqs = requests.filter((r) => r.path === "/1.6/users/me");
     expect(meReqs.length).toBe(2);
   });
 
@@ -383,14 +383,14 @@ describe("Granular write tools invalidate /me cache", () => {
     const { requests } = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X", computing_intelligence: false } },
       },
-      { method: "DELETE", path: "/1.5/organizations/org-1/user_prompt", status: 204 },
+      { method: "DELETE", path: "/1.6/organizations/org-1/user_prompt", status: 204 },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X", computing_intelligence: true } },
       },
@@ -398,7 +398,7 @@ describe("Granular write tools invalidate /me cache", () => {
     const client = new LeadbayClient(BASE, "u.test-token");
     await clearUserPrompt.execute(client, {});
     await client.resolveMe();
-    expect(requests.filter((r) => r.path === "/1.5/users/me").length).toBe(2);
+    expect(requests.filter((r) => r.path === "/1.6/users/me").length).toBe(2);
   });
 
   it("pickClarification invalidates /me cache", async () => {
@@ -406,14 +406,14 @@ describe("Granular write tools invalidate /me cache", () => {
     const { requests } = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X" } },
       },
-      { method: "POST", path: "/1.5/organizations/org-1/pick_clarification", status: 204 },
+      { method: "POST", path: "/1.6/organizations/org-1/pick_clarification", status: 204 },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X" } },
       },
@@ -421,7 +421,7 @@ describe("Granular write tools invalidate /me cache", () => {
     const client = new LeadbayClient(BASE, "u.test-token");
     await pickClarification.execute(client, { option_id: "opt-1" });
     await client.resolveMe();
-    expect(requests.filter((r) => r.path === "/1.5/users/me").length).toBe(2);
+    expect(requests.filter((r) => r.path === "/1.6/users/me").length).toBe(2);
   });
 
   it("dismissClarification invalidates /me cache", async () => {
@@ -429,14 +429,14 @@ describe("Granular write tools invalidate /me cache", () => {
     const { requests } = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X" } },
       },
-      { method: "POST", path: "/1.5/organizations/org-1/dismiss_clarification", status: 204 },
+      { method: "POST", path: "/1.6/organizations/org-1/dismiss_clarification", status: 204 },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", name: "X" } },
       },
@@ -444,7 +444,7 @@ describe("Granular write tools invalidate /me cache", () => {
     const client = new LeadbayClient(BASE, "u.test-token");
     await dismissClarification.execute(client, {});
     await client.resolveMe();
-    expect(requests.filter((r) => r.path === "/1.5/users/me").length).toBe(2);
+    expect(requests.filter((r) => r.path === "/1.6/users/me").length).toBe(2);
   });
 });
 
@@ -457,19 +457,19 @@ describe("user_prompt POST body shape (contract pin — #3508)", () => {
     const { requests } = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
           organization: { id: "org-1", name: "X", computing_intelligence: false },
         },
       },
-      { method: "POST", path: "/1.5/organizations/org-1/user_prompt", status: 204 },
+      { method: "POST", path: "/1.6/organizations/org-1/user_prompt", status: 204 },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     await setUserPrompt.execute(client, { prompt: "focus on hospitals" });
     const post = requests.find(
-      (r) => r.method === "POST" && r.path === "/1.5/organizations/org-1/user_prompt"
+      (r) => r.method === "POST" && r.path === "/1.6/organizations/org-1/user_prompt"
     );
     expect(post?.body).toBeDefined();
     const parsed = JSON.parse(post!.body!);
@@ -482,7 +482,7 @@ describe("user_prompt POST body shape (contract pin — #3508)", () => {
     const { requests } = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -490,7 +490,7 @@ describe("user_prompt POST body shape (contract pin — #3508)", () => {
           organization: { id: "org-1", name: "X", computing_intelligence: false },
         },
       },
-      { method: "POST", path: "/1.5/organizations/org-1/user_prompt", status: 204 },
+      { method: "POST", path: "/1.6/organizations/org-1/user_prompt", status: 204 },
     ]);
     const client = new LeadbayClient(BASE, "u.test-token");
     // clarification_poll_attempts: 0 skips the poll loop entirely.
@@ -499,7 +499,7 @@ describe("user_prompt POST body shape (contract pin — #3508)", () => {
       clarification_poll_attempts: 0,
     });
     const post = requests.find(
-      (r) => r.method === "POST" && r.path === "/1.5/organizations/org-1/user_prompt"
+      (r) => r.method === "POST" && r.path === "/1.6/organizations/org-1/user_prompt"
     );
     expect(post?.body).toBeDefined();
     const parsed = JSON.parse(post!.body!);
@@ -512,7 +512,7 @@ describe("user_prompt POST body shape (contract pin — #3508)", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -559,13 +559,13 @@ describe("LeadbayClient.setBaseUrl + region getter", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-us", name: "X" }, last_requested_lens: 10 },
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u2", organization: { id: "org-fr", name: "Y" }, last_requested_lens: 20 },
       },

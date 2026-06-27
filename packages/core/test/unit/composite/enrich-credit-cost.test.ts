@@ -60,7 +60,7 @@ describe("readCreditsRemaining", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", billing: { ai_credits: 42 } } },
       },
@@ -72,7 +72,7 @@ describe("readCreditsRemaining", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1" } },
       },
@@ -82,7 +82,7 @@ describe("readCreditsRemaining", () => {
 
   it("returns null when /users/me fails — advisory, never throws", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 500, body: { message: "boom" } },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: { message: "boom" } },
     ]);
     expect(await readCreditsRemaining(newClient())).toBeNull();
   });
@@ -131,7 +131,7 @@ describe("bulk_enrich_status — credits_remaining only", () => {
       // forced post-spend balance read (all_done → resolveMe(true))
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", billing: { ai_credits: 95 } } },
       },
@@ -183,7 +183,7 @@ describe("bulk_enrich_status — credits_remaining only", () => {
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", billing: { ai_credits: 50 } } },
       },
@@ -211,24 +211,24 @@ describe("enrich_titles BEFORE — balance + volume, no fabricated cost", () => 
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       // credits_remaining read (BEFORE — cached resolveMe is fine)
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", billing: { ai_credits: 50 } } },
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
 
     const res: any = await enrichTitles.execute(
@@ -251,23 +251,23 @@ describe("enrich_titles BEFORE — balance + volume, no fabricated cost", () => 
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1", billing: { ai_credits: 12 } } },
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
 
     const res: any = await enrichTitles.execute(
@@ -287,23 +287,23 @@ describe("enrich_titles BEFORE — balance + volume, no fabricated cost", () => 
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "org-1" } }, // no billing
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
 
     const res: any = await enrichTitles.execute(

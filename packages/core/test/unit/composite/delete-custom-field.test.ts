@@ -12,7 +12,7 @@ beforeEach(() => resetHttpMock());
 
 const catalog = (rows: unknown[]) => ({
   method: "GET" as const,
-  path: "/1.5/crm/custom_fields",
+  path: "/1.6/crm/custom_fields",
   status: 200,
   body: rows,
 });
@@ -32,7 +32,7 @@ describe("leadbay_delete_custom_field", () => {
   it("with confirm — deletes and reports the removed field", async () => {
     mockHttp([
       catalog([{ id: "12", name: "Legacy Source", type: "TEXT" }]),
-      { method: "DELETE", path: /\/1\.5\/crm\/custom_fields\/12$/, status: 204, body: null },
+      { method: "DELETE", path: /\/1\.6\/crm\/custom_fields\/12$/, status: 204, body: null },
     ]);
 
     const res: any = await deleteCustomField.execute(newClient(), { id: "12", confirm: true });

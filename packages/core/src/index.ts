@@ -6,6 +6,8 @@ export {
   getMockJournal,
   clearMockJournal,
   REGIONS,
+  API_VERSION,
+  API_PREFIX,
 } from "./client.js";
 export type { CreateClientConfig, TasteProfileResult } from "./client.js";
 export * from "./types.js";

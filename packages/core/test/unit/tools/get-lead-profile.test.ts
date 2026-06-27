@@ -54,10 +54,10 @@ function client() {
 describe("leadbay_get_lead_profile — success path", () => {
   it("returns all sections when every sub-request succeeds", async () => {
     mockHttp([
-      { method: "GET", path: `/1.5/lenses/${LENS}/leads/${LEAD}`, status: 200, body: minimalLead },
+      { method: "GET", path: `/1.6/lenses/${LENS}/leads/${LEAD}`, status: 200, body: minimalLead },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/ai_agent_responses`,
+        path: `/1.6/leads/${LEAD}/ai_agent_responses`,
         status: 200,
         body: [
           {
@@ -71,7 +71,7 @@ describe("leadbay_get_lead_profile — success path", () => {
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/contacts?IncludeEnriched=true`,
         status: 200,
         body: [
           {
@@ -87,7 +87,7 @@ describe("leadbay_get_lead_profile — success path", () => {
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
         status: 200,
         body: [
           {
@@ -103,7 +103,7 @@ describe("leadbay_get_lead_profile — success path", () => {
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/web_fetch`,
+        path: `/1.6/leads/${LEAD}/web_fetch`,
         status: 200,
         body: {
           content: { company_profile: "profile text" },
@@ -128,31 +128,31 @@ describe("leadbay_get_lead_profile — partial-result resilience", () => {
     return [
       {
         method: "GET",
-        path: `/1.5/lenses/${LENS}/leads/${LEAD}`,
+        path: `/1.6/lenses/${LENS}/leads/${LEAD}`,
         status: leadStatus,
         body: leadBody,
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/ai_agent_responses`,
+        path: `/1.6/leads/${LEAD}/ai_agent_responses`,
         status: 200,
         body: [],
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/contacts?IncludeEnriched=true`,
         status: 200,
         body: [],
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
         status: 200,
         body: [],
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/web_fetch`,
+        path: `/1.6/leads/${LEAD}/web_fetch`,
         status: 200,
         body: { content: null, fetch_at: null },
       },
@@ -170,7 +170,7 @@ describe("leadbay_get_lead_profile — partial-result resilience", () => {
     const scripts = baseScripts();
     scripts[1] = {
       method: "GET",
-      path: `/1.5/leads/${LEAD}/ai_agent_responses`,
+      path: `/1.6/leads/${LEAD}/ai_agent_responses`,
       status: 500,
       body: {} as any,
     };
@@ -187,13 +187,13 @@ describe("leadbay_get_lead_profile — partial-result resilience", () => {
     const scripts = baseScripts();
     scripts[2] = {
       method: "GET",
-      path: `/1.5/leads/${LEAD}/contacts?IncludeEnriched=true`,
+      path: `/1.6/leads/${LEAD}/contacts?IncludeEnriched=true`,
       status: 500,
       body: {} as any,
     };
     scripts[3] = {
       method: "GET",
-      path: `/1.5/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
+      path: `/1.6/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
       status: 500,
       body: {} as any,
     };
@@ -209,7 +209,7 @@ describe("leadbay_get_lead_profile — partial-result resilience", () => {
     const scripts = baseScripts();
     scripts[4] = {
       method: "GET",
-      path: `/1.5/leads/${LEAD}/web_fetch`,
+      path: `/1.6/leads/${LEAD}/web_fetch`,
       status: 500,
       body: {} as any,
     };
@@ -225,23 +225,23 @@ describe("leadbay_get_lead_profile — partial-result resilience", () => {
 describe("leadbay_get_lead_profile — contact source tagging", () => {
   it("tags org contacts as 'org' and paid contacts as 'paid'", async () => {
     mockHttp([
-      { method: "GET", path: `/1.5/lenses/${LENS}/leads/${LEAD}`, status: 200, body: minimalLead },
-      { method: "GET", path: `/1.5/leads/${LEAD}/ai_agent_responses`, status: 200, body: [] },
+      { method: "GET", path: `/1.6/lenses/${LENS}/leads/${LEAD}`, status: 200, body: minimalLead },
+      { method: "GET", path: `/1.6/leads/${LEAD}/ai_agent_responses`, status: 200, body: [] },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/contacts?IncludeEnriched=true`,
         status: 200,
         body: [{ id: "org1", first_name: "A", last_name: "B", recommended: false }],
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
+        path: `/1.6/leads/${LEAD}/enrich/contacts?IncludeEnriched=true`,
         status: 200,
         body: [{ id: "paid1", first_name: "C", last_name: "D", recommended: true }],
       },
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/web_fetch`,
+        path: `/1.6/leads/${LEAD}/web_fetch`,
         status: 200,
         body: { content: null, fetch_at: null },
       },

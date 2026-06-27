@@ -228,7 +228,7 @@ WHEN NOT TO USE: as a pre-flight gate before bulk ops — operations themselves 
 // endregion: leadbay_account_status
 
 // region: leadbay_acknowledge_notification
-export const leadbay_acknowledge_notification: string = `Acknowledge a Leadbay notification — i.e. tell the MCP and the backend "I've seen this and acted on it." Wraps \`POST /1.5/notifications/{id}/seen\` (default) or \`/archive\` (when \`archive:true\`) and drops the entry from the local inbox so subsequent \`_meta.notifications\` payloads stop carrying it.
+export const leadbay_acknowledge_notification: string = `Acknowledge a Leadbay notification — i.e. tell the MCP and the backend "I've seen this and acted on it." Wraps \`POST /1.6/notifications/{id}/seen\` (default) or \`/archive\` (when \`archive:true\`) and drops the entry from the local inbox so subsequent \`_meta.notifications\` payloads stop carrying it.
 
 **When to call.** After you read an entry from \`_meta.notifications\` or \`account_status.notifications\` and have revised whatever prior output the just-finished background work might have made stale (outreach drafts, lead lists, "available leads" claims, followup plans). Mark-seen tells the human team's pipeline you handled this and prevents the notification from re-surfacing on every subsequent tool response.
 
@@ -898,7 +898,7 @@ This tool MUTATES state. The caller (agent or human-in-the-loop) is responsible 
 // endregion: leadbay_create_lens_draft
 
 // region: leadbay_create_topup_link
-export const leadbay_create_topup_link: string = `Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps \`POST /1.5/stripe/topup_checkout\` → \`{url}\`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
+export const leadbay_create_topup_link: string = `Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps \`POST /1.6/stripe/topup_checkout\` → \`{url}\`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
 
 **When a quota window is hit, offer top-up as the FIRST option.** A top-up clears the throttle immediately (no need to wait for the daily/weekly/monthly window reset). The flow:
 
@@ -2202,7 +2202,7 @@ invent a tool that doesn't exist.
 // endregion: leadbay_new_lens
 
 // region: leadbay_open_billing_portal
-export const leadbay_open_billing_portal: string = `Generate a one-shot Stripe customer-portal URL. Wraps \`GET /1.5/stripe/portal\` → \`{url}\`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
+export const leadbay_open_billing_portal: string = `Generate a one-shot Stripe customer-portal URL. Wraps \`GET /1.6/stripe/portal\` → \`{url}\`. Returns a fresh Stripe-hosted URL the user can open to manage their existing Leadbay subscription: change plan tier, swap payment method, view invoices. The agent does NOT make subscription changes itself — it surfaces the URL and lets the user act.
 
 Sibling of \`leadbay_create_topup_link\`. Use cases differ:
 
@@ -2498,7 +2498,7 @@ table. Detail + status priority below.
 
 Pull KNOWN leads from the user's Monitor view — the re-engagement entry point. Use when the user asks "what should I follow up on", "leads I haven't contacted", "leads in [city]", "before my trip", or any phrasing implying pre-existing pipeline context. For NEW leads from Discover, use \`leadbay_pull_leads\`.
 
-Backend: wraps \`GET /1.5/monitor?personal=&liked=&filtered=&count=&page=\` plus, when \`set_filter\` is supplied, a preceding \`POST /1.5/monitor/filter\`. The Monitor filter is a single \`FilterItem\` per user — refreshing restores it.
+Backend: wraps \`GET /1.6/monitor?personal=&liked=&filtered=&count=&page=\` plus, when \`set_filter\` is supplied, a preceding \`POST /1.6/monitor/filter\`. The Monitor filter is a single \`FilterItem\` per user — refreshing restores it.
 
 **Filter mechanism — store-then-apply.** Pass \`set_filter: { criteria: FilterCriterion[] }\` to overwrite the server-stored filter, then the composite re-fetches with \`filtered:true\`. \`FilterCriterion\` is the backend's \`anyOf\` over 10 typed criteria: \`size\`, \`keywords\`, \`sector_ids\`, \`location_ids\`, \`custom_field\`(\`_comparison\`), \`yc\`, \`liked\`, \`last_action\` (MonitorActionType enum), \`last_action_date\` (with \`last_days\`).
 

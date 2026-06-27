@@ -41,8 +41,8 @@ describe("hosted MCP OAuth challenge", () => {
   it("POST /mcp with an expired token → 401 invalid_token", async () => {
     // Auto-probe hits both regions; both 401 AUTH_EXPIRED → expired.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
     ]);
     const res = await app.fetch(initRequest("https://mcp.test/mcp", { authorization: "Bearer stale" }));
     expect(res.status).toBe(401);
@@ -54,8 +54,8 @@ describe("hosted MCP OAuth challenge", () => {
   it("transient probe failure does NOT force re-auth (no 401)", async () => {
     // Both regions return a non-auth error → probe_failed → proceed (not a 401).
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
-      { method: "GET", path: "/1.5/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
     ]);
     const res = await app.fetch(initRequest("https://mcp.test/mcp", { authorization: "Bearer tok" }));
     expect(res.status).not.toBe(401);

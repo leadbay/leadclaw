@@ -31,8 +31,8 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_my_lenses", () => {
   it("list — marks the active lens from /me.last_requested_lens (string ids)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {});
@@ -47,16 +47,16 @@ describe("leadbay_my_lenses", () => {
     // The bug: switchToLensId:99 (number) vs lens id "99" (string) →
     // "99" === 99 is false → falsely "not_found". Must resolve now.
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
-      { method: "POST", path: "/1.5/lenses/99/update_last_requested", status: 200, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
+      { method: "POST", path: "/1.6/lenses/99/update_last_requested", status: 200, body: {} },
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: [{ ...LENSES[0], is_last_active: false }, { ...LENSES[1], is_last_active: true }],
       },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("99") },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("99") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), { switchToLensId: 99 });
@@ -67,23 +67,23 @@ describe("leadbay_my_lenses", () => {
     expect(result.lenses.find((l: any) => l.id === "99").is_active).toBe(true);
     expect(
       getHttpRequests().some(
-        (r) => r.method === "POST" && r.path === "/1.5/lenses/99/update_last_requested"
+        (r) => r.method === "POST" && r.path === "/1.6/lenses/99/update_last_requested"
       )
     ).toBe(true);
   });
 
   it("edit — name + description in one POST, returns the refreshed list", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
-      { method: "POST", path: "/1.5/lenses/99", status: 200, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
+      { method: "POST", path: "/1.6/lenses/99", status: 200, body: {} },
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: [LENSES[0], { ...LENSES[1], name: "Joinery Pro", description: "Woodworking <1000" }],
       },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {
@@ -98,32 +98,32 @@ describe("leadbay_my_lenses", () => {
     expect(row.name).toBe("Joinery Pro");
     expect(row.description).toBe("Woodworking <1000");
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/99"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/99"
     );
     expect(JSON.parse(post!.body!)).toEqual({ name: "Joinery Pro", description: "Woodworking <1000" });
   });
 
   it("edit — description only (no rename) sends just description", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
-      { method: "POST", path: "/1.5/lenses/99", status: 200, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
+      { method: "POST", path: "/1.6/lenses/99", status: 200, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     await myLenses.execute(newClient(), { editLensId: "99", newDescription: "Just a note" });
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/99"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/99"
     );
     expect(JSON.parse(post!.body!)).toEqual({ description: "Just a note" });
   });
 
   it("edit — nothing to change → not_found, no POST", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), { editLensId: "99" });
@@ -134,8 +134,8 @@ describe("leadbay_my_lenses", () => {
 
   it("switch — unknown id returns not_found and does NOT POST", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), { switchToLensId: "777" });
@@ -149,8 +149,8 @@ describe("leadbay_my_lenses", () => {
 
   it("delete — without confirm returns delete_preview, removes NOTHING", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
       // No DELETE mock — if it tried to delete, the harness would throw.
     ]);
 
@@ -163,11 +163,11 @@ describe("leadbay_my_lenses", () => {
 
   it("delete — with confirm DELETEs and returns the refreshed list", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
-      { method: "DELETE", path: "/1.5/lenses/99", status: 204, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [LENSES[0]] },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
+      { method: "DELETE", path: "/1.6/lenses/99", status: 204, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [LENSES[0]] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {
@@ -179,14 +179,14 @@ describe("leadbay_my_lenses", () => {
     expect(result.deleted).toBe(true);
     expect(result.lenses.find((l: any) => l.id === "99")).toBeUndefined();
     expect(
-      getHttpRequests().some((r) => r.method === "DELETE" && r.path === "/1.5/lenses/99")
+      getHttpRequests().some((r) => r.method === "DELETE" && r.path === "/1.6/lenses/99")
     ).toBe(true);
   });
 
   it("delete — default lens is refused (cannot_delete_default), no DELETE", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME("4242") },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME("4242") },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {
@@ -200,8 +200,8 @@ describe("leadbay_my_lenses", () => {
 
   it("list — empty lens set does not crash", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [] },
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME(null) },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME(null) },
     ]);
 
     const result: any = await myLenses.execute(newClient(), {});

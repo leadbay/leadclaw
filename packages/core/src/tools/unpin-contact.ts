@@ -16,7 +16,7 @@ interface UnpinContactResult {
 /**
  * Unpin a contact — the inverse of leadbay_pin_contact. Clears the
  * priority/favourite flag; the contact stays on the company.
- * Backend: `POST /1.5/contacts/{contactId}/unpin` → 204.
+ * Backend: `POST /1.6/contacts/{contactId}/unpin` → 204.
  */
 export const unpinContact: Tool<UnpinContactParams, UnpinContactResult> = {
   name: "leadbay_unpin_contact",

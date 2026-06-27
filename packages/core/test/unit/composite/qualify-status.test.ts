@@ -113,7 +113,7 @@ describe("leadbay_qualify_status — happy path", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/web_fetch",
+        path: "/1.6/leads/lead-1/web_fetch",
         status: 200,
         body: {
           lead_id: "lead-1",
@@ -124,7 +124,7 @@ describe("leadbay_qualify_status — happy path", () => {
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [
           {
@@ -166,8 +166,8 @@ describe("leadbay_qualify_status — happy path", () => {
     await tracker.markLaunched(record.bulk_id);
 
     mockHttp([
-      { method: "GET", path: "/1.5/leads/lead-gone/web_fetch", status: 404 },
-      { method: "GET", path: "/1.5/leads/lead-gone/ai_agent_responses", status: 404 },
+      { method: "GET", path: "/1.6/leads/lead-gone/web_fetch", status: 404 },
+      { method: "GET", path: "/1.6/leads/lead-gone/ai_agent_responses", status: 404 },
     ]);
 
     const out = await qualifyStatus.execute(
@@ -193,7 +193,7 @@ describe("leadbay_qualify_status — happy path", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/web_fetch",
+        path: "/1.6/leads/lead-1/web_fetch",
         status: 200,
         body: {
           lead_id: "lead-1",
@@ -204,7 +204,7 @@ describe("leadbay_qualify_status — happy path", () => {
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [],
       },

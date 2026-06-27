@@ -41,15 +41,15 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_adjust_audience — lensName targeting", () => {
   it("resolves a unique lensName and applies to THAT lens, not the active one", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       // resolveLensByName — "Joinery" uniquely substring-matches id 99 over 100? No:
       // both contain "joinery". Use an exact-ish unique query instead.
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
       // target is lens 99 (NOT the active 4242)
-      { method: "GET", path: "/1.5/lenses/99", status: 200, body: LENSES[1] },
-      { method: "GET", path: "/1.5/lenses/99/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/99/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/lenses/99", status: 200, body: LENSES[1] },
+      { method: "GET", path: "/1.6/lenses/99/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/99/filter", status: 200, body: {} },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -61,15 +61,15 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
     expect(result.lens_used.id).toBe(99);
     // The active lens (4242) was never written.
     const wrote4242 = getHttpRequests().some(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     expect(wrote4242).toBe(false);
   });
 
   it("unknown lensName → lens_not_found with the lens list, no filter POST", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -85,8 +85,8 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
 
   it("ambiguous lensName (matches >1) → ambiguous_lens with candidates, no POST", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: LENSES },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: LENSES },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -101,12 +101,12 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
 
   it("explicit lensId wins over lensName (lensName ignored)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       // lensId short-circuits name resolution → no GET /lenses for name lookup.
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: LENSES[0] },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: LENSES[0] },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -125,15 +125,15 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
     // update_last_requested. (P2 regression)
     const DEFAULT_LENS = { id: 4242, name: "Default audience", is_default: true, default: true };
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [DEFAULT_LENS] },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: DEFAULT_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [DEFAULT_LENS] },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: DEFAULT_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
       // clone
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: 5000, name: "Default audience", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: 5000, name: "Default audience", user_id: "u-1" } },
       // filter applied to the clone
-      { method: "POST", path: "/1.5/lenses/5000/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/5000/filter", status: 200, body: {} },
       // NOTE: deliberately NO update_last_requested mock — if the tool tried it,
       // the harness would throw (no script matched).
     ]);
@@ -153,7 +153,7 @@ describe("leadbay_adjust_audience — lensName targeting", () => {
     // (same backend contract as new_lens). Regression guard for the
     // default-lens clone path, which no other test's body assertion covered.
     const clonePost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     expect(JSON.parse(clonePost!.body!).base).toBe("4242");
   });

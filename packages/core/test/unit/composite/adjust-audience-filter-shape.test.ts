@@ -36,17 +36,17 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_adjust_audience — filter write shape", () => {
   it("POSTs the unwrapped {items:[...]} body, not the wrapped envelope", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(newClient(), { sectors: ["Fintech"] });
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const body = JSON.parse(post!.body!);
     expect(body).toHaveProperty("items");
@@ -59,16 +59,16 @@ describe("leadbay_adjust_audience — filter write shape", () => {
 
   it("size 'under 1000' (max only) is written with min defaulted to 0", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(newClient(), { sizes: [{ max: 1000 }] });
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const body = JSON.parse(post!.body!);
     const sizeCrit = body.items[0].criteria.find((c: any) => c.type === "size");

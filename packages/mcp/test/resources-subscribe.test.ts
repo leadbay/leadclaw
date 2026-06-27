@@ -81,7 +81,7 @@ describe("resources/subscribe + completion (iter28)", () => {
       // resolveDefaultLens → /me
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -91,7 +91,7 @@ describe("resources/subscribe + completion (iter28)", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [

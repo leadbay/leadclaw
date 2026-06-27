@@ -48,20 +48,20 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_new_lens — string-base regression (sector-creation crash class)", () => {
   it("POST /lenses sends `base` as a STRING and creates the lens (no deserialization error)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
-        path: "/1.5/sectors/all?lang=en&includeInvisible=false",
+        path: "/1.6/sectors/all?lang=en&includeInvisible=false",
         status: 200,
         body: SECTORS,
       },
       {
         method: "POST",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: { id: 555, name: "Joinery", user_id: "u-1" },
       },
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 200, body: {} },
     ]);
 
     const result: any = await newLens.execute(newClient(), {
@@ -76,7 +76,7 @@ describe("leadbay_new_lens — string-base regression (sector-creation crash cla
     expect(result.lens).toEqual({ id: 555, name: "Joinery" });
 
     const createPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses"
     );
     expect(createPost).toBeDefined();
     const createBody = JSON.parse(createPost!.body!);
@@ -88,20 +88,20 @@ describe("leadbay_new_lens — string-base regression (sector-creation crash cla
 
   it("POST /lenses/:id/filter sends the UNWRAPPED {items:[...]} body, not the envelope", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
-        path: "/1.5/sectors/all?lang=en&includeInvisible=false",
+        path: "/1.6/sectors/all?lang=en&includeInvisible=false",
         status: 200,
         body: SECTORS,
       },
       {
         method: "POST",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: { id: 555, name: "Joinery", user_id: "u-1" },
       },
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 200, body: {} },
     ]);
 
     await newLens.execute(newClient(), {
@@ -112,7 +112,7 @@ describe("leadbay_new_lens — string-base regression (sector-creation crash cla
     });
 
     const filterPost = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/555/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/555/filter"
     );
     expect(filterPost).toBeDefined();
     const filterBody = JSON.parse(filterPost!.body!);
@@ -127,20 +127,20 @@ describe("leadbay_new_lens — string-base regression (sector-creation crash cla
 
   it("a null-name taxonomy row does not crash lens creation", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       {
         method: "GET",
-        path: "/1.5/sectors/all?lang=en&includeInvisible=false",
+        path: "/1.6/sectors/all?lang=en&includeInvisible=false",
         status: 200,
         body: SECTORS, // contains {id:"2", name:null}
       },
       {
         method: "POST",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: { id: 555, name: "Joinery", user_id: "u-1" },
       },
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 200, body: {} },
     ]);
 
     // Pre-fix this threw a TypeError while scanning the null-name row.

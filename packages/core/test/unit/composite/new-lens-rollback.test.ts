@@ -28,13 +28,13 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_new_lens — rollback on filter failure", () => {
   it("filter write fails → DELETEs the new lens and rethrows", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: "555", name: "Joinery", user_id: "u-1" } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: "555", name: "Joinery", user_id: "u-1" } },
       // filter write fails
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 500, body: { error: "boom" } },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 500, body: { error: "boom" } },
       // rollback delete succeeds
-      { method: "DELETE", path: "/1.5/lenses/555", status: 204, body: {} },
+      { method: "DELETE", path: "/1.6/lenses/555", status: 204, body: {} },
     ]);
 
     await expect(
@@ -43,17 +43,17 @@ describe("leadbay_new_lens — rollback on filter failure", () => {
 
     // The orphan was cleaned up.
     expect(
-      getHttpRequests().some((r) => r.method === "DELETE" && r.path === "/1.5/lenses/555")
+      getHttpRequests().some((r) => r.method === "DELETE" && r.path === "/1.6/lenses/555")
     ).toBe(true);
   });
 
   it("filter write fails AND cleanup fails → returns orphan_created", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      { method: "POST", path: "/1.5/lenses", status: 200, body: { id: "555", name: "Joinery", user_id: "u-1" } },
-      { method: "POST", path: "/1.5/lenses/555/filter", status: 500, body: { error: "boom" } },
-      { method: "DELETE", path: "/1.5/lenses/555", status: 500, body: { error: "nope" } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      { method: "POST", path: "/1.6/lenses", status: 200, body: { id: "555", name: "Joinery", user_id: "u-1" } },
+      { method: "POST", path: "/1.6/lenses/555/filter", status: 500, body: { error: "boom" } },
+      { method: "DELETE", path: "/1.6/lenses/555", status: 500, body: { error: "nope" } },
     ]);
 
     const result: any = await newLens.execute(newClient(), {

@@ -21,11 +21,11 @@ function newClient() {
 beforeEach(() => resetHttpMock());
 
 describe("leadbay_list_locations", () => {
-  it("hits /1.5/geo/search?q= and returns the {results, parents} envelope", async () => {
+  it("hits /1.6/geo/search?q= and returns the {results, parents} envelope", async () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/geo/search?q=Paris",
+        path: "/1.6/geo/search?q=Paris",
         status: 200,
         body: {
           results: [
@@ -45,7 +45,7 @@ describe("leadbay_list_locations", () => {
 
     const reqs = getHttpRequests();
     expect(reqs).toHaveLength(1);
-    expect(reqs[0].path).toBe("/1.5/geo/search?q=Paris");
+    expect(reqs[0].path).toBe("/1.6/geo/search?q=Paris");
   });
 
   it("returns empty envelope without hitting the backend when q is empty", async () => {
@@ -59,7 +59,7 @@ describe("leadbay_list_locations", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=S%C3%A3o%20Paulo/,
+        path: /\/1\.6\/geo\/search\?q=S%C3%A3o%20Paulo/,
         status: 200,
         body: { results: [], parents: [] },
       },

@@ -31,7 +31,7 @@ describe("pull_followups city flow", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=Berlin/,
+        path: /\/1\.6\/geo\/search\?q=Berlin/,
         status: 200,
         body: {
           results: [
@@ -44,19 +44,19 @@ describe("pull_followups city flow", () => {
       },
       {
         method: "POST",
-        path: "/1.5/monitor/filter",
+        path: "/1.6/monitor/filter",
         status: 204,
         body: "",
       },
       {
         method: "GET",
-        path: "/1.5/monitor/filter",
+        path: "/1.6/monitor/filter",
         status: 200,
         body: { criteria: [{ type: "location_ids", is_excluded: false, locations: ["414522"] }] },
       },
       {
         method: "GET",
-        path: /\/1\.5\/monitor\?/,
+        path: /\/1\.6\/monitor\?/,
         status: 200,
         body: { items: [{ id: "lead-1", name: "Lead in Berlin" }] },
       },
@@ -68,7 +68,7 @@ describe("pull_followups city flow", () => {
     expect(result.leads).toHaveLength(1);
 
     const reqs = getHttpRequests();
-    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.5/monitor/filter");
+    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.6/monitor/filter");
     expect(filterPost).toBeDefined();
     const body = JSON.parse(filterPost!.body!);
     expect(body.criteria[0]).toEqual({
@@ -83,7 +83,7 @@ describe("pull_followups city flow", () => {
       {
         method: "GET",
         // Wide regex — match any q= value, so we don't miss due to URL encoding.
-        path: /\/1\.5\/geo\/search/,
+        path: /\/1\.6\/geo\/search/,
         status: 200,
         body: {
           // Multiple comparable matches — no clear winner.
@@ -104,7 +104,7 @@ describe("pull_followups city flow", () => {
     expect(result.location_ambiguities[0].matches.length).toBeGreaterThan(0);
 
     // /monitor must NOT have been called — agent picks an id first.
-    const monitorCall = reqs.find((r) => r.path.startsWith("/1.5/monitor?"));
+    const monitorCall = reqs.find((r) => r.path.startsWith("/1.6/monitor?"));
     expect(monitorCall).toBeUndefined();
   });
 
@@ -112,19 +112,19 @@ describe("pull_followups city flow", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/monitor/filter",
+        path: "/1.6/monitor/filter",
         status: 204,
         body: "",
       },
       {
         method: "GET",
-        path: "/1.5/monitor/filter",
+        path: "/1.6/monitor/filter",
         status: 200,
         body: { criteria: [{ type: "location_ids", is_excluded: false, locations: ["414522"] }] },
       },
       {
         method: "GET",
-        path: /\/1\.5\/monitor\?/,
+        path: /\/1\.6\/monitor\?/,
         status: 200,
         body: { items: [] },
       },
@@ -134,8 +134,8 @@ describe("pull_followups city flow", () => {
 
     const reqs = getHttpRequests();
     // No /geo/search call.
-    expect(reqs.find((r) => r.path.startsWith("/1.5/geo/search"))).toBeUndefined();
-    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.5/monitor/filter");
+    expect(reqs.find((r) => r.path.startsWith("/1.6/geo/search"))).toBeUndefined();
+    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.6/monitor/filter");
     const body = JSON.parse(filterPost!.body!);
     expect(body.criteria[0].locations).toEqual(["414522"]);
   });
@@ -144,16 +144,16 @@ describe("pull_followups city flow", () => {
     mockHttp([
       {
         method: "GET",
-        path: /\/1\.5\/geo\/search\?q=Paris/,
+        path: /\/1\.6\/geo\/search\?q=Paris/,
         status: 200,
         body: {
           results: [{ id: "416102", country: "US", level: 8, name: "Paris", parent_ids: [] }],
           parents: [],
         },
       },
-      { method: "POST", path: "/1.5/monitor/filter", status: 204, body: "" },
-      { method: "GET", path: "/1.5/monitor/filter", status: 200, body: { criteria: [] } },
-      { method: "GET", path: /\/1\.5\/monitor\?/, status: 200, body: { items: [] } },
+      { method: "POST", path: "/1.6/monitor/filter", status: 204, body: "" },
+      { method: "GET", path: "/1.6/monitor/filter", status: 200, body: { criteria: [] } },
+      { method: "GET", path: /\/1\.6\/monitor\?/, status: 200, body: { items: [] } },
     ]);
 
     await pullFollowups.execute(newClient(), {
@@ -164,7 +164,7 @@ describe("pull_followups city flow", () => {
     });
 
     const reqs = getHttpRequests();
-    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.5/monitor/filter");
+    const filterPost = reqs.find((r) => r.method === "POST" && r.path === "/1.6/monitor/filter");
     const body = JSON.parse(filterPost!.body!);
     const types = body.criteria.map((c: any) => c.type);
     expect(types).toContain("size");

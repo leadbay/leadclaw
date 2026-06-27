@@ -16,7 +16,7 @@ beforeEach(() => resetHttpMock());
 // with no second request.
 describe("LeadbayClient — 401 retry is GET-only (writes never re-execute)", () => {
   it("a POST that 401s is NOT retried — exactly one request, error surfaced", async () => {
-    mockHttp([{ method: "POST", path: "/1.5/leads/epilogue", status: 401, body: {} }]);
+    mockHttp([{ method: "POST", path: "/1.6/leads/epilogue", status: 401, body: {} }]);
     await expect(
       newClient().requestVoid("POST", "/leads/epilogue", { foo: "bar" })
     ).rejects.toMatchObject({ code: "AUTH_EXPIRED" });
@@ -25,7 +25,7 @@ describe("LeadbayClient — 401 retry is GET-only (writes never re-execute)", ()
   });
 
   it("a DELETE that 401s is NOT retried — exactly one request", async () => {
-    mockHttp([{ method: "DELETE", path: "/1.5/lenses/abc", status: 401, body: {} }]);
+    mockHttp([{ method: "DELETE", path: "/1.6/lenses/abc", status: 401, body: {} }]);
     await expect(
       newClient().requestVoid("DELETE", "/lenses/abc")
     ).rejects.toMatchObject({ code: "AUTH_EXPIRED" });
@@ -33,7 +33,7 @@ describe("LeadbayClient — 401 retry is GET-only (writes never re-execute)", ()
   });
 
   it("a GET that 401s IS retried — two requests (contrast case)", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/lenses", status: 401, body: {} }]);
+    mockHttp([{ method: "GET", path: "/1.6/lenses", status: 401, body: {} }]);
     await expect(newClient().request("GET", "/lenses")).rejects.toMatchObject({
       code: "AUTH_EXPIRED",
     });

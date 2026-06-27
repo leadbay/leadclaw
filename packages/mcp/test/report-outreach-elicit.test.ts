@@ -67,7 +67,7 @@ describe("report_outreach.user_confirmed elicit-consumer (iter22)", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/notes",
+        path: "/1.6/leads/lead-1/notes",
         status: 200,
         body: { id: "note-1", note: "ok", created_at: "2026-05-07T20:00:00Z" },
       },
@@ -152,7 +152,7 @@ describe("report_outreach.user_confirmed elicit-consumer (iter22)", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/notes",
+        path: "/1.6/leads/lead-1/notes",
         status: 200,
         body: { id: "note-1", note: "ok", created_at: "2026-05-07T20:00:00Z" },
       },
@@ -217,7 +217,7 @@ describe("report_outreach.user_confirmed elicit-consumer (iter22)", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/notes",
+        path: "/1.6/leads/lead-1/notes",
         status: 200,
         body: { id: "note-1", note: "ok", created_at: "2026-05-07T20:00:00Z" },
       },

@@ -19,7 +19,7 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_pin_contact", () => {
   it("happy path — pins via POST /contacts/{id}/pin", async () => {
     mockHttp([
-      { method: "POST", path: "/1.5/contacts/c-1/pin", status: 204, body: "" },
+      { method: "POST", path: "/1.6/contacts/c-1/pin", status: 204, body: "" },
     ]);
 
     const result = await pinContact.execute(newClient(), { contact_id: "c-1" });
@@ -32,14 +32,14 @@ describe("leadbay_pin_contact", () => {
     const reqs = getHttpRequests();
     expect(reqs).toHaveLength(1);
     expect(reqs[0].method).toBe("POST");
-    expect(reqs[0].path).toBe("/1.5/contacts/c-1/pin");
+    expect(reqs[0].path).toBe("/1.6/contacts/c-1/pin");
   });
 
   it("propagates a 404", async () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/missing/pin",
+        path: "/1.6/contacts/missing/pin",
         status: 404,
         body: { message: "not found" },
       },
@@ -58,7 +58,7 @@ describe("leadbay_pin_contact", () => {
 describe("leadbay_unpin_contact", () => {
   it("happy path — unpins via POST /contacts/{id}/unpin", async () => {
     mockHttp([
-      { method: "POST", path: "/1.5/contacts/c-2/unpin", status: 204, body: "" },
+      { method: "POST", path: "/1.6/contacts/c-2/unpin", status: 204, body: "" },
     ]);
 
     const result = await unpinContact.execute(newClient(), {
@@ -71,7 +71,7 @@ describe("leadbay_unpin_contact", () => {
       action: "unpinned",
     });
     const reqs = getHttpRequests();
-    expect(reqs[0].path).toBe("/1.5/contacts/c-2/unpin");
+    expect(reqs[0].path).toBe("/1.6/contacts/c-2/unpin");
   });
 
   it("is registered as a write tool", () => {

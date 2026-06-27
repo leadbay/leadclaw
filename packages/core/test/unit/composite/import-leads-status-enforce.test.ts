@@ -94,23 +94,23 @@ function importedRecordsPage() {
 
 function fullFlowMocks() {
   return [
-    { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+    { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     {
       method: "POST",
-      path: /\/1\.5\/imports\?file_name=/,
+      path: /\/1\.6\/imports\?file_name=/,
       status: 200,
       body: importPayload({ preFinished: true }),
     },
     {
       method: "GET",
-      path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+      path: /\/1\.6\/imports\/[a-z0-9-]+$/,
       status: 200,
       body: importPayload({ preFinished: true }),
     },
-    { method: "POST", path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
+    { method: "POST", path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
     {
       method: "GET",
-      path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+      path: /\/1\.6\/imports\/[a-z0-9-]+$/,
       status: 200,
       body: importPayload({ preFinished: true, procFinished: true }),
     },
@@ -118,13 +118,13 @@ function fullFlowMocks() {
     // consecutive settled snapshots, so it fetches the page twice.
     {
       method: "GET",
-      path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+      path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
       status: 200,
       body: importedRecordsPage(),
     },
     {
       method: "GET",
-      path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+      path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
       status: 200,
       body: importedRecordsPage(),
     },
@@ -173,7 +173,7 @@ describe("leadbay_import_leads — LeadStatus enforcement (product#3745)", () =>
   });
 
   it("rejects an unrecognized status with IMPORT_INVALID_STATUS before any import is created", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
 
     await expect(
       importLeads.execute(newClient(), {

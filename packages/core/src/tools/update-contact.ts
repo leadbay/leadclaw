@@ -36,7 +36,7 @@ interface UpdateContactResult {
 /**
  * Edit an existing contact in place.
  *
- * Backend route: `POST /1.5/contacts/{contactId}/update` → 200 with the
+ * Backend route: `POST /1.6/contacts/{contactId}/update` → 200 with the
  * updated contact. Keyed by the contact's own id. The body must be snake_case
  * and MUST carry `first_name` + `last_name` — the endpoint validates the full
  * identity and 400s ("invalid contact") on a partial body. So callers pass

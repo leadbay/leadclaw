@@ -11,7 +11,7 @@
 // scenario-execution glue (run-eval.ts / setupScenarioFixtures) lands; the
 // fixtures + mission are runner-ready today.
 
-const P = (path: string) => `/1.5${path}`; // LeadbayClient prepends /1.5
+const P = (path: string) => `/1.6${path}`; // LeadbayClient prepends /1.6
 
 // A small Monitor portfolio: two leads with a clear post-2025 M&A signal, one
 // without. The agent should scan all three and return exactly the two matches.
@@ -62,7 +62,7 @@ export const SCENARIO = {
     { method: "GET", path: P("/monitor/filter"), status: 200, body: { criteria: [] } },
     {
       method: "GET",
-      path: /\/1\.5\/monitor\?/,
+      path: /\/1\.6\/monitor\?/,
       status: 200,
       body: { items: MONITOR_LEADS, pagination: { page: 0, pages: 1, total: 3 } },
     },

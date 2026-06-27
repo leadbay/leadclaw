@@ -23,6 +23,12 @@ const REGIONS: Record<string, string> = {
   fr: "https://api-fr.leadbay.app",
 };
 
+// Backend API version. Single source of truth — every request path the client
+// builds is mounted under this prefix. Bump here to move the whole MCP data
+// plane to a new backend version.
+export const API_VERSION = "1.6";
+export const API_PREFIX = `/${API_VERSION}`;
+
 interface HttpResult {
   status: number;
   body: string;
@@ -134,7 +140,7 @@ export async function resolveRegion(
     try {
       const res = await httpsRequest(
         "POST",
-        `${baseUrl}/1.5/auth/login`,
+        `${baseUrl}${API_PREFIX}/auth/login`,
         { "Content-Type": "application/json" },
         body
       );
@@ -234,7 +240,7 @@ function findMockFixture(
   if (!_mockFixtures) return null;
   for (const f of _mockFixtures) {
     if (f.method !== method) continue;
-    // The fixture path includes /1.5; the incoming basePath is /1.5/<path>.
+    // The fixture path includes /1.6; the incoming basePath is /1.6/<path>.
     if (basePath === f.path) return f;
     // Loose match: pathname segments equal (ignore query string differences).
     const fNoQs = f.path.split("?")[0];
@@ -429,7 +435,7 @@ export class LeadbayClient {
     const retryOn401 = opts?.retryOn401 !== false;
     await this.acquireSemaphore();
     try {
-      const url = `${this._baseUrl}/1.5${path}`;
+      const url = `${this._baseUrl}${API_PREFIX}${path}`;
       const headers: Record<string, string> = {
         Authorization: `Bearer ${this.token}`,
       };
@@ -480,7 +486,7 @@ export class LeadbayClient {
     }
     await this.acquireSemaphore();
     try {
-      const url = `${this._baseUrl}/1.5${path}`;
+      const url = `${this._baseUrl}${API_PREFIX}${path}`;
       const headers: Record<string, string> = {
         Authorization: `Bearer ${this.token}`,
       };
@@ -514,7 +520,7 @@ export class LeadbayClient {
   // serialized body (string for text payloads such as CSV; Buffer for binary
   // uploads). Auth, semaphore, error mapping, _lastMeta, and mock-mode all
   // mirror request() exactly. Used by leadbay_import_leads to upload CSVs to
-  // the wizard at POST /1.5/imports.
+  // the wizard at POST /1.6/imports.
   async requestRawBinary<T>(
     method: string,
     path: string,
@@ -534,7 +540,7 @@ export class LeadbayClient {
     }
     await this.acquireSemaphore();
     try {
-      const url = `${this._baseUrl}/1.5${path}`;
+      const url = `${this._baseUrl}${API_PREFIX}${path}`;
       const headers: Record<string, string> = {
         Authorization: `Bearer ${this.token}`,
         "Content-Type": contentType,
@@ -564,7 +570,7 @@ export class LeadbayClient {
   }
 
   private mockRequest<T>(method: string, path: string, body?: unknown): T {
-    const fullPath = `/1.5${path}`;
+    const fullPath = `${API_PREFIX}${path}`;
     this._lastMeta = {
       region: this._region,
       endpoint: `${method} ${path}`,
@@ -598,7 +604,7 @@ export class LeadbayClient {
     contentType: string,
     body: string | Buffer
   ): T {
-    const fullPath = `/1.5${path}`;
+    const fullPath = `${API_PREFIX}${path}`;
     this._lastMeta = {
       region: this._region,
       endpoint: `${method} ${path}`,
@@ -904,7 +910,7 @@ export class LeadbayClient {
   }
 
   async getWsTicket(): Promise<WsAuthResponse> {
-    // Mounted under /1.5/auth/ws (see backend/AuthRoutes.kt::authRoutes).
+    // Mounted under /1.6/auth/ws (see backend/AuthRoutes.kt::authRoutes).
     return this.request<WsAuthResponse>("GET", "/auth/ws?v=1.0");
   }
 

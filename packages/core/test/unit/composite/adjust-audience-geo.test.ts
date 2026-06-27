@@ -50,18 +50,18 @@ beforeEach(() => resetHttpMock());
 describe("leadbay_adjust_audience — geographic scoping", () => {
   it("free-text location resolves and is written as a location_ids criterion (unwrapped body)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      geoMatch(/\/1\.5\/geo\/search\?q=Lyon/, { id: "999", country: "FR", level: 8, name: "Lyon", parent_ids: [] }),
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      geoMatch(/\/1\.6\/geo\/search\?q=Lyon/, { id: "999", country: "FR", level: 8, name: "Lyon", parent_ids: [] }),
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), { locations: ["Lyon"] });
     expect(result.status).toBe("applied");
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const body = JSON.parse(post!.body!);
     expect(body).toHaveProperty("items");
@@ -72,9 +72,9 @@ describe("leadbay_adjust_audience — geographic scoping", () => {
 
   it("ambiguous location bails without mutating the lens", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       geoMatch(
-        /\/1\.5\/geo\/search\?q=Pa/,
+        /\/1\.6\/geo\/search\?q=Pa/,
         { id: "1", country: "FR", level: 8, name: "Pau", parent_ids: [] },
         { id: "2", country: "FR", level: 8, name: "Paris", parent_ids: [] },
         { id: "3", country: "FR", level: 8, name: "Pantin", parent_ids: [] }
@@ -86,25 +86,25 @@ describe("leadbay_adjust_audience — geographic scoping", () => {
     expect(result.location_ambiguities[0].location_text).toBe("Pa");
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     expect(post).toBeUndefined();
   });
 
   it("admin-area id passes through without a /geo/search call", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(newClient(), { location_ids: ["712345"] });
 
-    const geo = getHttpRequests().find((r) => /\/1\.5\/geo\/search/.test(r.path));
+    const geo = getHttpRequests().find((r) => /\/1\.6\/geo\/search/.test(r.path));
     expect(geo).toBeUndefined();
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const locCrit = JSON.parse(post!.body!).items[0].criteria.find(
       (c: any) => c.type === "location_ids"
@@ -114,17 +114,17 @@ describe("leadbay_adjust_audience — geographic scoping", () => {
 
   it("exclude_locations writes an is_excluded:true location criterion", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      geoMatch(/\/1\.5\/geo\/search\?q=Corsica/, { id: "888", country: "FR", level: 6, name: "Corsica", parent_ids: [] }),
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      geoMatch(/\/1\.6\/geo\/search\?q=Corsica/, { id: "888", country: "FR", level: 6, name: "Corsica", parent_ids: [] }),
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(newClient(), { exclude_locations: ["Corsica"] });
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const locCrit = JSON.parse(post!.body!).items[0].criteria.find(
       (c: any) => c.type === "location_ids"
@@ -134,18 +134,18 @@ describe("leadbay_adjust_audience — geographic scoping", () => {
 
   it("location coexists with sectors — both criteria are written", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      { method: "GET", path: "/1.5/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
-      geoMatch(/\/1\.5\/geo\/search\?q=Lyon/, { id: "999", country: "FR", level: 8, name: "Lyon", parent_ids: [] }),
-      { method: "GET", path: "/1.5/lenses/4242", status: 200, body: USER_LENS },
-      { method: "GET", path: "/1.5/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
-      { method: "POST", path: "/1.5/lenses/4242/filter", status: 200, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/sectors/all?lang=en&includeInvisible=false", status: 200, body: SECTORS },
+      geoMatch(/\/1\.6\/geo\/search\?q=Lyon/, { id: "999", country: "FR", level: 8, name: "Lyon", parent_ids: [] }),
+      { method: "GET", path: "/1.6/lenses/4242", status: 200, body: USER_LENS },
+      { method: "GET", path: "/1.6/lenses/4242/filter", status: 200, body: EMPTY_FILTER },
+      { method: "POST", path: "/1.6/lenses/4242/filter", status: 200, body: {} },
     ]);
 
     await adjustAudience.execute(newClient(), { sectors: ["Fintech"], locations: ["Lyon"] });
 
     const post = getHttpRequests().find(
-      (r) => r.method === "POST" && r.path === "/1.5/lenses/4242/filter"
+      (r) => r.method === "POST" && r.path === "/1.6/lenses/4242/filter"
     );
     const criteria = JSON.parse(post!.body!).items[0].criteria;
     expect(criteria.find((c: any) => c.type === "sector_ids")).toMatchObject({ sectors: ["1"] });
