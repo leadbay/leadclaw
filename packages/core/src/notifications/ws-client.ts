@@ -3,7 +3,7 @@
 // Wire contract (confirmed from backend/websocket/WebSocketRoutes.kt
 // and backend/routes/AuthRoutes.kt::authRoutes):
 //
-//   1. GET /1.5/auth/ws?v=1.0 (bearer-authed) → { url } carrying a
+//   1. GET /1.6/auth/ws?v=1.0 (bearer-authed) → { url } carrying a
 //      one-shot `?t=<ticket>` query param.
 //   2. Open WS to that URL. Server filters per-user via Redis fanout, so
 //      only this user's frames arrive.

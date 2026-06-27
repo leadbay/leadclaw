@@ -12,7 +12,7 @@ annotations:
   idempotentHint: false
   openWorldHint: true
 ---
-Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps `POST /1.5/stripe/topup_checkout` → `{url}`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
+Generate a one-shot Stripe checkout session for an AI-credits top-up. Wraps `POST /1.6/stripe/topup_checkout` → `{url}`. Returns a fresh Stripe-hosted URL (~1 hour TTL); creating one does NOT charge the user — payment happens only after the user opens the URL and completes checkout in their browser.
 
 **When a quota window is hit, offer top-up as the FIRST option.** A top-up clears the throttle immediately (no need to wait for the daily/weekly/monthly window reset). The flow:
 

@@ -6,8 +6,8 @@ import { leadbay_team_activity as TEAM_ACTIVITY_DESCRIPTION } from "../tool-desc
 // Manager / team KPIs — the data behind the web app's Dashboard-Manager screen,
 // exposed to the MCP so an artifact can render a team dashboard (top performers +
 // activity-over-time). Wraps two backend reads:
-//   GET /1.5/kpi/users   → per-rep activity leaderboard (List<UserKpiPayload>)
-//   GET /1.5/kpi/trends   → activity time series (List<{date,count}>)
+//   GET /1.6/kpi/users   → per-rep activity leaderboard (List<UserKpiPayload>)
+//   GET /1.6/kpi/trends   → activity time series (List<{date,count}>)
 // Both take from/to/periodicity (required) + user_ids; user_events/lead_events
 // are optional (the backend defaults to a sensible interaction set). user_ids=ALL
 // returns the whole org for admins; non-admins are scoped to themselves by the

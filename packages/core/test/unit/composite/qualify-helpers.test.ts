@@ -55,12 +55,12 @@ describe("fanOutWebFetchAndPoll — happy path", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/web_fetch?force_fetch=false",
+        path: "/1.6/leads/lead-1/web_fetch?force_fetch=false",
         status: 204,
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/web_fetch",
+        path: "/1.6/leads/lead-1/web_fetch",
         status: 200,
         body: {
           lead_id: "lead-1",
@@ -71,7 +71,7 @@ describe("fanOutWebFetchAndPoll — happy path", () => {
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [
           {
@@ -109,24 +109,24 @@ describe("fanOutWebFetchAndPoll — quota_exceeded mid-fanout", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/web_fetch?force_fetch=false",
+        path: "/1.6/leads/lead-1/web_fetch?force_fetch=false",
         status: 204,
       },
       {
         method: "POST",
-        path: "/1.5/leads/lead-2/web_fetch?force_fetch=false",
+        path: "/1.6/leads/lead-2/web_fetch?force_fetch=false",
         status: 429,
         body: { error: "quota_exceeded" },
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/web_fetch",
+        path: "/1.6/leads/lead-1/web_fetch",
         status: 200,
         body: { lead_id: "lead-1", in_progress: false, fetch_at: null, content: null },
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [
           {
@@ -225,7 +225,7 @@ describe("refreshLeadStates", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/web_fetch",
+        path: "/1.6/leads/lead-1/web_fetch",
         status: 200,
         body: {
           lead_id: "lead-1",
@@ -236,7 +236,7 @@ describe("refreshLeadStates", () => {
       },
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [
           {

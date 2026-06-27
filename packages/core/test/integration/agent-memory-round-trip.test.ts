@@ -38,7 +38,7 @@ describe("agent memory capture -> recall", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "user-1",

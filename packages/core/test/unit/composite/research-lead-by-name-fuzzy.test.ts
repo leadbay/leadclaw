@@ -40,11 +40,11 @@ beforeEach(() => resetHttpMock());
 function mockByIdSubResources(leadId: string) {
   return [
     // /interactions fire-and-forget
-    { method: "POST" as const, path: "/1.5/interactions", status: 200, body: {} },
+    { method: "POST" as const, path: "/1.6/interactions", status: 200, body: {} },
     // lens-scoped lead profile
     {
       method: "GET" as const,
-      path: new RegExp(`/1\\.5/lenses/42/leads/${leadId}$`),
+      path: new RegExp(`/1\\.6/lenses/42/leads/${leadId}$`),
       status: 200,
       body: {
         id: leadId,
@@ -68,16 +68,16 @@ function mockByIdSubResources(leadId: string) {
       },
     },
     // qualification (additive)
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
     // enrich/contacts (additive)
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
     // web_fetch (additive)
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
     // activities (additive)
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/activities`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/activities`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
     // org contacts (only fetched conditionally — when org_contacts_count > 0
     // it would be triggered; mock anyway in case the composite changes)
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/contacts`), status: 200, body: [] },
   ];
 }
 
@@ -97,7 +97,7 @@ describe("research_lead_by_name_fuzzy", () => {
       // resolveDefaultLens
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -108,7 +108,7 @@ describe("research_lead_by_name_fuzzy", () => {
       // wishlist for fuzzy resolution
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [{ id: "lead-1", name: "Acme Corp", score: 80 }],
@@ -132,7 +132,7 @@ describe("research_lead_by_name_fuzzy", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -142,7 +142,7 @@ describe("research_lead_by_name_fuzzy", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [
@@ -176,7 +176,7 @@ describe("research_lead_by_name_fuzzy", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -186,7 +186,7 @@ describe("research_lead_by_name_fuzzy", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [

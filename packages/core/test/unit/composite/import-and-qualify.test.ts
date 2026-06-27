@@ -112,14 +112,14 @@ async function waitForImportRecord(
 
 describe("leadbay_import_and_qualify — preflight errors", () => {
   it("missing bulkTracker → BULK_TRACKER_UNAVAILABLE", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     await expect(
       importAndQualify.execute(newClient(), { domains: [{ domain: "apple.com" }] }, {})
     ).rejects.toMatchObject({ code: "BULK_TRACKER_UNAVAILABLE" });
   });
 
   it("empty input → IMPORT_EMPTY_INPUT (bubbled from import-leads)", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     await expect(
       importAndQualify.execute(newClient(), {}, { bulkTracker: tracker })
@@ -131,39 +131,39 @@ describe("leadbay_import_and_qualify — async import handle", () => {
   it("wait_for_completion=false returns an import handle before qualification starts", async () => {
     const tracker = new InMemoryBulkStore();
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /^\/1\.5\/imports\?file_name=/,
+        path: /^\/1\.6\/imports\?file_name=/,
         status: 200,
         body: importPayload({ id: "imp-async", preFinished: false }),
       },
       {
         method: "GET",
-        path: "/1.5/imports/imp-async",
+        path: "/1.6/imports/imp-async",
         status: 200,
         body: importPayload({ id: "imp-async", preFinished: true }),
       },
       {
         method: "POST",
-        path: "/1.5/imports/imp-async/update_mappings",
+        path: "/1.6/imports/imp-async/update_mappings",
         status: 204,
       },
       {
         method: "GET",
-        path: "/1.5/imports/imp-async",
+        path: "/1.6/imports/imp-async",
         status: 200,
         body: importPayload({ id: "imp-async", preFinished: true, procFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/imp-async\/records\?/,
+        path: /\/1\.6\/imports\/imp-async\/records\?/,
         status: 200,
         body: importedAppleRecordsPage(),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/imp-async\/records\?/,
+        path: /\/1\.6\/imports\/imp-async\/records\?/,
         status: 200,
         body: importedAppleRecordsPage(),
       },
@@ -188,8 +188,8 @@ describe("leadbay_import_and_qualify — async import handle", () => {
       still_running: [],
     });
     expect(getHttpRequests().map((r) => `${r.method} ${r.path}`)).toEqual([
-      "GET /1.5/users/me",
-      expect.stringContaining("POST /1.5/imports?file_name="),
+      "GET /1.6/users/me",
+      expect.stringContaining("POST /1.6/imports?file_name="),
     ]);
 
     const record = await waitForImportRecord(tracker, out.handle_id!, "complete");
@@ -201,7 +201,7 @@ describe("leadbay_import_and_qualify — async import handle", () => {
 
 describe("leadbay_import_and_qualify — empty matched leads → no qualify phase", () => {
   it("all-malformed input returns clean shape with qualify_id=null", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     const out = await importAndQualify.execute(
       newClient(),
@@ -219,11 +219,11 @@ describe("leadbay_import_and_qualify — empty matched leads → no qualify phas
 
   it("dry_run: true sets the top-level dry_run flag distinctly", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       // POST /imports for dry_run
       {
         method: "POST",
-        path: /^\/1\.5\/imports\?file_name=/,
+        path: /^\/1\.6\/imports\?file_name=/,
         status: 200,
         body: {
           id: "imp-dry-1234-5678-9abc-deadbeef0001",
@@ -240,7 +240,7 @@ describe("leadbay_import_and_qualify — empty matched leads → no qualify phas
       // GET preprocess finished — dry_run path returns after preprocess.
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: "imp-dry-1234-5678-9abc-deadbeef0001",
@@ -277,11 +277,11 @@ describe("leadbay_import_and_qualify — preview mode", () => {
   it("returns mapping_hints + custom_field_candidates from wizard preprocess", async () => {
     const importId = "imp-prv-1234-5678-9abc-deadbeef0001";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       // POST /imports → preview upload (dynamic file_name)
       {
         method: "POST",
-        path: /^\/1\.5\/imports\?file_name=mcp-preview-/,
+        path: /^\/1\.6\/imports\?file_name=mcp-preview-/,
         status: 200,
         body: {
           id: importId,
@@ -298,7 +298,7 @@ describe("leadbay_import_and_qualify — preview mode", () => {
       // GET /imports/{id} preprocess loop — finished w/ hints
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: importId,
@@ -330,7 +330,7 @@ describe("leadbay_import_and_qualify — preview mode", () => {
       // GET /crm/custom_fields → catalog with priority_test
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: [{ id: "8", name: "priority_test", type: "TEXT" }],
       },
@@ -372,7 +372,7 @@ describe("leadbay_import_and_qualify — preview mode", () => {
   });
 
   it("preview with empty input → IMPORT_EMPTY_INPUT", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     await expect(
       importAndQualify.execute(
@@ -390,18 +390,18 @@ describe("leadbay_import_and_qualify — idempotency includes custom_fields", ()
   // collide on the same qualify_id).
   it("custom_fields shorthand changes the qualify_id within idempotency window", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       // First call: catalog GET
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: [{ id: "8", name: "priority_test", type: "TEXT" }],
       },
       // Second call: catalog GET again (fresh cache)
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: [{ id: "8", name: "priority_test", type: "TEXT" }],
       },
@@ -460,34 +460,34 @@ describe("leadbay_import_and_qualify — not_in_lens partition (iter-17 e2e bug)
   it("surfaces not_in_lens when /lenses/{id}/leads/{id} returns 404", async () => {
     const importId = "imp-noinlens-1234-5678-9abc-deadbeef0099";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
       {
-        method: "POST", path: /^\/1\.5\/imports\?file_name=/, status: 200,
+        method: "POST", path: /^\/1\.6\/imports\?file_name=/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 0, pending_imported_records: 0, total_records: 0, mappings: null, pre_processing: null, processing: null },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 1, pending_imported_records: 0, total_records: 1, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
-      { method: "POST", path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
+      { method: "POST", path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 1, pending_imported_records: 0, total_records: 1, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [{ id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "Stripe" }, { column_name: "LEAD_WEBSITE", value: "stripe.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-stripe", name: "Stripe", website: "stripe.com" } }], pagination: { page: 0, pages: 1, total: 1 } },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [{ id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "Stripe" }, { column_name: "LEAD_WEBSITE", value: "stripe.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-stripe", name: "Stripe", website: "stripe.com" } }], pagination: { page: 0, pages: 1, total: 1 } },
       },
-      { method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-stripe"] } },
+      { method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-stripe"] } },
       // The lens-leads preflight returns 404 — lead exists in org, not in lens.
       {
         method: "GET",
-        path: "/1.5/lenses/21580/leads/lead-stripe",
+        path: "/1.6/lenses/21580/leads/lead-stripe",
         status: 404,
         body: { error: { code: "not_found" } },
       },
@@ -520,48 +520,48 @@ describe("leadbay_import_and_qualify — quota_blocked lifecycle flag (iter-15)"
   it("surfaces quota_blocked: true when 429 mid-launch, deadline not hit", async () => {
     const importId = "imp-quota-1234-5678-9abc-deadbeef0042";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
       {
-        method: "POST", path: /^\/1\.5\/imports\?file_name=/, status: 200,
+        method: "POST", path: /^\/1\.6\/imports\?file_name=/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 0, pending_imported_records: 0, total_records: 0, mappings: null, pre_processing: null, processing: null },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 2, pending_imported_records: 0, total_records: 2, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
-      { method: "POST", path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
+      { method: "POST", path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 2, pending_imported_records: 0, total_records: 2, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
       // Two records, both matched.
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [
           { id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "A" }, { column_name: "LEAD_WEBSITE", value: "a.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-a", name: "A", website: "a.com" } },
           { id: 2, records: [{ column_name: "MCP_ROW_ID", value: "r2" }, { column_name: "LEAD_NAME", value: "B" }, { column_name: "LEAD_WEBSITE", value: "b.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-b", name: "B", website: "b.com" } },
         ], pagination: { page: 0, pages: 1, total: 2 } },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [
           { id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "A" }, { column_name: "LEAD_WEBSITE", value: "a.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-a", name: "A", website: "a.com" } },
           { id: 2, records: [{ column_name: "MCP_ROW_ID", value: "r2" }, { column_name: "LEAD_NAME", value: "B" }, { column_name: "LEAD_WEBSITE", value: "b.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-b", name: "B", website: "b.com" } },
         ], pagination: { page: 0, pages: 1, total: 2 } },
       },
       // /imports/{id}/leads
-      { method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-a", "lead-b"] } },
+      { method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-a", "lead-b"] } },
       // First lead's web_fetch POST → 204
-      { method: "POST", path: "/1.5/leads/lead-a/web_fetch?force_fetch=false", status: 204 },
+      { method: "POST", path: "/1.6/leads/lead-a/web_fetch?force_fetch=false", status: 204 },
       // Second lead's web_fetch POST → 429 (quota)
       {
-        method: "POST", path: "/1.5/leads/lead-b/web_fetch?force_fetch=false", status: 429,
+        method: "POST", path: "/1.6/leads/lead-b/web_fetch?force_fetch=false", status: 429,
         body: { error: "quota_exceeded" },
       },
       // Poll lead-a (only the launched one)
-      { method: "GET", path: "/1.5/leads/lead-a/web_fetch", status: 200, body: { lead_id: "lead-a", in_progress: false, fetch_at: "2026-05-04T00:00:00Z", content: {} } },
-      { method: "GET", path: "/1.5/leads/lead-a/ai_agent_responses", status: 200, body: [{ question: "Q1", question_created_at: "2026-05-04T00:00:00Z", lead_id: "lead-a", score: 10, response: "y", computed_at: "2026-05-04T00:00:00Z" }] },
+      { method: "GET", path: "/1.6/leads/lead-a/web_fetch", status: 200, body: { lead_id: "lead-a", in_progress: false, fetch_at: "2026-05-04T00:00:00Z", content: {} } },
+      { method: "GET", path: "/1.6/leads/lead-a/ai_agent_responses", status: 200, body: [{ question: "Q1", question_created_at: "2026-05-04T00:00:00Z", lead_id: "lead-a", score: 10, response: "y", computed_at: "2026-05-04T00:00:00Z" }] },
     ]);
 
     const tracker = new InMemoryBulkStore();
@@ -608,33 +608,33 @@ describe("leadbay_import_and_qualify — markLaunched retry (iter-15)", () => {
 
     const importId = "imp-mark-1234-5678-9abc-deadbeef00aa";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: [{ id: 21580, name: "A", is_last_active: true }] },
       {
-        method: "POST", path: /^\/1\.5\/imports\?file_name=/, status: 200,
+        method: "POST", path: /^\/1\.6\/imports\?file_name=/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 0, pending_imported_records: 0, total_records: 0, mappings: null, pre_processing: null, processing: null },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 1, pending_imported_records: 0, total_records: 1, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
-      { method: "POST", path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
+      { method: "POST", path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/, status: 204 },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+$/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+$/, status: 200,
         body: { id: importId, date: "2026-05-04T00:00:00Z", file_name: "x.csv", imported_records: 1, pending_imported_records: 0, total_records: 1, mappings: null, pre_processing: { finished: true }, processing: { progress: 1, finished: true, error: null } },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [{ id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "A" }, { column_name: "LEAD_WEBSITE", value: "a.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-a", name: "A", website: "a.com" } }], pagination: { page: 0, pages: 1, total: 1 } },
       },
       {
-        method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/, status: 200,
+        method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/, status: 200,
         body: { items: [{ id: 1, records: [{ column_name: "MCP_ROW_ID", value: "r1" }, { column_name: "LEAD_NAME", value: "A" }, { column_name: "LEAD_WEBSITE", value: "a.com" }], match_type: "AUTOMATIC_MATCH", status: "IMPORTED", lead: { id: "lead-a", name: "A", website: "a.com" } }], pagination: { page: 0, pages: 1, total: 1 } },
       },
-      { method: "GET", path: /\/1\.5\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-a"] } },
-      { method: "POST", path: "/1.5/leads/lead-a/web_fetch?force_fetch=false", status: 204 },
-      { method: "GET", path: "/1.5/leads/lead-a/web_fetch", status: 200, body: { lead_id: "lead-a", in_progress: false, fetch_at: "2026-05-04T00:00:00Z", content: {} } },
-      { method: "GET", path: "/1.5/leads/lead-a/ai_agent_responses", status: 200, body: [{ question: "Q1", question_created_at: "2026-05-04T00:00:00Z", lead_id: "lead-a", score: 10, response: "y", computed_at: "2026-05-04T00:00:00Z" }] },
+      { method: "GET", path: /\/1\.6\/imports\/[a-z0-9-]+\/leads$/, status: 200, body: { lead_ids: ["lead-a"] } },
+      { method: "POST", path: "/1.6/leads/lead-a/web_fetch?force_fetch=false", status: 204 },
+      { method: "GET", path: "/1.6/leads/lead-a/web_fetch", status: 200, body: { lead_id: "lead-a", in_progress: false, fetch_at: "2026-05-04T00:00:00Z", content: {} } },
+      { method: "GET", path: "/1.6/leads/lead-a/ai_agent_responses", status: 200, body: [{ question: "Q1", question_created_at: "2026-05-04T00:00:00Z", lead_id: "lead-a", score: 10, response: "y", computed_at: "2026-05-04T00:00:00Z" }] },
     ]);
 
     const out = await importAndQualify.execute(
@@ -666,16 +666,16 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
     // Mock import phase happy path + 404 on /leads endpoint.
     const importId = "imp-fallback-1234-5678-9abc-deadbeef9999";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: [{ id: 21580, name: "Active", is_last_active: true }],
       },
       {
         method: "POST",
-        path: /^\/1\.5\/imports\?file_name=/,
+        path: /^\/1\.6\/imports\?file_name=/,
         status: 200,
         body: {
           id: importId,
@@ -691,7 +691,7 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: importId,
@@ -707,12 +707,12 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       },
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: importId,
@@ -728,7 +728,7 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -750,7 +750,7 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       // Stabilization second poll
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -772,19 +772,19 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       // /imports/{id}/leads — 404 (older backend)
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/leads$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/leads$/,
         status: 404,
         body: { error: { code: "not_found" } },
       },
       // skip_already_qualified preflight + qualify happy path
       {
         method: "POST",
-        path: `/1.5/leads/lead-apple/web_fetch?force_fetch=false`,
+        path: `/1.6/leads/lead-apple/web_fetch?force_fetch=false`,
         status: 204,
       },
       {
         method: "GET",
-        path: `/1.5/leads/lead-apple/web_fetch`,
+        path: `/1.6/leads/lead-apple/web_fetch`,
         status: 200,
         body: {
           lead_id: "lead-apple",
@@ -795,7 +795,7 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
       },
       {
         method: "GET",
-        path: `/1.5/leads/lead-apple/ai_agent_responses`,
+        path: `/1.6/leads/lead-apple/ai_agent_responses`,
         status: 200,
         body: [
           {
@@ -830,7 +830,7 @@ describe("leadbay_import_and_qualify — /imports/{id}/leads canonical source", 
 
 describe("leadbay_import_and_qualify — adaptive budgets", () => {
   it("picks 'small' strategy for 1-lead input when no budgets passed", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     const out = await importAndQualify.execute(
       newClient(),
@@ -846,7 +846,7 @@ describe("leadbay_import_and_qualify — adaptive budgets", () => {
   });
 
   it("picks 'default' strategy for 10-lead input", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     const tenMalformed = Array.from({ length: 10 }, () => ({ domain: "no-tld" }));
     const out = await importAndQualify.execute(
@@ -860,7 +860,7 @@ describe("leadbay_import_and_qualify — adaptive budgets", () => {
   });
 
   it("picks 'large' strategy for 50-lead input", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     const fiftyMalformed = Array.from({ length: 50 }, () => ({ domain: "no-tld" }));
     const out = await importAndQualify.execute(
@@ -874,7 +874,7 @@ describe("leadbay_import_and_qualify — adaptive budgets", () => {
   });
 
   it("explicit budget params suppress chosen_budgets (caller is in charge)", async () => {
-    mockHttp([{ method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() }]);
+    mockHttp([{ method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() }]);
     const tracker = new InMemoryBulkStore();
     const out = await importAndQualify.execute(
       newClient(),
@@ -895,18 +895,18 @@ describe("leadbay_import_and_qualify — happy path", () => {
     // Mock import phase: 1 lead matched.
     const importId = "imp-abc-1234-5678-9abc-deadbeef0001";
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       // resolveDefaultLens via /lenses
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 200,
         body: [{ id: 21580, name: "Active", is_last_active: true }],
       },
       // POST /imports → 200 with import id (fuzzy path because file_name has a timestamp)
       {
         method: "POST",
-        path: /^\/1\.5\/imports\?file_name=/,
+        path: /^\/1\.6\/imports\?file_name=/,
         status: 200,
         body: {
           id: importId,
@@ -923,7 +923,7 @@ describe("leadbay_import_and_qualify — happy path", () => {
       // GET /imports/{id} preprocess loop — return finished
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: importId,
@@ -940,13 +940,13 @@ describe("leadbay_import_and_qualify — happy path", () => {
       // POST update_mappings → 204
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       // GET /imports/{id} process loop — also finished
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: {
           id: importId,
@@ -963,7 +963,7 @@ describe("leadbay_import_and_qualify — happy path", () => {
       // GET records — terminal (matches up to 2 stabilization polls)
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -984,7 +984,7 @@ describe("leadbay_import_and_qualify — happy path", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -1006,20 +1006,20 @@ describe("leadbay_import_and_qualify — happy path", () => {
       // /imports/{id}/leads — canonical source-of-truth (PR #1801).
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/leads$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/leads$/,
         status: 200,
         body: { lead_ids: ["lead-apple"] },
       },
       // Qualify phase: web_fetch POST
       {
         method: "POST",
-        path: `/1.5/leads/lead-apple/web_fetch?force_fetch=false`,
+        path: `/1.6/leads/lead-apple/web_fetch?force_fetch=false`,
         status: 204,
       },
       // First poll: in_progress=false, ai_agent_responses populated
       {
         method: "GET",
-        path: `/1.5/leads/lead-apple/web_fetch`,
+        path: `/1.6/leads/lead-apple/web_fetch`,
         status: 200,
         body: {
           lead_id: "lead-apple",
@@ -1030,7 +1030,7 @@ describe("leadbay_import_and_qualify — happy path", () => {
       },
       {
         method: "GET",
-        path: `/1.5/leads/lead-apple/ai_agent_responses`,
+        path: `/1.6/leads/lead-apple/ai_agent_responses`,
         status: 200,
         body: [
           {

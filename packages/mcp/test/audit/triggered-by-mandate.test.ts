@@ -185,7 +185,7 @@ describe("audit: composite _triggered_by mandate (dispatch + telemetry)", () => 
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "user-1",
@@ -196,7 +196,7 @@ describe("audit: composite _triggered_by mandate (dispatch + telemetry)", () => 
       },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [],
@@ -227,7 +227,7 @@ describe("audit: composite _triggered_by mandate (dispatch + telemetry)", () => 
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "user-1",
@@ -237,7 +237,7 @@ describe("audit: composite _triggered_by mandate (dispatch + telemetry)", () => 
       },
       {
         method: "GET",
-        path: /\/1\.5\/organizations\/org-1\/quota_status/,
+        path: /\/1\.6\/organizations\/org-1\/quota_status/,
         status: 200,
         body: { plan: "free", org: { spend: [], resources: [] } },
       },

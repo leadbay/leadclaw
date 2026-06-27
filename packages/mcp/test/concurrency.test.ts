@@ -35,7 +35,7 @@ describe("MCP server — concurrency", () => {
     for (let i = 0; i < 10; i++) {
       scripts.push({
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -47,7 +47,7 @@ describe("MCP server — concurrency", () => {
     for (let i = 0; i < 10; i++) {
       scripts.push({
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [],
@@ -102,7 +102,7 @@ describe("MCP server — concurrency", () => {
     for (let i = 0; i < 15; i++) {
       scripts.push({
         method: "GET",
-        path: `/1.5/ping-${i}`,
+        path: `/1.6/ping-${i}`,
         status: 200,
         body: { ok: true, i },
       });

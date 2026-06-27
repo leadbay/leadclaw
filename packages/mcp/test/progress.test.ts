@@ -95,7 +95,7 @@ describe("notifications/progress (P2 progress streaming)", () => {
       // resolveDefaultLens → /me
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -106,26 +106,26 @@ describe("notifications/progress (P2 progress streaming)", () => {
       // selection select
       {
         method: "POST",
-        path: /\/1\.5\/leads\/selection\/select/,
+        path: /\/1\.6\/leads\/selection\/select/,
         status: 200,
         body: {},
       },
       // job_titles
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: ["CTO", "CEO"],
       },
       // preview (with titles)
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: { enrichable_contacts: 0, title_suggestions: [], auto_included_titles: [] },
       },
       // selection clear
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 200, body: {} },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 200, body: {} },
     ]);
 
     const lbClient = new LeadbayClient(BASE, "u.test-token");

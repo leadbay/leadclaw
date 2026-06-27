@@ -26,7 +26,7 @@ const newClient = () => new LeadbayClient(BASE, "u.tok", "us");
 function webFetch(leadId: string, content: any, inProgress = false) {
   return {
     method: "GET" as const,
-    path: `/1.5/leads/${leadId}/web_fetch`,
+    path: `/1.6/leads/${leadId}/web_fetch`,
     status: 200,
     body: { lead_id: leadId, content, fetch_at: "2025-06-01", in_progress: inProgress },
   };
@@ -156,7 +156,7 @@ describe("leadbay_scan_portfolio_signals", () => {
       }),
       {
         method: "GET",
-        path: "/1.5/leads/lead-2/web_fetch",
+        path: "/1.6/leads/lead-2/web_fetch",
         status: 429,
         body: { code: "QUOTA_EXCEEDED" },
       },
@@ -184,7 +184,7 @@ describe("leadbay_scan_portfolio_signals", () => {
       }),
       {
         method: "GET",
-        path: "/1.5/leads/lead-2/web_fetch",
+        path: "/1.6/leads/lead-2/web_fetch",
         status: 404,
         body: { code: "NOT_FOUND" },
       },
@@ -224,16 +224,16 @@ describe("leadbay_scan_portfolio_signals", () => {
       // 1. geo resolve — exact-name match on "Lyon" short-circuits ambiguity.
       {
         method: "GET",
-        path: "/1.5/geo/search?q=Lyon",
+        path: "/1.6/geo/search?q=Lyon",
         status: 200,
         body: { results: [{ id: "geo-lyon", name: "Lyon", country: "FR", level: 5 }] },
       },
       // 2. store the filter (location_ids merged from the resolved geo id).
-      { method: "POST", path: "/1.5/monitor/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/monitor/filter", status: 200, body: {} },
       // 3. one short page of the portfolio — carries id/name/location.
       {
         method: "GET",
-        path: /^\/1\.5\/monitor\?/,
+        path: /^\/1\.6\/monitor\?/,
         status: 200,
         body: {
           items: [
@@ -267,8 +267,8 @@ describe("leadbay_scan_portfolio_signals", () => {
 
     const reqs = getHttpRequests();
     // The filter was stored (POST) and /monitor was queried with filtered=true.
-    expect(reqs.some((r) => r.method === "POST" && r.path === "/1.5/monitor/filter")).toBe(true);
-    const monitorReq = reqs.find((r) => r.method === "GET" && r.path.startsWith("/1.5/monitor?"));
+    expect(reqs.some((r) => r.method === "POST" && r.path === "/1.6/monitor/filter")).toBe(true);
+    const monitorReq = reqs.find((r) => r.method === "GET" && r.path.startsWith("/1.6/monitor?"));
     expect(monitorReq?.path).toContain("filtered=true");
   });
 
@@ -276,15 +276,15 @@ describe("leadbay_scan_portfolio_signals", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/geo/search?q=Lyon",
+        path: "/1.6/geo/search?q=Lyon",
         status: 200,
         body: { results: [{ id: "geo-lyon", name: "Lyon", country: "FR", level: 5 }] },
       },
-      { method: "POST", path: "/1.5/monitor/filter", status: 200, body: {} },
+      { method: "POST", path: "/1.6/monitor/filter", status: 200, body: {} },
       // The portfolio enumeration itself hits the quota wall.
       {
         method: "GET",
-        path: /^\/1\.5\/monitor\?/,
+        path: /^\/1\.6\/monitor\?/,
         status: 429,
         body: { code: "QUOTA_EXCEEDED" },
       },
@@ -305,11 +305,11 @@ describe("leadbay_scan_portfolio_signals", () => {
   it("filter POST fails — falls back to an UNfiltered scan (filtered=false), never trusts a stale server-side filter", async () => {
     mockHttp([
       // Storing the filter fails (server error).
-      { method: "POST", path: "/1.5/monitor/filter", status: 500, body: { code: "SERVER_ERROR" } },
+      { method: "POST", path: "/1.6/monitor/filter", status: 500, body: { code: "SERVER_ERROR" } },
       // The /monitor read must go out UNfiltered to avoid a stale cohort.
       {
         method: "GET",
-        path: /^\/1\.5\/monitor\?/,
+        path: /^\/1\.6\/monitor\?/,
         status: 200,
         body: { items: [{ id: "lead-1", name: "Acme", location: "Paris" }], pagination: { pages: 1 } },
       },
@@ -325,7 +325,7 @@ describe("leadbay_scan_portfolio_signals", () => {
 
     expect(out.matched.map((m: any) => m.lead_id)).toEqual(["lead-1"]);
     const monitorReq = getHttpRequests().find(
-      (r) => r.method === "GET" && r.path.startsWith("/1.5/monitor?")
+      (r) => r.method === "GET" && r.path.startsWith("/1.6/monitor?")
     );
     // The store failed, so the read must NOT claim filtered=true.
     expect(monitorReq?.path).toContain("filtered=false");
@@ -336,7 +336,7 @@ describe("leadbay_scan_portfolio_signals", () => {
       // Two close-scoring prefix matches, neither an exact-name win → ambiguous.
       {
         method: "GET",
-        path: "/1.5/geo/search?q=Springfield",
+        path: "/1.6/geo/search?q=Springfield",
         status: 200,
         body: {
           results: [

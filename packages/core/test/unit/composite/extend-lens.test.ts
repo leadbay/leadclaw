@@ -38,7 +38,7 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 200,
         body: {
           accepted_seeds: [
@@ -74,13 +74,13 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: ME_PAYLOAD,
       },
       {
         method: "POST",
-        path: "/1.5/lenses/4242/extra_refill",
+        path: "/1.6/lenses/4242/extra_refill",
         status: 200,
         body: { accepted_seeds: [] },
       },
@@ -103,19 +103,19 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 429,
         body: { error: "quota_exceeded" },
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: ME_PAYLOAD,
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org-1/quota_status",
+        path: "/1.6/organizations/org-1/quota_status",
         status: 200,
         body: {
           plan: "TIER1",
@@ -152,13 +152,13 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 429,
         body: { error: "quota_exceeded" },
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 500,
         body: "boom",
       },
@@ -179,7 +179,7 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 409,
         body: { error: "refresh_in_progress" },
       },
@@ -196,7 +196,7 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 400,
         body: { error: "no_valid_seeds" },
       },
@@ -216,7 +216,7 @@ describe("leadbay_extend_lens", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/lenses/9001/extra_refill",
+        path: "/1.6/lenses/9001/extra_refill",
         status: 500,
         body: { message: "internal" },
       },

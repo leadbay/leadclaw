@@ -58,25 +58,25 @@ describe("enrich_titles + bulk_enrich_status — happy path", () => {
       // job_titles
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       // preview
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       // launch
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/launch",
+        path: "/1.6/leads/selection/enrichment/launch",
         status: 204,
       },
       // clear
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
 
     const launched: any = await enrichTitles.execute(
@@ -173,22 +173,22 @@ describe("enrich_titles + bulk_enrich_status — happy path", () => {
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/launch",
+        path: "/1.6/leads/selection/enrichment/launch",
         status: 204,
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
     const launched: any = await enrichTitles.execute(
       newClient(),
@@ -245,22 +245,22 @@ describe("enrich_titles reuse short-circuit", () => {
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/launch",
+        path: "/1.6/leads/selection/enrichment/launch",
         status: 204,
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
     const first: any = await enrichTitles.execute(
       newClient(),
@@ -276,17 +276,17 @@ describe("enrich_titles reuse short-circuit", () => {
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
     const second: any = await enrichTitles.execute(
       newClient(),
@@ -314,23 +314,23 @@ describe("enrich_titles failed launch → next identical launch allowed", () => 
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/launch",
+        path: "/1.6/leads/selection/enrichment/launch",
         status: 500,
         body: { message: "boom" },
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
     await expect(
       enrichTitles.execute(
@@ -349,22 +349,22 @@ describe("enrich_titles failed launch → next identical launch allowed", () => 
       { method: "POST", path: /\/leads\/selection\/select/, status: 204 },
       {
         method: "GET",
-        path: "/1.5/leads/selection/enrichment/job_titles",
+        path: "/1.6/leads/selection/enrichment/job_titles",
         status: 200,
         body: [TITLE],
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/preview",
+        path: "/1.6/leads/selection/enrichment/preview",
         status: 200,
         body: previewBody,
       },
       {
         method: "POST",
-        path: "/1.5/leads/selection/enrichment/launch",
+        path: "/1.6/leads/selection/enrichment/launch",
         status: 204,
       },
-      { method: "POST", path: "/1.5/leads/selection/clear", status: 204 },
+      { method: "POST", path: "/1.6/leads/selection/clear", status: 204 },
     ]);
     const second: any = await enrichTitles.execute(
       newClient(),

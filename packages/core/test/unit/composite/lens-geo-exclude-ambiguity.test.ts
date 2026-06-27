@@ -56,8 +56,8 @@ beforeEach(() => resetHttpMock());
 describe("ambiguous exclude-location recovery preserves exclude intent", () => {
   it("adjust_audience: exclude ambiguity steers to exclude_locations, not location_ids", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      ambiguousSpring(/\/1\.5\/geo\/search\?q=Spring/),
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      ambiguousSpring(/\/1\.6\/geo\/search\?q=Spring/),
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -74,8 +74,8 @@ describe("ambiguous exclude-location recovery preserves exclude intent", () => {
 
   it("adjust_audience: include ambiguity still steers to location_ids", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
-      ambiguousSpring(/\/1\.5\/geo\/search\?q=Spring/),
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
+      ambiguousSpring(/\/1\.6\/geo\/search\?q=Spring/),
     ]);
 
     const result: any = await adjustAudience.execute(newClient(), {
@@ -89,7 +89,7 @@ describe("ambiguous exclude-location recovery preserves exclude intent", () => {
 
   it("new_lens: exclude ambiguity steers to exclude_locations, not locations", async () => {
     mockHttp([
-      ambiguousSpring(/\/1\.5\/geo\/search\?q=Spring/),
+      ambiguousSpring(/\/1\.6\/geo\/search\?q=Spring/),
     ]);
 
     const result: any = await newLens.execute(newClient(), {

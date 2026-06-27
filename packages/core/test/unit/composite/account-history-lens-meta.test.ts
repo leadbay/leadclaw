@@ -28,10 +28,10 @@ afterEach(() => {
 // prove account-history forwards lensId rather than resolving the default.
 function mockResearchForLens(leadId: string, lensId: number) {
   return [
-    { method: "POST" as const, path: "/1.5/interactions", status: 200, body: {} },
+    { method: "POST" as const, path: "/1.6/interactions", status: 200, body: {} },
     {
       method: "GET" as const,
-      path: new RegExp(`/1\\.5/lenses/${lensId}/leads/${leadId}$`),
+      path: new RegExp(`/1\\.6/lenses/${lensId}/leads/${leadId}$`),
       status: 200,
       body: {
         id: leadId,
@@ -54,14 +54,14 @@ function mockResearchForLens(leadId: string, lensId: number) {
         recommended_contact: null,
       },
     },
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/activities\\?count=20`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/activities\\?count=20`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/contacts`), status: 200, body: [] },
     // account-history's own notes + activities reads
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/notes`, status: 200, body: [] },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/activities\\?count=50`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/notes`, status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/activities\\?count=50`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
   ];
 }
 
@@ -77,10 +77,10 @@ describe("leadbay_account_history — lensId passthrough + _meta preservation", 
     // The lead was fetched from the explicitly-requested lens.
     const reqs = getHttpRequests();
     expect(
-      reqs.some((r) => r.path === `/1.5/lenses/${OTHER_LENS}/leads/${LEAD}`),
+      reqs.some((r) => r.path === `/1.6/lenses/${OTHER_LENS}/leads/${LEAD}`),
     ).toBe(true);
     // With an explicit lensId, research must NOT resolve the default lens.
-    expect(reqs.some((r) => r.path === "/1.5/users/me")).toBe(false);
+    expect(reqs.some((r) => r.path === "/1.6/users/me")).toBe(false);
     // And the chosen lens is reflected in the passed-through metadata.
     expect(res._meta.lens_id).toBe(OTHER_LENS);
   });

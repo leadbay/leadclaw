@@ -13,7 +13,7 @@ beforeEach(() => resetHttpMock());
 
 const me = () => ({
   method: "GET" as const,
-  path: "/1.5/users/me",
+  path: "/1.6/users/me",
   status: 200,
   body: { id: "u", organization: { id: ORG, name: "Acme" } },
 });
@@ -23,14 +23,14 @@ const Q2 = "Does the company spec modular flooring?";
 
 const currentQuestions = (qs: string[]) => ({
   method: "GET" as const,
-  path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`),
+  path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`),
   status: 200,
   body: qs.map((q) => ({ question: q, created_at: "2026-05-30T00:00:00Z", lang: "en" })),
 });
 
 const postOrg = () => ({
   method: "POST" as const,
-  path: new RegExp(`/1\\.5/organizations/${ORG}$`),
+  path: new RegExp(`/1\\.6/organizations/${ORG}$`),
   status: 204,
   body: null,
 });

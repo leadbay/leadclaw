@@ -52,13 +52,13 @@ describe("resources/* capability (P3 resources)", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/lenses/42/filter",
+        path: "/1.6/lenses/42/filter",
         status: 200,
         body: { lens_filter: { items: [] }, locations: { results: [], parents: [] } },
       },
       {
         method: "GET",
-        path: "/1.5/lenses/42/scoring",
+        path: "/1.6/lenses/42/scoring",
         status: 200,
         body: { weights: [] },
       },

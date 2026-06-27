@@ -23,10 +23,10 @@ const BASE = "https://api-us.leadbay.app";
 
 const HAPPY_PATH_MOCKS = () => {
   mockHttp([
-    { method: "POST", path: "/1.5/interactions", status: 200, body: {} },
+    { method: "POST", path: "/1.6/interactions", status: 200, body: {} },
     {
       method: "GET",
-      path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,
+      path: /\/1\.6\/lenses\/42\/leads\/lead-1$/,
       status: 200,
       body: {
         id: "lead-1",
@@ -54,7 +54,7 @@ const HAPPY_PATH_MOCKS = () => {
     },
     {
       method: "GET",
-      path: "/1.5/leads/lead-1/ai_agent_responses",
+      path: "/1.6/leads/lead-1/ai_agent_responses",
       status: 200,
       body: [
         {
@@ -69,13 +69,13 @@ const HAPPY_PATH_MOCKS = () => {
     },
     {
       method: "GET",
-      path: /\/1\.5\/leads\/lead-1\/enrich\/contacts/,
+      path: /\/1\.6\/leads\/lead-1\/enrich\/contacts/,
       status: 200,
       body: [],
     },
     {
       method: "GET",
-      path: "/1.5/leads/lead-1/web_fetch",
+      path: "/1.6/leads/lead-1/web_fetch",
       status: 200,
       body: { content: null, status: "complete", in_progress: false },
     },

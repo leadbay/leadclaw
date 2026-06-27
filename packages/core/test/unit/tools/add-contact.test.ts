@@ -20,7 +20,7 @@ describe("leadbay_add_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-1/contacts",
+        path: "/1.6/leads/lead-1/contacts",
         status: 200,
         body: {
           id: "c-new",
@@ -55,7 +55,7 @@ describe("leadbay_add_contact", () => {
     const reqs = getHttpRequests();
     expect(reqs).toHaveLength(1);
     expect(reqs[0].method).toBe("POST");
-    expect(reqs[0].path).toBe("/1.5/leads/lead-1/contacts");
+    expect(reqs[0].path).toBe("/1.6/leads/lead-1/contacts");
     // Only provided optional fields are sent (no email/phone here).
     const sent = JSON.parse(reqs[0].body as string);
     expect(sent).toMatchObject({
@@ -72,7 +72,7 @@ describe("leadbay_add_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-2/contacts",
+        path: "/1.6/leads/lead-2/contacts",
         status: 200,
         body: {
           id: "c-2",
@@ -104,7 +104,7 @@ describe("leadbay_add_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/lead-3/contacts",
+        path: "/1.6/leads/lead-3/contacts",
         status: 401,
         body: { message: "unauthorized" },
       },

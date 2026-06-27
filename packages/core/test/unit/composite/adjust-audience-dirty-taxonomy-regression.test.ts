@@ -54,14 +54,14 @@ const SECTORS = [
   { id: "4", name: "Plomberie" },
 ];
 
-const SECTORS_PATH = "/1.5/sectors/all?lang=fr&includeInvisible=false";
+const SECTORS_PATH = "/1.6/sectors/all?lang=fr&includeInvisible=false";
 
 beforeEach(() => resetHttpMock());
 
 describe("leadbay_adjust_audience — dirty-taxonomy no-crash regression (sector-creation crash class)", () => {
   it("a null-name taxonomy row does not throw a TypeError while scanning", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       { method: "GET", path: SECTORS_PATH, status: 200, body: SECTORS },
       // No lens-write fixtures: ambiguous resolution must bail before any POST.
     ]);
@@ -77,7 +77,7 @@ describe("leadbay_adjust_audience — dirty-taxonomy no-crash regression (sector
 
   it("returns a graceful ambiguous_sectors message and writes no half-built lens", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: ME },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: ME },
       { method: "GET", path: SECTORS_PATH, status: 200, body: SECTORS },
     ]);
 

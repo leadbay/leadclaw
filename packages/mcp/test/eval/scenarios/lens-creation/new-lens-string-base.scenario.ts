@@ -19,7 +19,7 @@
 // deterministic red/green proof of these exact fixtures lives in
 // packages/core/test/unit/composite/new-lens-string-base-regression.test.ts.
 
-const P = (path: string) => `/1.5${path}`; // LeadbayClient prepends /1.5
+const P = (path: string) => `/1.6${path}`; // LeadbayClient prepends /1.6
 
 const ME = {
   id: "u-1",

@@ -144,7 +144,7 @@ describe("tools/call — composite round-trip", () => {
       // resolveDefaultLens → /me first
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u",
@@ -154,7 +154,7 @@ describe("tools/call — composite round-trip", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+        path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
         status: 200,
         body: {
           items: [
@@ -186,7 +186,7 @@ describe("tools/call — composite round-trip", () => {
       // qualification fan-out (1 lead)
       {
         method: "GET",
-        path: "/1.5/leads/lead-1/ai_agent_responses",
+        path: "/1.6/leads/lead-1/ai_agent_responses",
         status: 200,
         body: [
           { question: "Q1", question_created_at: "2026-04-20T00:00:00Z", lead_id: "lead-1", score: 8, response: "good fit", computed_at: "2026-04-20T00:00:00Z" },
@@ -225,14 +225,14 @@ describe("tools/call — error envelopes", () => {
       // pull_leads → resolveDefaultLens → /me first
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 401,
         body: { message: "expired" },
       },
       // Fallback to /lenses scan after /me 401 — also 401.
       {
         method: "GET",
-        path: "/1.5/lenses",
+        path: "/1.6/lenses",
         status: 401,
         body: { message: "expired" },
       },
@@ -477,13 +477,13 @@ describe("resolveClientFromEnv — region auto-probe", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 401,
         body: { message: "nope" },
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { id: "u", organization: { id: "o" } },
       },
@@ -508,8 +508,8 @@ describe("resolveClientFromEnv — region auto-probe", () => {
     // broken-client so the JSON-RPC handshake completes and the auth
     // failure surfaces on first tool call.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 401, body: {} },
-      { method: "GET", path: "/1.5/users/me", status: 401, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: {} },
     ]);
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {

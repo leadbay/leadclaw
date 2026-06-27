@@ -20,7 +20,7 @@ describe("leadbay_update_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/c-1/update",
+        path: "/1.6/contacts/c-1/update",
         status: 200,
         body: {
           id: "c-1",
@@ -48,7 +48,7 @@ describe("leadbay_update_contact", () => {
     const reqs = getHttpRequests();
     expect(reqs).toHaveLength(1);
     expect(reqs[0].method).toBe("POST");
-    expect(reqs[0].path).toBe("/1.5/contacts/c-1/update");
+    expect(reqs[0].path).toBe("/1.6/contacts/c-1/update");
     const sent = JSON.parse(reqs[0].body as string);
     // first/last name are always sent (backend requires the full identity).
     expect(sent).toMatchObject({
@@ -62,7 +62,7 @@ describe("leadbay_update_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/c-2/update",
+        path: "/1.6/contacts/c-2/update",
         status: 400,
         body: { error: { code: "bad_request", message: "invalid contact" } },
       },

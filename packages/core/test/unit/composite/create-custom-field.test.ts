@@ -24,10 +24,10 @@ beforeEach(() => {
 describe("leadbay_create_custom_field", () => {
   it("creates an EXTERNAL_ID field and returns the import mapping value", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/crm/custom_fields", status: 200, body: [] },
+      { method: "GET", path: "/1.6/crm/custom_fields", status: 200, body: [] },
       {
         method: "POST",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: {
           id: "8",
@@ -57,8 +57,8 @@ describe("leadbay_create_custom_field", () => {
     });
     const requests = getHttpRequests();
     expect(requests.map((r) => `${r.method} ${r.path}`)).toEqual([
-      "GET /1.5/crm/custom_fields",
-      "POST /1.5/crm/custom_fields",
+      "GET /1.6/crm/custom_fields",
+      "POST /1.6/crm/custom_fields",
     ]);
     expect(JSON.parse(requests[1].body ?? "{}")).toEqual({
       name: "HubSpot Contact",
@@ -73,7 +73,7 @@ describe("leadbay_create_custom_field", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: [
           {
@@ -103,7 +103,7 @@ describe("leadbay_create_custom_field", () => {
       existed: true,
     });
     expect(getHttpRequests().map((r) => `${r.method} ${r.path}`)).toEqual([
-      "GET /1.5/crm/custom_fields",
+      "GET /1.6/crm/custom_fields",
     ]);
   });
 

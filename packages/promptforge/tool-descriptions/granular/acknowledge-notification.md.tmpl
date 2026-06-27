@@ -12,7 +12,7 @@ annotations:
   idempotentHint: true
   openWorldHint: true
 ---
-Acknowledge a Leadbay notification — i.e. tell the MCP and the backend "I've seen this and acted on it." Wraps `POST /1.5/notifications/{id}/seen` (default) or `/archive` (when `archive:true`) and drops the entry from the local inbox so subsequent `_meta.notifications` payloads stop carrying it.
+Acknowledge a Leadbay notification — i.e. tell the MCP and the backend "I've seen this and acted on it." Wraps `POST /1.6/notifications/{id}/seen` (default) or `/archive` (when `archive:true`) and drops the entry from the local inbox so subsequent `_meta.notifications` payloads stop carrying it.
 
 **When to call.** After you read an entry from `_meta.notifications` or `account_status.notifications` and have revised whatever prior output the just-finished background work might have made stale (outreach drafts, lead lists, "available leads" claims, followup plans). Mark-seen tells the human team's pipeline you handled this and prevents the notification from re-surfacing on every subsequent tool response.
 

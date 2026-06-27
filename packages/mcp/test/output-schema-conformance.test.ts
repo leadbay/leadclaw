@@ -168,19 +168,19 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: { id: "u", organization: { id: "org-1", name: "Test Co" } },
         },
         {
           method: "GET",
-          path: /\/1\.5\/organizations\/org-1\/ai_agent_questions/,
+          path: /\/1\.6\/organizations\/org-1\/ai_agent_questions/,
           status: 200,
           body: [{ question: "Does the company run install crews?", created_at: "2026-05-30T00:00:00Z", lang: "en" }],
         },
         {
           method: "POST",
-          path: /\/1\.5\/organizations\/org-1$/,
+          path: /\/1\.6\/organizations\/org-1$/,
           status: 204,
           body: null,
         },
@@ -194,13 +194,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/crm/custom_fields",
+          path: "/1.6/crm/custom_fields",
           status: 200,
           body: [{ id: "12", name: "Tier", type: "TEXT" }],
         },
         {
           method: "POST",
-          path: /\/1\.5\/crm\/custom_fields\/12$/,
+          path: /\/1\.6\/crm\/custom_fields\/12$/,
           status: 204,
           body: null,
         },
@@ -214,13 +214,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/crm/custom_fields",
+          path: "/1.6/crm/custom_fields",
           status: 200,
           body: [{ id: "12", name: "Legacy Source", type: "TEXT" }],
         },
         {
           method: "DELETE",
-          path: /\/1\.5\/crm\/custom_fields\/12$/,
+          path: /\/1\.6\/crm\/custom_fields\/12$/,
           status: 204,
           body: null,
         },
@@ -234,7 +234,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -245,19 +245,19 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: /\/1\.5\/organizations\/org-1\/ideal_buyer_profile/,
+          path: /\/1\.6\/organizations\/org-1\/ideal_buyer_profile/,
           status: 200,
           body: { summary: "IBP", key_characteristics: [], anti_patterns: [] },
         },
         {
           method: "GET",
-          path: /\/1\.5\/organizations\/org-1\/purchase_intent_tags/,
+          path: /\/1\.6\/organizations\/org-1\/purchase_intent_tags/,
           status: 200,
           body: [],
         },
         {
           method: "GET",
-          path: /\/1\.5\/organizations\/org-1\/ai_agent_questions/,
+          path: /\/1\.6\/organizations\/org-1\/ai_agent_questions/,
           status: 200,
           body: [
             { question: "Does the company run install crews?", created_at: "2026-05-30T00:00:00Z", lang: "en" },
@@ -273,7 +273,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -281,10 +281,10 @@ const CASES: ConformanceCase[] = [
             last_requested_lens: 42,
           },
         },
-        { method: "POST", path: "/1.5/interactions", status: 200, body: {} },
+        { method: "POST", path: "/1.6/interactions", status: 200, body: {} },
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42\/leads\/lead-7$/,
+          path: /\/1\.6\/lenses\/42\/leads\/lead-7$/,
           status: 200,
           body: {
             id: "lead-7",
@@ -318,7 +318,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "POST",
-          path: "/1.5/leads/resolve",
+          path: "/1.6/leads/resolve",
           status: 200,
           body: {
             type: "matched",
@@ -336,7 +336,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             email: "test@example.com",
@@ -356,7 +356,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/organizations/org-1/quota_status",
+          path: "/1.6/organizations/org-1/quota_status",
           status: 200,
           body: { plan: "PRO", windows: [] },
         },
@@ -370,7 +370,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -380,7 +380,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+          path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
           status: 200,
           body: {
             items: [
@@ -411,7 +411,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/ai_agent_responses",
+          path: "/1.6/leads/lead-1/ai_agent_responses",
           status: 200,
           body: [
             {
@@ -435,14 +435,14 @@ const CASES: ConformanceCase[] = [
         // /monitor/filter (read the stored filter; default-filtered path)
         {
           method: "GET",
-          path: "/1.5/monitor/filter",
+          path: "/1.6/monitor/filter",
           status: 200,
           body: { criteria: [] },
         },
         // /monitor with filtered=true
         {
           method: "GET",
-          path: /\/1\.5\/monitor\?/,
+          path: /\/1\.6\/monitor\?/,
           status: 200,
           body: {
             items: [
@@ -488,14 +488,14 @@ const CASES: ConformanceCase[] = [
         // POST /interactions (fire-and-forget) — succeed silently.
         {
           method: "POST",
-          path: "/1.5/interactions",
+          path: "/1.6/interactions",
           status: 200,
           body: {},
         },
         // /lenses/42/leads/lead-1
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,
+          path: /\/1\.6\/lenses\/42\/leads\/lead-1$/,
           status: 200,
           body: {
             id: "lead-1",
@@ -523,7 +523,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/ai_agent_responses",
+          path: "/1.6/leads/lead-1/ai_agent_responses",
           status: 200,
           body: [
             {
@@ -538,13 +538,13 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/enrich\/contacts/,
+          path: /\/1\.6\/leads\/lead-1\/enrich\/contacts/,
           status: 200,
           body: [],
         },
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/web_fetch",
+          path: "/1.6/leads/lead-1/web_fetch",
           status: 200,
           body: { signals: [], status: "complete" },
         },
@@ -559,7 +559,7 @@ const CASES: ConformanceCase[] = [
         // Read-only fan-out: a single cached web_fetch read, no POST.
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/web_fetch",
+          path: "/1.6/leads/lead-1/web_fetch",
           status: 200,
           body: {
             lead_id: "lead-1",
@@ -588,7 +588,7 @@ const CASES: ConformanceCase[] = [
         // ensure_lens / resolve default lens
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -599,19 +599,19 @@ const CASES: ConformanceCase[] = [
         // /lenses/42 — lens load
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42$/,
+          path: /\/1\.6\/lenses\/42$/,
           status: 200,
           body: { id: 42, name: "L", filter_definition: {}, scoring_definition: {} },
         },
         // Bulk launch — selection-based web_fetch (backend ADR §4).
         {
           method: "POST",
-          path: /\/1\.5\/leads\/selection\/select\?leadIds=lead-1$/,
+          path: /\/1\.6\/leads\/selection\/select\?leadIds=lead-1$/,
           status: 204,
         },
         {
           method: "POST",
-          path: "/1.5/leads/selection/web_fetch?force_fetch=false",
+          path: "/1.6/leads/selection/web_fetch?force_fetch=false",
           status: 200,
           body: {
             queued: 1,
@@ -623,13 +623,13 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "POST",
-          path: "/1.5/leads/selection/clear",
+          path: "/1.6/leads/selection/clear",
           status: 204,
         },
         // Inline polling — both endpoints return terminal state immediately.
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/web_fetch",
+          path: "/1.6/leads/lead-1/web_fetch",
           status: 200,
           body: {
             lead_id: "lead-1",
@@ -640,7 +640,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/ai_agent_responses",
+          path: "/1.6/leads/lead-1/ai_agent_responses",
           status: 200,
           body: [
             {
@@ -711,7 +711,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "POST",
-          path: "/1.5/notifications/abcdef01-2345-4678-89ab-cdef01234567/seen",
+          path: "/1.6/notifications/abcdef01-2345-4678-89ab-cdef01234567/seen",
           status: 204,
         },
       ]);
@@ -723,11 +723,11 @@ const CASES: ConformanceCase[] = [
     setupMocks: () => {
       mockHttp([
         // Selection lock + select
-        { method: "POST", path: /\/1\.5\/leads\/selection\/select/, status: 200, body: {} },
+        { method: "POST", path: /\/1\.6\/leads\/selection\/select/, status: 200, body: {} },
         // 0-titles preview returns previously_enriched_titles populated → preview_field path
         {
           method: "POST",
-          path: "/1.5/leads/selection/enrichment/preview",
+          path: "/1.6/leads/selection/enrichment/preview",
           status: 200,
           body: {
             enrichable_contacts: 0,
@@ -737,7 +737,7 @@ const CASES: ConformanceCase[] = [
           },
         },
         // Selection clear
-        { method: "POST", path: "/1.5/leads/selection/clear", status: 200, body: {} },
+        { method: "POST", path: "/1.6/leads/selection/clear", status: 200, body: {} },
       ]);
     },
   },
@@ -746,7 +746,7 @@ const CASES: ConformanceCase[] = [
     arguments: {},
     setupMocks: () => {
       mockHttp([
-        { method: "GET", path: "/1.5/crm/custom_fields", status: 200, body: [] },
+        { method: "GET", path: "/1.6/crm/custom_fields", status: 200, body: [] },
       ]);
     },
   },
@@ -761,10 +761,10 @@ const CASES: ConformanceCase[] = [
     },
     setupMocks: () => {
       mockHttp([
-        { method: "GET", path: "/1.5/crm/custom_fields", status: 200, body: [] },
+        { method: "GET", path: "/1.6/crm/custom_fields", status: 200, body: [] },
         {
           method: "POST",
-          path: "/1.5/crm/custom_fields",
+          path: "/1.6/crm/custom_fields",
           status: 200,
           body: {
             id: "8",
@@ -785,7 +785,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/imports/imp-1",
+          path: "/1.6/imports/imp-1",
           status: 200,
           body: {
             id: "imp-1",
@@ -820,7 +820,7 @@ const CASES: ConformanceCase[] = [
         // resolveDefaultLens → /me
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -831,7 +831,7 @@ const CASES: ConformanceCase[] = [
         // discoverLeads wishlist fan-out for fuzzy resolution
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42\/leads\/wishlist/,
+          path: /\/1\.6\/lenses\/42\/leads\/wishlist/,
           status: 200,
           body: {
             items: [
@@ -843,14 +843,14 @@ const CASES: ConformanceCase[] = [
         // POST /interactions (fire-and-forget)
         {
           method: "POST",
-          path: "/1.5/interactions",
+          path: "/1.6/interactions",
           status: 200,
           body: {},
         },
         // research_lead_by_id main payload via lens-prefixed path
         {
           method: "GET",
-          path: /\/1\.5\/lenses\/42\/leads\/lead-1$/,
+          path: /\/1\.6\/lenses\/42\/leads\/lead-1$/,
           status: 200,
           body: {
             id: "lead-1",
@@ -876,35 +876,35 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/ai_agent_responses",
+          path: "/1.6/leads/lead-1/ai_agent_responses",
           status: 200,
           body: [],
         },
         // getLeadProfile contacts (org)
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/contacts/,
+          path: /\/1\.6\/leads\/lead-1\/contacts/,
           status: 200,
           body: [],
         },
         // getLeadProfile paid contacts
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/enrich\/contacts/,
+          path: /\/1\.6\/leads\/lead-1\/enrich\/contacts/,
           status: 200,
           body: [],
         },
         // getLeadProfile web_fetch
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/web_fetch",
+          path: "/1.6/leads/lead-1/web_fetch",
           status: 200,
           body: { content: null, fetch_at: null },
         },
         // getLeadActivities
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/activities/,
+          path: /\/1\.6\/leads\/lead-1\/activities/,
           status: 200,
           body: { items: [] },
         },
@@ -919,14 +919,14 @@ const CASES: ConformanceCase[] = [
         // getContacts
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/contacts/,
+          path: /\/1\.6\/leads\/lead-1\/contacts/,
           status: 200,
           body: [],
         },
         // getLeadProfile fan-out (best-effort; if it 404s the tool soft-fails)
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1$/,
+          path: /\/1\.6\/leads\/lead-1$/,
           status: 404,
           body: {},
         },
@@ -940,7 +940,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u",
@@ -959,7 +959,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/lenses",
+          path: "/1.6/lenses",
           status: 200,
           body: [
             { id: 1, name: "Default", is_last_active: true, description: null },
@@ -975,7 +975,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: /\/1\.5\/geo\/search/,
+          path: /\/1\.6\/geo\/search/,
           status: 200,
           body: {
             results: [
@@ -996,13 +996,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: { id: "u", organization: { id: "org-1", name: "X" } },
         },
         {
           method: "GET",
-          path: "/1.5/organizations/org-1/quota_status",
+          path: "/1.6/organizations/org-1/quota_status",
           status: 200,
           body: { plan: "PRO", windows: [] },
         },
@@ -1016,13 +1016,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: { id: "u", organization: { id: "org-1", name: "X" } },
         },
         {
           method: "GET",
-          path: "/1.5/organizations/org-1/user_prompt",
+          path: "/1.6/organizations/org-1/user_prompt",
           status: 204,
         },
       ]);
@@ -1035,13 +1035,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: { id: "u", organization: { id: "org-1", name: "X" } },
         },
         {
           method: "GET",
-          path: "/1.5/organizations/org-1/clarifications",
+          path: "/1.6/organizations/org-1/clarifications",
           status: 204,
         },
       ]);
@@ -1054,7 +1054,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "POST",
-          path: /\/1\.5\/leads\/selection\/select/,
+          path: /\/1\.6\/leads\/selection\/select/,
           status: 200,
           body: {},
         },
@@ -1068,13 +1068,13 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: { id: "u", organization: { id: "org-1", name: "X" } },
         },
         {
           method: "POST",
-          path: "/1.5/organizations/org-1/pick_clarification",
+          path: "/1.6/organizations/org-1/pick_clarification",
           status: 200,
           body: {},
         },
@@ -1088,7 +1088,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "POST",
-          path: "/1.5/leads/lead-1/notes",
+          path: "/1.6/leads/lead-1/notes",
           status: 200,
           body: {
             id: "note-1",
@@ -1106,7 +1106,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: /\/1\.5\/leads\/lead-1\/activities/,
+          path: /\/1\.6\/leads\/lead-1\/activities/,
           status: 200,
           body: { items: [], pagination: { page: 0, pages: 0, total: 0 } },
         },
@@ -1120,7 +1120,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/leads/lead-1/web_fetch",
+          path: "/1.6/leads/lead-1/web_fetch",
           status: 200,
           body: { content: null, fetch_at: null },
         },
@@ -1134,7 +1134,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/lenses/42/seed_candidates?limit=10",
+          path: "/1.6/lenses/42/seed_candidates?limit=10",
           status: 200,
           body: {
             candidates: [
@@ -1174,7 +1174,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "POST",
-          path: "/1.5/lenses/42/extra_refill",
+          path: "/1.6/lenses/42/extra_refill",
           status: 200,
           body: {
             accepted_seeds: ["11111111-1111-1111-1111-111111111111"],
@@ -1191,7 +1191,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/lenses",
+          path: "/1.6/lenses",
           status: 200,
           body: [
             { id: 42, name: "Default audience", description: "All sectors", is_last_active: true },
@@ -1200,7 +1200,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u-1",
@@ -1220,7 +1220,7 @@ const CASES: ConformanceCase[] = [
       mockHttp([
         {
           method: "GET",
-          path: "/1.5/users/me",
+          path: "/1.6/users/me",
           status: 200,
           body: {
             id: "u-1",
@@ -1232,7 +1232,7 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "GET",
-          path: "/1.5/sectors/all?lang=en&includeInvisible=false",
+          path: "/1.6/sectors/all?lang=en&includeInvisible=false",
           status: 200,
           body: [
             { id: "1", name: "Fintech" },
@@ -1241,13 +1241,13 @@ const CASES: ConformanceCase[] = [
         },
         {
           method: "POST",
-          path: "/1.5/lenses",
+          path: "/1.6/lenses",
           status: 200,
           body: { id: 555, name: "Joinery", user_id: "u-1", is_default: false },
         },
         {
           method: "POST",
-          path: "/1.5/lenses/555/filter",
+          path: "/1.6/lenses/555/filter",
           status: 200,
           body: {},
         },

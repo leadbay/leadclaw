@@ -21,7 +21,7 @@ describe("campaign_progression composite", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/campaigns/camp-1/leads?count=50&page=0",
+        path: "/1.6/campaigns/camp-1/leads?count=50&page=0",
         status: 200,
         body: {
           items: [

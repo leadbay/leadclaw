@@ -55,7 +55,7 @@ describe("leadbay_seed_candidates", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/lenses/9001/seed_candidates?limit=10",
+        path: "/1.6/lenses/9001/seed_candidates?limit=10",
         status: 200,
         body: { candidates: [SAMPLE_CANDIDATE] },
       },
@@ -76,13 +76,13 @@ describe("leadbay_seed_candidates", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: ME_PAYLOAD,
       },
       {
         method: "GET",
-        path: "/1.5/lenses/4242/seed_candidates?limit=20",
+        path: "/1.6/lenses/4242/seed_candidates?limit=20",
         status: 200,
         body: { candidates: [SAMPLE_CANDIDATE] },
       },
@@ -94,10 +94,10 @@ describe("leadbay_seed_candidates", () => {
     expect(out.candidates).toHaveLength(1);
 
     const reqs = getHttpRequests();
-    expect(reqs.some((r) => r.path === "/1.5/users/me")).toBe(true);
+    expect(reqs.some((r) => r.path === "/1.6/users/me")).toBe(true);
     expect(
       reqs.some((r) =>
-        r.path === "/1.5/lenses/4242/seed_candidates?limit=20",
+        r.path === "/1.6/lenses/4242/seed_candidates?limit=20",
       ),
     ).toBe(true);
   });
@@ -106,7 +106,7 @@ describe("leadbay_seed_candidates", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/lenses/9001/seed_candidates?limit=20",
+        path: "/1.6/lenses/9001/seed_candidates?limit=20",
         status: 200,
         body: { candidates: [] },
       },
@@ -121,7 +121,7 @@ describe("leadbay_seed_candidates", () => {
     mockHttp([
       {
         method: "GET",
-        path: "/1.5/lenses/9001/seed_candidates?limit=50",
+        path: "/1.6/lenses/9001/seed_candidates?limit=50",
         status: 200,
         body: { candidates: [] },
       },
@@ -131,6 +131,6 @@ describe("leadbay_seed_candidates", () => {
     await seedCandidates.execute(newClient(), { lensId: 9001, limit: 999 });
 
     const reqs = getHttpRequests();
-    expect(reqs[0].path).toBe("/1.5/lenses/9001/seed_candidates?limit=50");
+    expect(reqs[0].path).toBe("/1.6/lenses/9001/seed_candidates?limit=50");
   });
 });

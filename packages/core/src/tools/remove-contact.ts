@@ -19,7 +19,7 @@ interface RemoveContactResult {
  * Remove (archive) a single contact from a company — the undo for the
  * add-a-contact path (leadbay_add_contact).
  *
- * Backend route: `POST /1.5/contacts/{contactId}/archive` → 204. This is the
+ * Backend route: `POST /1.6/contacts/{contactId}/archive` → 204. This is the
  * exact call the Leadbay web UI fires from its contact "delete" action;
  * archive is a soft-delete (the contact leaves the company's active list).
  * The endpoint is keyed by the contact's OWN id, not nested under the lead.

@@ -27,7 +27,7 @@ describe("leadbay_resolve_import_rows", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/resolve",
+        path: "/1.6/leads/resolve",
         status: 200,
         body: {
           type: "matched",
@@ -37,7 +37,7 @@ describe("leadbay_resolve_import_rows", () => {
       },
       {
         method: "POST",
-        path: "/1.5/leads/resolve",
+        path: "/1.6/leads/resolve",
         status: 200,
         body: {
           type: "ambiguous",
@@ -59,7 +59,7 @@ describe("leadbay_resolve_import_rows", () => {
       },
       {
         method: "POST",
-        path: "/1.5/leads/resolve",
+        path: "/1.6/leads/resolve",
         status: 200,
         body: { type: "none", would_help: ["website", "registry_number"] },
       },
@@ -127,7 +127,7 @@ describe("leadbay_resolve_import_rows", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/resolve",
+        path: "/1.6/leads/resolve",
         status: 200,
         body: {
           type: "ambiguous",
@@ -149,7 +149,7 @@ describe("leadbay_resolve_import_rows", () => {
       },
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: {
           id: "u-1",
@@ -159,7 +159,7 @@ describe("leadbay_resolve_import_rows", () => {
       },
       {
         method: "GET",
-        path: "/1.5/lenses/42/leads/lead-a",
+        path: "/1.6/lenses/42/leads/lead-a",
         status: 200,
         body: {
           id: "lead-a",
@@ -172,7 +172,7 @@ describe("leadbay_resolve_import_rows", () => {
       },
       {
         method: "GET",
-        path: "/1.5/lenses/42/leads/lead-b",
+        path: "/1.6/lenses/42/leads/lead-b",
         status: 200,
         body: {
           id: "lead-b",
@@ -217,7 +217,7 @@ describe("leadbay_resolve_import_rows", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/leads/resolve",
+        path: "/1.6/leads/resolve",
         status: 200,
         body: { type: "unidentifiable", reason: "no identifying fields supplied" },
       },

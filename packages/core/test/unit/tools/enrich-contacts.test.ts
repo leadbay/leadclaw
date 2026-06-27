@@ -54,7 +54,7 @@ describe("leadbay_enrich_contacts — validation", () => {
 describe("leadbay_enrich_contacts — quota advisory", () => {
   it("quota 0 credits → throws QUOTA_EXCEEDED without enriching", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyZeroCredits },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyZeroCredits },
     ]);
     await expect(
       enrichContacts.execute(client(), { leadId: "L1", contactId: "C1" })
@@ -64,10 +64,10 @@ describe("leadbay_enrich_contacts — quota advisory", () => {
 
   it("advisory-check failure does NOT block enrichment", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 500, body: {} },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: {} },
       {
         method: "POST",
-        path: /\/1\.5\/leads\/L1\/enrich\/contacts\/C1\/enrich/,
+        path: /\/1\.6\/leads\/L1\/enrich\/contacts\/C1\/enrich/,
         status: 204,
       },
     ]);
@@ -83,7 +83,7 @@ describe("leadbay_enrich_contacts — quota advisory", () => {
 describe("leadbay_enrich_contacts — paid → org fallback", () => {
   it("paid path 404 → falls back to org-contacts path", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyFull },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyFull },
       {
         method: "POST",
         path: /\/leads\/L1\/enrich\/contacts\/C1\/enrich/,
@@ -113,7 +113,7 @@ describe("leadbay_enrich_contacts — paid → org fallback", () => {
 
   it("paid path 500 error propagates — org path is NOT tried", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyFull },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyFull },
       {
         method: "POST",
         path: /\/leads\/L1\/enrich\/contacts\/C1\/enrich/,
@@ -133,7 +133,7 @@ describe("leadbay_enrich_contacts — paid → org fallback", () => {
 
   it("paid success → org endpoint is NOT called (no double-charge)", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyFull },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyFull },
       {
         method: "POST",
         path: /\/leads\/L1\/enrich\/contacts\/C1\/enrich/,
@@ -157,10 +157,10 @@ describe("leadbay_enrich_contacts — paid → org fallback", () => {
 describe("leadbay_enrich_contacts — URL + response shape", () => {
   it("emits exact URL with email/phone query params as literal strings", async () => {
     const { requests } = mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyFull },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyFull },
       {
         method: "POST",
-        path: "/1.5/leads/L1/enrich/contacts/C1/enrich?email=true&phone=false",
+        path: "/1.6/leads/L1/enrich/contacts/C1/enrich?email=true&phone=false",
         status: 204,
       },
     ]);
@@ -174,13 +174,13 @@ describe("leadbay_enrich_contacts — URL + response shape", () => {
       r.path.includes("/enrich/contacts/C1/enrich")
     );
     expect(paidCall!.path).toBe(
-      "/1.5/leads/L1/enrich/contacts/C1/enrich?email=true&phone=false"
+      "/1.6/leads/L1/enrich/contacts/C1/enrich?email=true&phone=false"
     );
   });
 
   it("response includes credits_remaining from advisory check", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: meBodyFull },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: meBodyFull },
       {
         method: "POST",
         path: /\/enrich\/contacts\/.*\/enrich/,

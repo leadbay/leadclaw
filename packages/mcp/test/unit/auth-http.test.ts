@@ -55,8 +55,8 @@ describe("resolveClientFromToken", () => {
   it("auto-probe: first region to respond wins", async () => {
     // Respond to /users/me on us; fr gets a 401 (will be ignored since us wins)
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: { id: "u1" } },
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "NOT_AUTHENTICATED", message: "bad" } },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: { id: "u1" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "NOT_AUTHENTICATED", message: "bad" } },
     ]);
     const result = await resolveClientFromToken("tok");
     expect(result.authState).toBe("ok");
@@ -64,8 +64,8 @@ describe("resolveClientFromToken", () => {
 
   it("auto-probe: both regions return AUTH_EXPIRED → expired broken client", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
     ]);
     const result = await resolveClientFromToken("tok");
     expect(result.authState).toBe("expired");
@@ -76,8 +76,8 @@ describe("resolveClientFromToken", () => {
 
   it("auto-probe: both regions return network error → probe_failed with live client", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
-      { method: "GET", path: "/1.5/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
+      { method: "GET", path: "/1.6/users/me", status: 500, body: { error: true, code: "SERVER_ERROR", message: "oops" } },
     ]);
     const result = await resolveClientFromToken("tok");
     expect(result.authState).toBe("probe_failed");

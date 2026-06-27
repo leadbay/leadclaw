@@ -16,19 +16,19 @@ beforeEach(() => resetHttpMock());
 function mockMe() {
   return {
     method: "GET" as const,
-    path: "/1.5/users/me",
+    path: "/1.6/users/me",
     status: 200,
     body: { id: "u-1", organization: { id: "org-1", name: "Acme" }, last_requested_lens: LENS },
   };
 }
 
-const SEEN = { method: "POST" as const, path: "/1.5/interactions", status: 200, body: {} };
+const SEEN = { method: "POST" as const, path: "/1.6/interactions", status: 200, body: {} };
 
 // A lead detail with self-describing custom_fields entries (verified live shape).
 function mockLead(customFields: unknown[]) {
   return {
     method: "GET" as const,
-    path: new RegExp(`/1\\.5/lenses/${LENS}/leads/${LEAD}$`),
+    path: new RegExp(`/1\\.6/lenses/${LENS}/leads/${LEAD}$`),
     status: 200,
     body: {
       id: LEAD,
@@ -112,7 +112,7 @@ describe("leadbay_get_lead_custom_fields", () => {
       mockMe(),
       SEEN,
       mockLead([{ id: "99", value: "orphan" }]),
-      { method: "GET" as const, path: new RegExp(`/1\\.5/crm/custom_fields`), status: 500, body: { error: "boom" } },
+      { method: "GET" as const, path: new RegExp(`/1\\.6/crm/custom_fields`), status: 500, body: { error: "boom" } },
     ]);
 
     const res: any = await getLeadCustomFields.execute(newClient(), { leadId: LEAD });

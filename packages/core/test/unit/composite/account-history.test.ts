@@ -23,10 +23,10 @@ const LEAD = "lead-9";
 // scripts, both matched by the same regex (harness consumes one per call).
 function mockResearchSubResources(leadId: string) {
   return [
-    { method: "POST" as const, path: "/1.5/interactions", status: 200, body: {} },
+    { method: "POST" as const, path: "/1.6/interactions", status: 200, body: {} },
     {
       method: "GET" as const,
-      path: new RegExp(`/1\\.5/lenses/42/leads/${leadId}$`),
+      path: new RegExp(`/1\\.6/lenses/42/leads/${leadId}$`),
       status: 200,
       body: {
         id: leadId,
@@ -49,21 +49,21 @@ function mockResearchSubResources(leadId: string) {
         recommended_contact: null,
       },
     },
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
-    { method: "GET" as const, path: `/1.5/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/ai_agent_responses`, status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/enrich/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: `/1.6/leads/${leadId}/web_fetch`, status: 200, body: { content: null, fetch_at: null } },
     // research's own activities?count=20 — matched specifically by count so it
     // can't accidentally consume account-history's own count=50 read (both
     // fire concurrently inside the same Promise.all).
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/activities\\?count=20`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/leads/${leadId}/contacts`), status: 200, body: [] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/activities\\?count=20`), status: 200, body: { items: [], pagination: { page: 0, pages: 1, total: 0 } } },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/leads/${leadId}/contacts`), status: 200, body: [] },
   ];
 }
 
 function mockLensResolution() {
   return {
     method: "GET" as const,
-    path: "/1.5/users/me",
+    path: "/1.6/users/me",
     status: 200,
     body: { id: "u", organization: { id: "org-1", name: "X" }, last_requested_lens: 42 },
   };
@@ -77,7 +77,7 @@ describe("leadbay_account_history", () => {
       // account-history's own notes read
       {
         method: "GET",
-        path: `/1.5/leads/${LEAD}/notes`,
+        path: `/1.6/leads/${LEAD}/notes`,
         status: 200,
         body: [
           { id: "n1", note: "Quoted in 2024, never closed.", created_at: "2024-03-01T00:00:00Z" },
@@ -88,7 +88,7 @@ describe("leadbay_account_history", () => {
       // specifically so it can't consume research's count=20 script.
       {
         method: "GET",
-        path: new RegExp(`/1\\.5/leads/${LEAD}/activities\\?count=50`),
+        path: new RegExp(`/1\\.6/leads/${LEAD}/activities\\?count=50`),
         status: 200,
         body: {
           items: [
@@ -119,10 +119,10 @@ describe("leadbay_account_history", () => {
     mockHttp([
       mockLensResolution(),
       ...mockResearchSubResources(LEAD),
-      { method: "GET", path: `/1.5/leads/${LEAD}/notes`, status: 500, body: { code: "ERR" } },
+      { method: "GET", path: `/1.6/leads/${LEAD}/notes`, status: 500, body: { code: "ERR" } },
       {
         method: "GET",
-        path: new RegExp(`/1\\.5/leads/${LEAD}/activities\\?count=50`),
+        path: new RegExp(`/1\\.6/leads/${LEAD}/activities\\?count=50`),
         status: 200,
         body: { items: [{ lead_id: LEAD, type: "CONTACTED", date: "2024-03-02T00:00:00Z" }], pagination: { page: 0, pages: 1, total: 1 } },
       },
@@ -144,10 +144,10 @@ describe("leadbay_account_history", () => {
     mockHttp([
       mockLensResolution(),
       ...mockResearchSubResources(LEAD),
-      { method: "GET", path: `/1.5/leads/${LEAD}/notes`, status: 200, body: {} },
+      { method: "GET", path: `/1.6/leads/${LEAD}/notes`, status: 200, body: {} },
       {
         method: "GET",
-        path: new RegExp(`/1\\.5/leads/${LEAD}/activities\\?count=50`),
+        path: new RegExp(`/1\\.6/leads/${LEAD}/activities\\?count=50`),
         status: 200,
         body: { items: null, pagination: null },
       },
@@ -167,18 +167,18 @@ describe("leadbay_account_history", () => {
   it("error — research itself 4xx propagates (load-bearing)", async () => {
     mockHttp([
       mockLensResolution(),
-      { method: "POST", path: "/1.5/interactions", status: 200, body: {} },
+      { method: "POST", path: "/1.6/interactions", status: 200, body: {} },
       {
         method: "GET",
-        path: new RegExp(`/1\\.5/lenses/42/leads/${LEAD}$`),
+        path: new RegExp(`/1\\.6/lenses/42/leads/${LEAD}$`),
         status: 404,
         body: { code: "NOT_FOUND" },
       },
       // notes/activities still scripted (they fire in parallel before research
       // rejects) — both the research count=20 read and account-history's count=50.
-      { method: "GET", path: `/1.5/leads/${LEAD}/notes`, status: 200, body: [] },
-      { method: "GET", path: new RegExp(`/1\\.5/leads/${LEAD}/activities\\?count=20`), status: 200, body: { items: [], pagination: { total: 0 } } },
-      { method: "GET", path: new RegExp(`/1\\.5/leads/${LEAD}/activities\\?count=50`), status: 200, body: { items: [], pagination: { total: 0 } } },
+      { method: "GET", path: `/1.6/leads/${LEAD}/notes`, status: 200, body: [] },
+      { method: "GET", path: new RegExp(`/1\\.6/leads/${LEAD}/activities\\?count=20`), status: 200, body: { items: [], pagination: { total: 0 } } },
+      { method: "GET", path: new RegExp(`/1\\.6/leads/${LEAD}/activities\\?count=50`), status: 200, body: { items: [], pagination: { total: 0 } } },
     ]);
 
     await expect(

@@ -12,7 +12,7 @@ beforeEach(() => resetHttpMock());
 
 const catalog = (rows: unknown[]) => ({
   method: "GET" as const,
-  path: "/1.5/crm/custom_fields",
+  path: "/1.6/crm/custom_fields",
   status: 200,
   body: rows,
 });
@@ -21,7 +21,7 @@ describe("leadbay_update_custom_field", () => {
   it("rename-only — preserves the existing type", async () => {
     mockHttp([
       catalog([{ id: "12", name: "Tier", type: "TEXT" }]),
-      { method: "POST", path: /\/1\.5\/crm\/custom_fields\/12$/, status: 204, body: null },
+      { method: "POST", path: /\/1\.6\/crm\/custom_fields\/12$/, status: 204, body: null },
     ]);
 
     const res: any = await updateCustomField.execute(newClient(), { id: "12", name: "Account Tier" });
@@ -35,7 +35,7 @@ describe("leadbay_update_custom_field", () => {
   it("retype to PRICE — keeps name, sends config", async () => {
     mockHttp([
       catalog([{ id: "13", name: "ARR", type: "NUMBER" }]),
-      { method: "POST", path: /\/1\.5\/crm\/custom_fields\/13$/, status: 204, body: null },
+      { method: "POST", path: /\/1\.6\/crm\/custom_fields\/13$/, status: 204, body: null },
     ]);
 
     const res: any = await updateCustomField.execute(newClient(), {

@@ -13,7 +13,7 @@ beforeEach(() => resetHttpMock());
 
 const me = () => ({
   method: "GET" as const,
-  path: "/1.5/users/me",
+  path: "/1.6/users/me",
   status: 200,
   body: { id: "u", organization: { id: ORG, name: "Acme" } },
 });
@@ -27,7 +27,7 @@ describe("leadbay_get_qualification_questions — fetch failure surfaces", () =>
   it("ai_agent_questions 500 → throws, does NOT return empty", async () => {
     mockHttp([
       me(),
-      { method: "GET", path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`), status: 500, body: { error: "boom" } },
+      { method: "GET", path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`), status: 500, body: { error: "boom" } },
     ]);
     await expect(getQualificationQuestions.execute(newClient(), {})).rejects.toThrow();
   });
@@ -35,7 +35,7 @@ describe("leadbay_get_qualification_questions — fetch failure surfaces", () =>
   it("ai_agent_questions 401 → throws (auth failure not shown as empty)", async () => {
     mockHttp([
       me(),
-      { method: "GET", path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`), status: 401, body: {} },
+      { method: "GET", path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`), status: 401, body: {} },
     ]);
     await expect(getQualificationQuestions.execute(newClient(), {})).rejects.toThrow();
   });
@@ -43,7 +43,7 @@ describe("leadbay_get_qualification_questions — fetch failure surfaces", () =>
   it("genuine empty (200 + []) → returns empty with the no-questions hint", async () => {
     mockHttp([
       me(),
-      { method: "GET", path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`), status: 200, body: [] },
+      { method: "GET", path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`), status: 200, body: [] },
     ]);
     const res: any = await getQualificationQuestions.execute(newClient(), {});
     expect(res.count).toBe(0);

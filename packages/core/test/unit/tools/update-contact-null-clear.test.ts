@@ -20,7 +20,7 @@ describe("leadbay_update_contact — null clears", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/c-9/update",
+        path: "/1.6/contacts/c-9/update",
         status: 200,
         body: {
           id: "c-9",

@@ -20,7 +20,7 @@ describe("leadbay_remove_contact", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/c-123/archive",
+        path: "/1.6/contacts/c-123/archive",
         status: 204,
         body: "",
       },
@@ -40,14 +40,14 @@ describe("leadbay_remove_contact", () => {
     expect(reqs).toHaveLength(1);
     expect(reqs[0].method).toBe("POST");
     // Keyed by the contact's own id — NOT nested under the lead.
-    expect(reqs[0].path).toBe("/1.5/contacts/c-123/archive");
+    expect(reqs[0].path).toBe("/1.6/contacts/c-123/archive");
   });
 
   it("propagates a 404 (unknown contact id)", async () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/contacts/missing/archive",
+        path: "/1.6/contacts/missing/archive",
         status: 404,
         body: { message: "not found" },
       },

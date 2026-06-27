@@ -175,7 +175,7 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
 
   it("non-admin → IMPORT_ADMIN_REQUIRED before CSV upload", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: nonAdminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: nonAdminMe() },
     ]);
     const client = newClient();
     await expect(
@@ -192,7 +192,7 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
 
   it("only-malformed input → no importIds, all returned as malformed", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     ]);
     const client = newClient();
     const out = await importLeads.execute(client, {
@@ -208,38 +208,38 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
 
   it("duplicate normalized domains are deduped to one CSV row", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       // POST /imports → returns id + finished preprocessing immediately
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       // poll preprocess GET — already finished
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       // update_mappings
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       // poll process — done
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true, procFinished: true }),
       },
       // records page 0 — both records terminal
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -260,7 +260,7 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
       // stabilization second poll (counts must be stable across 2 polls)
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -296,39 +296,39 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
   it("wait_for_completion=false starts the wizard and returns before polling", async () => {
     const tracker = new InMemoryBulkStore();
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: false }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true, procFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: importedAppleRecordsPage(),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: importedAppleRecordsPage(),
       },
@@ -356,8 +356,8 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
     });
     const requestsAtReturn = getHttpRequests().map((r) => `${r.method} ${r.path}`);
     expect(requestsAtReturn).toHaveLength(2);
-    expect(requestsAtReturn[0]).toBe("GET /1.5/users/me");
-    expect(requestsAtReturn[1]).toContain("POST /1.5/imports?file_name=");
+    expect(requestsAtReturn[0]).toBe("GET /1.6/users/me");
+    expect(requestsAtReturn[1]).toContain("POST /1.6/imports?file_name=");
 
     const record = await waitForImportRecord(tracker, (out as any).handle_id, "complete");
     expect(record?.result?.leads).toEqual([
@@ -369,10 +369,10 @@ describe("leadbay_import_leads — preflight + edge cases", () => {
 describe("leadbay_import_leads — error paths", () => {
   it("preprocess error surfaces as IMPORT_PREPROCESS_FAILED", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({
           preFinished: true,
@@ -381,7 +381,7 @@ describe("leadbay_import_leads — error paths", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({
           preFinished: true,
@@ -402,16 +402,16 @@ describe("leadbay_import_leads — error paths", () => {
 describe("leadbay_import_leads — dry_run", () => {
   it("skips update_mappings + processing; all inputs return as dry_run", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
@@ -441,43 +441,43 @@ describe("leadbay_import_leads — chunking >100", () => {
     }));
     // 2 chunks; each has full upload→records flow.
     const scripts: any[] = [
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     ];
     for (let chunk = 0; chunk < 2; chunk++) {
       scripts.push(
         {
           method: "POST",
-          path: /\/1\.5\/imports\?file_name=/,
+          path: /\/1\.6\/imports\?file_name=/,
           status: 200,
           body: makeImportPayload({ preFinished: true }),
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+$/,
           status: 200,
           body: makeImportPayload({ preFinished: true }),
         },
         {
           method: "POST",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
           status: 204,
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+$/,
           status: 200,
           body: makeImportPayload({ preFinished: true, procFinished: true }),
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
           status: 200,
           body: { items: [], pagination: { page: 0, pages: 1, total: 0 } },
         },
         // stabilization second poll
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
           status: 200,
           body: { items: [], pagination: { page: 0, pages: 1, total: 0 } },
         }
@@ -503,33 +503,33 @@ describe("leadbay_import_leads — chunking >100", () => {
 describe("leadbay_import_leads — records mode", () => {
   it("happy path: 2 records → matched leads; mapping body is verbatim; rowId populated", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true, procFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -561,7 +561,7 @@ describe("leadbay_import_leads — records mode", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -649,16 +649,16 @@ describe("leadbay_import_leads — records mode", () => {
 
   it("accepts LEADBAY_ID-only mappings as deterministic resolver input", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
@@ -677,16 +677,16 @@ describe("leadbay_import_leads — records mode", () => {
 
   it("dry_run: no update_mappings; not_imported uses rowId; domain only when LEAD_WEBSITE parsed", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
@@ -714,33 +714,33 @@ describe("leadbay_import_leads — records mode", () => {
 
   it("not_imported populated for NO_MATCH records (rowId echoed via byDomain fallback)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "POST",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
         status: 204,
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true, procFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -760,7 +760,7 @@ describe("leadbay_import_leads — records mode", () => {
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
         status: 200,
         body: {
           items: [
@@ -800,42 +800,42 @@ describe("leadbay_import_leads — records mode", () => {
       Site: `co${String(i).padStart(3, "0")}.com`,
     }));
     const scripts: any[] = [
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     ];
     for (let chunk = 0; chunk < 2; chunk++) {
       scripts.push(
         {
           method: "POST",
-          path: /\/1\.5\/imports\?file_name=/,
+          path: /\/1\.6\/imports\?file_name=/,
           status: 200,
           body: makeImportPayload({ preFinished: true }),
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+$/,
           status: 200,
           body: makeImportPayload({ preFinished: true }),
         },
         {
           method: "POST",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/update_mappings/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/update_mappings/,
           status: 204,
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+$/,
           status: 200,
           body: makeImportPayload({ preFinished: true, procFinished: true }),
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
           status: 200,
           body: { items: [], pagination: { page: 0, pages: 1, total: 0 } },
         },
         {
           method: "GET",
-          path: /\/1\.5\/imports\/[a-z0-9-]+\/records\?/,
+          path: /\/1\.6\/imports\/[a-z0-9-]+\/records\?/,
           status: 200,
           body: { items: [], pagination: { page: 0, pages: 1, total: 0 } },
         }
@@ -869,16 +869,16 @@ describe("leadbay_import_leads — records mode", () => {
 
   it("coerces number/boolean cells; records[i].Brand=42 → '42' in CSV", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "POST",
-        path: /\/1\.5\/imports\?file_name=/,
+        path: /\/1\.6\/imports\?file_name=/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
       {
         method: "GET",
-        path: /\/1\.5\/imports\/[a-z0-9-]+$/,
+        path: /\/1\.6\/imports\/[a-z0-9-]+$/,
         status: 200,
         body: makeImportPayload({ preFinished: true }),
       },
@@ -902,7 +902,7 @@ describe("leadbay_import_leads — records mode", () => {
 describe("leadbay_import_leads — records-mode validation errors", () => {
   function adminClient() {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     ]);
     return newClient();
   }
@@ -1009,10 +1009,10 @@ describe("leadbay_import_leads — records-mode validation errors", () => {
   it("two columns mapping to the SAME custom field is allowed (not a conflict)", async () => {
     // Catalog with priority_test seeded
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: [{ id: "8", name: "priority_test", type: "TEXT" }],
       },
@@ -1052,10 +1052,10 @@ describe("leadbay_import_leads — custom field mapping", () => {
     catalog: Array<{ id: string; name: string; type: string }>
   ) {
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
       {
         method: "GET",
-        path: "/1.5/crm/custom_fields",
+        path: "/1.6/crm/custom_fields",
         status: 200,
         body: catalog,
       },
@@ -1080,7 +1080,7 @@ describe("leadbay_import_leads — custom field mapping", () => {
       })
     ).rejects.not.toMatchObject({ code: "IMPORT_CUSTOM_FIELD_UNKNOWN" });
     const reqs = getHttpRequests();
-    expect(reqs.some((r) => r.path === "/1.5/crm/custom_fields")).toBe(true);
+    expect(reqs.some((r) => r.path === "/1.6/crm/custom_fields")).toBe(true);
   });
 
   it("mappings.fields with CUSTOM.999 (id not on org) → IMPORT_CUSTOM_FIELD_UNKNOWN", async () => {
@@ -1100,7 +1100,7 @@ describe("leadbay_import_leads — custom field mapping", () => {
     });
     // Should NOT have hit POST /imports — preflight blocked it.
     const reqs = getHttpRequests();
-    expect(reqs.some((r) => r.method === "POST" && r.path.startsWith("/1.5/imports"))).toBe(false);
+    expect(reqs.some((r) => r.method === "POST" && r.path.startsWith("/1.6/imports"))).toBe(false);
   });
 
   it("mappings.fields with malformed CUSTOM.<bogus> → IMPORT_INVALID_CUSTOM_MAPPING", async () => {
@@ -1244,7 +1244,7 @@ describe("leadbay_import_leads — custom field mapping", () => {
     // adminClient WITHOUT catalog — proves we don't call /crm/custom_fields
     // when the mapping has no CUSTOM.<id> and no custom_fields shorthand.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 200, body: adminMe() },
+      { method: "GET", path: "/1.6/users/me", status: 200, body: adminMe() },
     ]);
     const client = newClient();
     // Will fail later due to no /imports mock — we just want to confirm the
@@ -1256,7 +1256,7 @@ describe("leadbay_import_leads — custom field mapping", () => {
       })
     ).rejects.toBeDefined();
     const reqs = getHttpRequests();
-    expect(reqs.some((r) => r.path === "/1.5/crm/custom_fields")).toBe(false);
+    expect(reqs.some((r) => r.path === "/1.6/crm/custom_fields")).toBe(false);
   });
 });
 

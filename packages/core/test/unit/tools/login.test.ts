@@ -48,11 +48,11 @@ describe("leadbay_login — password unescape", () => {
       const { requests } = mockHttp([
         {
           method: "POST",
-          path: "/1.5/auth/login",
+          path: "/1.6/auth/login",
           status: 200,
           body: { token: "u.new-token", verified: true },
         },
-        { method: "GET", path: /\/1\.5\/users\/me/, status: 404, body: {} },
+        { method: "GET", path: /\/1\.6\/users\/me/, status: 404, body: {} },
       ]);
       const client = new LeadbayClient(BASE, undefined, "us");
       const { logger } = createLogger();
@@ -63,7 +63,7 @@ describe("leadbay_login — password unescape", () => {
         { logger }
       );
 
-      const loginReq = requests.find((r) => r.path === "/1.5/auth/login");
+      const loginReq = requests.find((r) => r.path === "/1.6/auth/login");
       expect(loginReq).toBeDefined();
       const payload = JSON.parse(loginReq!.body!);
       expect(payload.password).toBe(expected);
@@ -76,7 +76,7 @@ describe("leadbay_login — region auto-detect + status handling", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 200,
         body: { token: "u.abc123", verified: true },
       },
@@ -103,14 +103,14 @@ describe("leadbay_login — region auto-detect + status handling", () => {
       // First attempt: us → 401
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 401,
         body: { message: "wrong region" },
       },
       // Second attempt: fr → 200
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 200,
         body: { token: "u.fr-token", verified: true },
       },
@@ -135,13 +135,13 @@ describe("leadbay_login — region auto-detect + status handling", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 401,
         body: { message: "bad credentials" },
       },
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 401,
         body: { message: "bad credentials" },
       },
@@ -167,13 +167,13 @@ describe("leadbay_login — region auto-detect + status handling", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 0,
         error: new Error("ECONNREFUSED"),
       },
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 0,
         error: new Error("ECONNREFUSED"),
       },
@@ -195,7 +195,7 @@ describe("leadbay_login — region auto-detect + status handling", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 200,
         body: { token: "u.abc", verified: true },
       },
@@ -218,13 +218,13 @@ describe("leadbay_login — region auto-detect + status handling", () => {
     mockHttp([
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 401,
         body: { message: "bad" },
       },
       {
         method: "POST",
-        path: "/1.5/auth/login",
+        path: "/1.6/auth/login",
         status: 401,
         body: { message: "bad" },
       },

@@ -17,7 +17,7 @@ beforeEach(() => resetHttpMock());
 function mockMe(admin: boolean) {
   return {
     method: "GET" as const,
-    path: "/1.5/users/me",
+    path: "/1.6/users/me",
     status: 200,
     body: { id: "u-1", email: "rep@acme.com", admin, organization: { id: ORG, name: "Acme" } },
   };
@@ -30,9 +30,9 @@ const QUESTIONS = [
 
 function mockTaste(questions: unknown[]) {
   return [
-    { method: "GET" as const, path: new RegExp(`/1\\.5/organizations/${ORG}/ideal_buyer_profile`), status: 200, body: { summary: "IBP", key_characteristics: [], anti_patterns: [] } },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/organizations/${ORG}/purchase_intent_tags`), status: 200, body: [{ tag: "expanding", display_name: "Expanding" }] },
-    { method: "GET" as const, path: new RegExp(`/1\\.5/organizations/${ORG}/ai_agent_questions`), status: 200, body: questions },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/organizations/${ORG}/ideal_buyer_profile`), status: 200, body: { summary: "IBP", key_characteristics: [], anti_patterns: [] } },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/organizations/${ORG}/purchase_intent_tags`), status: 200, body: [{ tag: "expanding", display_name: "Expanding" }] },
+    { method: "GET" as const, path: new RegExp(`/1\\.6/organizations/${ORG}/ai_agent_questions`), status: 200, body: questions },
   ];
 }
 

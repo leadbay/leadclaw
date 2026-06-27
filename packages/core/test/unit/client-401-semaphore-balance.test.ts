@@ -18,8 +18,8 @@ beforeEach(() => resetHttpMock());
 describe("LeadbayClient — semaphore stays balanced across a 401 retry", () => {
   it("returns to zero active after a retried-then-succeeded GET 401", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: { ok: true } },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: { ok: true } },
     ]);
     const client = newClient();
     expect(client._semaphoreState.active).toBe(0);
@@ -31,8 +31,8 @@ describe("LeadbayClient — semaphore stays balanced across a 401 retry", () => 
 
   it("returns to zero active after a persistent GET 401 (retry also 401s, throws)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
     ]);
     const client = newClient();
     await expect(client.request("GET", "/lenses")).rejects.toMatchObject({
@@ -44,7 +44,7 @@ describe("LeadbayClient — semaphore stays balanced across a 401 retry", () => 
   });
 
   it("returns to zero active after a non-retried POST 401", async () => {
-    mockHttp([{ method: "POST", path: "/1.5/leads/epilogue", status: 401, body: {} }]);
+    mockHttp([{ method: "POST", path: "/1.6/leads/epilogue", status: 401, body: {} }]);
     const client = newClient();
     await expect(
       client.requestVoid("POST", "/leads/epilogue", { foo: "bar" })

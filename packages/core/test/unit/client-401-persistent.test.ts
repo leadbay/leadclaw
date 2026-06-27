@@ -19,8 +19,8 @@ beforeEach(() => resetHttpMock());
 describe("LeadbayClient — persistent 401 names both causes, over-claims neither", () => {
   it("acknowledges the logout possibility without claiming the login is fine", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
     ]);
     try {
       await newClient().request("GET", "/lenses");

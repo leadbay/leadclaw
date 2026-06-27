@@ -194,13 +194,13 @@ describe("CallTool gate while bootstrap is pending", () => {
     const afterMock = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { email: "x@leadbay.ai", organization: { id: "org1", name: "Org" } },
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org1/quota_status",
+        path: "/1.6/organizations/org1/quota_status",
         status: 200,
         body: {},
       },
@@ -212,7 +212,7 @@ describe("CallTool gate while bootstrap is pending", () => {
     // Gate let it through: it is NOT the AUTH_PENDING envelope, and it actually
     // reached the backend (proving the live-instance token mutation works).
     expect(ok.content?.[0]?.text ?? "").not.toMatch(/Signing you in to Leadbay/i);
-    expect(afterMock.requests.some((r) => r.path === "/1.5/users/me")).toBe(true);
+    expect(afterMock.requests.some((r) => r.path === "/1.6/users/me")).toBe(true);
   });
 
   it("no bootstrapStatus (normal config) → never gated as pending", async () => {
@@ -221,13 +221,13 @@ describe("CallTool gate while bootstrap is pending", () => {
     const captured = mockHttp([
       {
         method: "GET",
-        path: "/1.5/users/me",
+        path: "/1.6/users/me",
         status: 200,
         body: { email: "x@leadbay.ai", organization: { id: "org1", name: "Org" } },
       },
       {
         method: "GET",
-        path: "/1.5/organizations/org1/quota_status",
+        path: "/1.6/organizations/org1/quota_status",
         status: 200,
         body: {},
       },
@@ -237,7 +237,7 @@ describe("CallTool gate while bootstrap is pending", () => {
       arguments: { _triggered_by: "check" },
     });
     expect(res.content?.[0]?.text ?? "").not.toMatch(/Signing you in to Leadbay/i);
-    expect(captured.requests.some((r) => r.path === "/1.5/users/me")).toBe(true);
+    expect(captured.requests.some((r) => r.path === "/1.6/users/me")).toBe(true);
   });
 });
 

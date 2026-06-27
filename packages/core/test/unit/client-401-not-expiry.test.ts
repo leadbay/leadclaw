@@ -17,8 +17,8 @@ beforeEach(() => resetHttpMock());
 describe("LeadbayClient — 401 auto-retry + non-expiry framing", () => {
   it("a transient 401 is retried once and then succeeds (no error surfaced)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 200, body: { ok: true } },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 200, body: { ok: true } },
     ]);
     const result = await newClient().request<{ ok: boolean }>("GET", "/lenses");
     expect(result.ok).toBe(true);
@@ -28,8 +28,8 @@ describe("LeadbayClient — 401 auto-retry + non-expiry framing", () => {
 
   it("when the retry also 401s, it surfaces AUTH_EXPIRED (backward-compat code)", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
     ]);
     await expect(newClient().request("GET", "/lenses")).rejects.toMatchObject({
       error: true,
@@ -39,8 +39,8 @@ describe("LeadbayClient — 401 auto-retry + non-expiry framing", () => {
 
   it("the surfaced 401 message never claims the token expired / is invalid", async () => {
     mockHttp([
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
-      { method: "GET", path: "/1.5/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
+      { method: "GET", path: "/1.6/lenses", status: 401, body: {} },
     ]);
     try {
       await newClient().request("GET", "/lenses");

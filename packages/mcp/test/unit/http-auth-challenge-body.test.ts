@@ -48,8 +48,8 @@ describe("hosted MCP OAuth challenge — empty body (product#3761)", () => {
   it("expired token → 401, invalid_token in header, body empty + no quotable prose", async () => {
     // Auto-probe hits both regions; both 401 AUTH_EXPIRED → expired.
     mockHttp([
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
-      { method: "GET", path: "/1.5/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
+      { method: "GET", path: "/1.6/users/me", status: 401, body: { error: true, code: "AUTH_EXPIRED", message: "token expired" } },
     ]);
     const res = await app.fetch(initRequest("https://mcp.test/mcp", { authorization: "Bearer stale" }));
 

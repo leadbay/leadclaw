@@ -319,7 +319,7 @@ export type FilterCriterion =
   | { type: "size"; is_excluded: boolean; sizes: Array<{ min?: number; max?: number }> }
   | { type: string; is_excluded: boolean; [k: string]: unknown };
 
-// /1.5/geo/search response shape. `level` is the admin hierarchy depth
+// /1.6/geo/search response shape. `level` is the admin hierarchy depth
 // (5=region, 6=county, 7=township-area, 8=city/town). `parent_ids` traces
 // the lead's location up the admin tree.
 export interface GeoMatch {
@@ -481,7 +481,7 @@ export interface QuotaStatusPayload {
   };
 }
 
-// ─── File-import wizard payloads (POST /1.5/imports/...) ──────────────────
+// ─── File-import wizard payloads (POST /1.6/imports/...) ──────────────────
 // Wire format probed live 2026-04-28. The Leadbay backend serializes with
 // kotlinx.serialization JsonNamingStrategy.SnakeCase, so all field names are
 // snake_case. The mapping keys for `fields` are column-header names from the
@@ -601,7 +601,7 @@ export interface FileImportPayloadV15 {
   processing: ProcessingStatePayload | null;
 }
 
-// Returned by GET /1.5/imports/{importId}/leads (backend PR #1801, 2026-05-06).
+// Returned by GET /1.6/imports/{importId}/leads (backend PR #1801, 2026-05-06).
 // Distinct lead ids that this import touched — matched-existing AND
 // newly-created. Source of truth for downstream chaining (bulk_qualify_leads
 // / bulk_enrich / import_and_qualify) — replaces per-record pagination.
@@ -610,7 +610,7 @@ export interface ImportLeadsResponse {
   lead_ids: string[];
 }
 
-// ─── Lead resolver payloads (POST /1.5/leads/resolve) ─────────────────────
+// ─── Lead resolver payloads (POST /1.6/leads/resolve) ─────────────────────
 
 export interface ResolveSocialsPayload {
   linkedin?: string | null;
