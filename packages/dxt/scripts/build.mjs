@@ -123,8 +123,8 @@ async function main() {
   // cycle so upgrade-path is gentle: clients still scanning for *.dxt keep
   // working; new clients matching *.mcpb pick up the bundle. The .dxt
   // filename can be retired in 0.7.0 once downstream clients adopt MCPB.
-  const dxtPath = join(DIST_DIR, `leadbay-${version}.dxt`);
-  const mcpbPath = join(DIST_DIR, `leadbay-${version}.mcpb`);
+  const dxtPath = join(DIST_DIR, `leadbay-mcp-${version}.dxt`);
+  const mcpbPath = join(DIST_DIR, `leadbay-mcp-${version}.mcpb`);
   await new Promise((resolve, reject) => {
     const out = createWriteStream(dxtPath);
     const archive = archiver("zip", { zlib: { level: 9 } });

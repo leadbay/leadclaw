@@ -3,17 +3,17 @@
 // staging.leadbay.app / api-{us,fr}-staging.leadbay.app.
 //
 // Differs from scripts/build.mjs:
-//   - `name` is "leadbay-staging" so the bundle can coexist with the prod
+//   - `name` is "leadbay-mcp-staging" so the bundle can coexist with the prod
 //     install in Claude Desktop's Extensions list.
-//   - `display_name` is "Leadbay (Staging)" so the user can tell them apart.
+//   - `display_name` is "Leadbay MCP (Staging)" so the user can tell them apart.
 //   - no token / region / backend URL config fields. The bundled server opts
 //     into OAuth bootstrap, uses staging stargate to infer region, opens the
 //     browser for consent, then persists the resulting token.
-//   - Output file is `leadbay-staging-<version>.mcpb`.
+//   - Output file is `leadbay-mcp-staging-<version>.mcpb`.
 //
 // To use:
 //   1. Build this bundle: pnpm --filter @leadbay/dxt run build:staging
-//   2. Drag `packages/dxt/dist/leadbay-staging-<v>.mcpb` into Claude Desktop
+//   2. Drag `packages/dxt/dist/leadbay-mcp-staging-<v>.mcpb` into Claude Desktop
 //      → Settings → Extensions.
 //   3. Save the extension settings. The server opens staging.leadbay.app for
 //      OAuth on first launch.
@@ -47,8 +47,8 @@ async function main() {
   const manifestTpl = readFileSync(join(DXT_DIR, "manifest.template.json"), "utf8");
   const manifest = JSON.parse(manifestTpl.replaceAll("{{VERSION}}", version));
 
-  manifest.name = "leadbay-staging";
-  manifest.display_name = "Leadbay (Staging)";
+  manifest.name = "leadbay-mcp-staging";
+  manifest.display_name = "Leadbay MCP (Staging)";
   manifest.description = "STAGING build - talks to staging.leadbay.app / api-{us,fr}-staging.leadbay.app. On first launch, the server opens your browser for OAuth and persists the token. No paste-the-token dance.";
 
   // Zero-config install: opt into startup OAuth and mark the auth environment
@@ -106,7 +106,7 @@ async function main() {
   }
   console.log(`✓ Staged server starts (reported: ${versionOut})`);
 
-  const mcpbPath = join(DIST_DIR, `leadbay-staging-${version}.mcpb`);
+  const mcpbPath = join(DIST_DIR, `leadbay-mcp-staging-${version}.mcpb`);
   await new Promise((resolve, reject) => {
     const out = createWriteStream(mcpbPath);
     const archive = archiver("zip", { zlib: { level: 9 } });
