@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.3",
-  "name": "leadbay-mcp",
+  "name": "leadbay",
   "display_name": "Leadbay MCP",
   "version": "{{VERSION}}",
   "description": "AI lead discovery, qualification, and outreach prep. Sign in with Leadbay OAuth, then ask Claude to find, research, and prepare outreach on B2B prospects.",

@@ -48,7 +48,7 @@ describe.skipIf(!dxtPath)("@leadbay/dxt — .dxt bundle shape", () => {
     const manifest = JSON.parse(readFromZip(dxtPath!, "manifest.json"));
     expect(manifest.manifest_version).toBe("0.3");
     expect(manifest.dxt_version).toBeUndefined();
-    expect(manifest.name).toBe("leadbay-mcp");
+    expect(manifest.name).toBe("leadbay");
     expect(manifest.version).toBe(mcpVersion);
     expect(manifest.server?.type).toBe("node");
     expect(manifest.server?.entry_point).toBe("server/index.js");
