@@ -16,3 +16,8 @@ follow-ups. On `ambiguous_sectors`, the only move is to pick a sector and re-cal
 
 If nothing fits, default to "switch to the new lens and pull leads" — never
 invent a tool that doesn't exist.
+
+**A brand-new lens fills asynchronously.** Its wishlist is built server-side
+over ~30–60s, so the FIRST `leadbay_pull_leads` on it may return 0 leads with
+`computing_wishlist` / `computing_scores` true. That's expected — wait ~30s and
+re-pull, don't declare the lens broken or reach for the extend flow.

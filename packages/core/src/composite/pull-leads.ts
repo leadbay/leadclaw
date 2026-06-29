@@ -80,7 +80,8 @@ export interface NextStepOption {
     | "build_artifact"
     | "pull_next_page"
     | "qualify_deeper"
-    | "refine_audience";
+    | "refine_audience"
+    | "wait_and_repull";
 }
 
 export interface NextSteps {
@@ -91,8 +92,18 @@ export interface NextSteps {
 
 /**
  * Deterministically build the NEXT STEPS the model should surface via
- * ask_user_input_v0 after a pull_leads. Returns null when there's nothing to
- * act on (empty batch) so the model doesn't fire an empty widget.
+ * ask_user_input_v0 after a pull_leads.
+ *
+ * Empty-batch handling is two-way:
+ *  - empty AND `computing` (wishlist/scores still building) → a "wait &
+ *    re-pull" object. A brand-new lens auto-fills asynchronously, so its
+ *    FIRST pull is often empty while leads stream in over ~30–60s. Returning
+ *    null there left the agent with no move and it declared the lens broken
+ *    (product#3826). The re-pull option is the fix.
+ *  - empty AND NOT `computing` (genuinely exhausted / nothing matches) →
+ *    null, so no empty widget fires and the inbox framing holds.
+ * `computing` is OPTIONAL and falsy by default — an `{leadCount:0}` call with
+ * no `computing` still returns null (load-bearing for the existing contract).
  *
  * The artifact offer ("Build an interactive lead triage board") is ALWAYS the
  * first option whenever the batch is non-empty — this is the gate that kept
@@ -103,9 +114,32 @@ export function buildPullLeadsNextSteps(args: {
   leadCount: number;
   hasMore: boolean;
   nextPage: number | null;
+  computing?: boolean;
 }): NextSteps | null {
-  const { leadCount, hasMore, nextPage } = args;
-  if (leadCount <= 0) return null;
+  const { leadCount, hasMore, nextPage, computing } = args;
+  if (leadCount <= 0) {
+    // Fresh lens still building its wishlist — offer a re-pull, not silence.
+    if (computing) {
+      return {
+        question: "This lens is still filling — leads stream in over ~30–60s.",
+        options: [
+          {
+            label: "Re-pull now",
+            description:
+              "Wait ~30s then pull again — leads are still being generated for this lens.",
+            kind: "wait_and_repull",
+          },
+          {
+            label: "Refine audience",
+            description: "Adjust the lens audience / filters (sector, size, prompt).",
+            kind: "refine_audience",
+          },
+        ],
+      };
+    }
+    // Not computing and empty → genuinely nothing to act on; no widget.
+    return null;
+  }
 
   const options: NextStepOption[] = [];
 
@@ -216,7 +250,7 @@ export const pullLeads: Tool<PullLeadsParams> = {
       next_steps: {
         type: ["object", "null"],
         description:
-          "Ready-made NEXT STEPS for the host's choice widget. Each option has a SHORT `label` (≤5 words, fits AskUserQuestion's label cap on Claude cowork/Claude Code) and a full `description`. For AskUserQuestion (cowork/Claude Code) pass each option as {label, description}. For ask_user_input_v0 (Claude chat/ChatGPT, string-only options) use the `description` as the option string. Use these VERBATIM, in order — do NOT re-derive, reword, or render as prose when a widget tool exists. options[0] is the artifact offer (build the lead triage board) whenever the batch is non-empty. null only when the batch is empty.",
+          "Ready-made NEXT STEPS for the host's choice widget. Each option has a SHORT `label` (≤5 words, fits AskUserQuestion's label cap on Claude cowork/Claude Code) and a full `description`. For AskUserQuestion (cowork/Claude Code) pass each option as {label, description}. For ask_user_input_v0 (Claude chat/ChatGPT, string-only options) use the `description` as the option string. Use these VERBATIM, in order — do NOT re-derive, reword, or render as prose when a widget tool exists. options[0] is the artifact offer (build the lead triage board) whenever the batch is non-empty. On an EMPTY batch where the lens is still computing (computing_wishlist/computing_scores), the options offer a wait-and-re-pull — a fresh lens fills asynchronously, so re-pull in ~30s rather than declaring it broken. null only when the batch is empty AND the lens is not still computing.",
         properties: {
           question: { type: "string" },
           options: {
@@ -352,7 +386,12 @@ export const pullLeads: Tool<PullLeadsParams> = {
     // drops the artifact offer). The model is instructed to pass
     // `next_steps.options` straight into ask_user_input_v0 verbatim.
     const leadCount = res.items.length;
-    const nextSteps = buildPullLeadsNextSteps({ leadCount, hasMore, nextPage });
+    const nextSteps = buildPullLeadsNextSteps({
+      leadCount,
+      hasMore,
+      nextPage,
+      computing: res.computing_wishlist || res.computing_scores,
+    });
 
     return withAgentMemoryMeta(client, {
       lens: { id: lensId },

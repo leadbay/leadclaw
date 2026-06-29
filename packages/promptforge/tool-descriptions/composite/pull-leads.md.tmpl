@@ -70,7 +70,7 @@ annotations:
 ---
 Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool.
 
-Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line `qualification_summary` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
+For an ESTABLISHED lens, Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently — pulling more won't produce more; user outreach/skips/saves does. **EXCEPTION — a brand-new lens fills its wishlist asynchronously.** Right after `leadbay_new_lens`, the first pull is often EMPTY while leads stream in over ~30–60s (watch `computing_wishlist` / `computing_scores`). For a fresh/computing lens an empty result means "wait ~30s and re-pull," NOT "done" — never declare the lens broken or jump to the extend flow. Each returned lead carries a one-line `qualification_summary` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
 
 Roughly the top 10 of the batch come pre-qualified (populated qualification_summary + ai_agent_lead_score); leads below the top ~10 carry only the basic firmographic `score` — not worse, just resource-saved by the system. Call leadbay_bulk_qualify_leads to deepen any of them on demand — a healthy daily rhythm is to bulk-qualify the rows without ❖ caps so tomorrow's top-10 list is richer.
 

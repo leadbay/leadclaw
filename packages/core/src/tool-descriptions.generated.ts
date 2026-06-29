@@ -2198,6 +2198,11 @@ follow-ups. On \`ambiguous_sectors\`, the only move is to pick a sector and re-c
 
 If nothing fits, default to "switch to the new lens and pull leads" — never
 invent a tool that doesn't exist.
+
+**A brand-new lens fills asynchronously.** Its wishlist is built server-side
+over ~30–60s, so the FIRST \`leadbay_pull_leads\` on it may return 0 leads with
+\`computing_wishlist\` / \`computing_scores\` true. That's expected — wait ~30s and
+re-pull, don't declare the lens broken or reach for the extend flow.
 `;
 // endregion: leadbay_new_lens
 
@@ -2694,7 +2699,7 @@ contact + title. Full algorithm + linking rules below.
 
 Pull up new leads from the user's last-active lens — the canonical "show me today's prospects" tool.
 
-Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently. Pulling more won't produce more; user outreach/skips/saves does. Each returned lead carries a one-line \`qualification_summary\` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
+For an ESTABLISHED lens, Leadbay works like an inbox: each time the user logs back in, a fresh batch is delivered, paced by how many leads they've actually acted on recently — pulling more won't produce more; user outreach/skips/saves does. **EXCEPTION — a brand-new lens fills its wishlist asynchronously.** Right after \`leadbay_new_lens\`, the first pull is often EMPTY while leads stream in over ~30–60s (watch \`computing_wishlist\` / \`computing_scores\`). For a fresh/computing lens an empty result means "wait ~30s and re-pull," NOT "done" — never declare the lens broken or jump to the extend flow. Each returned lead carries a one-line \`qualification_summary\` built from leadbay_ai_agent_responses, plus the rich tags / scores / engagement counters / in-flight flags from the lead summary.
 
 Roughly the top 10 of the batch come pre-qualified (populated qualification_summary + ai_agent_lead_score); leads below the top ~10 carry only the basic firmographic \`score\` — not worse, just resource-saved by the system. Call leadbay_bulk_qualify_leads to deepen any of them on demand — a healthy daily rhythm is to bulk-qualify the rows without ❖ caps so tomorrow's top-10 list is richer.
 
@@ -2816,6 +2821,8 @@ Pick 2–3 items below based on what was actually observed in the response. The 
 | Top row has phone but no email                             | "Show [Contact]'s call details + a 60-second opener"         | leadbay_prepare_outreach(leadId)                       |
 | Top row has contacts but no phone/email                    | "Order contact enrichment to surface email/phone first"      | leadbay_enrich_titles(...) or leadbay_prepare_outreach(leadId, enrich:true) |
 | \`computing_scores == true\` or \`computing_wishlist == true\` | "Scores are still being computed — re-pull in ~30s"          | leadbay_pull_leads (retry with same lensId)            |
+| 0 leads AND (\`computing_wishlist\` or \`computing_scores\`)   | "This lens is still filling — re-pull in ~30s" (a fresh lens fills asynchronously; do NOT declare it broken or jump to the extend flow) | leadbay_pull_leads (retry with same lensId)            |
+| 0 leads AND NOT computing                                  | "Audience may be too narrow — refine the sector / size"      | leadbay_adjust_audience(...)                           |
 | User wants a narrower / wider audience                     | "Adjust the lens filters (sector / size)"                    | leadbay_adjust_audience(...)                           |
 | Phase 4 research was run (\`research_lead_by_id\` called) AND top contacts lack direct email/phone | "Enrich contacts on [Lead1], [Lead2] to get direct emails and phone numbers" | leadbay_enrich_contacts(leadId, contactId) — ONE call per contact (the tool takes a single leadId + contactId, never a list) |
 If nothing in the menu applies cleanly, suggest only "pull next page" and "research a specific lead in depth" — never invent a tool that doesn't exist.
