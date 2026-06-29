@@ -8,8 +8,8 @@
     "email": "support@leadbay.ai",
     "url": "https://leadbay.ai"
   },
-  "homepage": "https://github.com/leadbay/leadbay-mcp/tree/main/packages/mcp#readme",
-  "repository": "https://github.com/leadbay/leadbay-mcp",
+  "homepage": "https://github.com/leadbay/mcp/tree/main/packages/mcp#readme",
+  "repository": "https://github.com/leadbay/mcp",
   "license": "MIT",
   "keywords": ["mcp", "sales", "lead-generation", "b2b", "outreach"],
   "mcpServers": {

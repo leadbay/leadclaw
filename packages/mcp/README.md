@@ -143,7 +143,7 @@ To rotate the local MCP credential, re-run `npx -y @leadbay/mcp install --oauth`
 ### Install via the Claude Code plugin marketplace
 
 ```text
-/plugin marketplace add leadbay/leadbay-mcp
+/plugin marketplace add leadbay/mcp
 ```
 
 ```text
@@ -163,7 +163,7 @@ You can verify the skills installed by running `/skill list` after install. To u
 
 The guided installer writes the local `mcpServers.leadbay` entry in `claude_desktop_config.json` with `npx -y @leadbay/mcp@latest`, like the Linux flow. Restart Claude Desktop after install.
 
-The `.dxt` / `.mcpb` bundle from [Releases](https://github.com/leadbay/leadbay-mcp/releases/latest) remains available as an alternative install path.
+The `.dxt` / `.mcpb` bundle from [Releases](https://github.com/leadbay/mcp/releases/latest) remains available as an alternative install path.
 
 ### `npm install -g` says "EACCES" / "permission denied"
 
@@ -551,7 +551,7 @@ The user's literal text replaces `verification.ref` in the outreach record, and 
 
 ## 7. Upgrade & rotation
 
-**Upgrade**: the guided installer pins `@leadbay/mcp@latest`, so each MCP session already picks up the newest published version — just restart the client. (If you hand-pinned a specific version in your config, change it to `@latest` or the version you want, then restart.) **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/leadbay-mcp/releases).
+**Upgrade**: the guided installer pins `@leadbay/mcp@latest`, so each MCP session already picks up the newest published version — just restart the client. (If you hand-pinned a specific version in your config, change it to `@latest` or the version you want, then restart.) **0.3.0 enables composite write tools by default** — see [MIGRATION.md](./MIGRATION.md). See also the [changelog](https://github.com/leadbay/mcp/releases).
 
 **Rotate local credential**: re-run `npx -y @leadbay/mcp@latest install --oauth` (or `login --oauth`) — the new credential replaces the old one in your MCP client config.
 
