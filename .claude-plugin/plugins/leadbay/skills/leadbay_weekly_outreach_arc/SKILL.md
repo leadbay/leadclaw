@@ -144,17 +144,22 @@ This is the phase that earns the "50 leads WITH contacts" promise. Contacts aren
 
 **ANTI-PATTERN — do NOT** pick the most senior or "decision-maker-sounding" title regardless of department. Seniority is not the same as being my buyer.
 
-**Step B — find the persona-matching, enrichable contacts.** Call `leadbay_recall_ordered_titles({leadIds, lensId})` and `leadbay_enrich_titles({leadIds, lensId})` in **discovery mode** (no `titles`). These return `title_suggestions`, `auto_included_titles`, `available_in_selection`, `enrichable_contacts`, and `credits_remaining`. Treat them as a **menu to filter against my persona — not the answer.** If past-enriched titles or suggestions are off-persona, do NOT repeat them.
+**Step B — find the persona-matching titles (discovery is a MENU, not a verdict).** Call `leadbay_recall_ordered_titles({leadIds, lensId})` and `leadbay_enrich_titles({leadIds, lensId})` in **discovery mode** (no `titles`). These return `available_titles`, `title_suggestions`, `auto_included_titles`, `enrichable_contacts`, and `credits_remaining`. Two things you MUST understand about this response:
 
-**Step B.5 — coverage guarantee.** For each lead, determine whether it has an **enrichable buyer-persona contact** (use the discovery data; where ambiguous, a quick `leadbay_research_lead_by_id` to see that lead's contact titles). KEEP leads with ≥1 enrichable buyer contact — that is the "WITH contacts" promise. Drop leads whose only contacts are off-persona or who have no enrichable contact. If the lens genuinely can't supply enough buyer-ready leads, say so honestly rather than padding. State the funnel ("dropped 12 — no reachable buyer; 38 remain").
+- **Discovery `enrichable_contacts: 0` is EXPECTED and is NOT a stop signal.** Discovery runs a zero-titles preview, so the count is naturally 0 — it means "you haven't picked titles yet," not "nothing can be enriched." The real enrichable count only appears AFTER you choose titles and re-preview (Step C). Never abandon the arc on a discovery `0`.
+- **`credits_remaining` is a display figure, not a gate.** It can read `0` or be unknown even when enrichment will succeed (the balance lags the real entitlement). Surface it for transparency, but a `0`/unknown reading MUST NOT stop you from selecting titles and launching. The launch result is the source of truth — only a real `quota_exceeded` / paid-rejection on the actual launch (Step D) means stop.
 
-**Step C — SPEND GATE (mandatory).** State the persona, the chosen titles, and "You have {credits_remaining} credits; this enriches {enrichable_contacts} <persona> contacts across {n} leads." Confirm via your host's choice widget — "Enrich these {enrichable_contacts} <persona> contacts now?" → ["Yes, enrich", "No — draft from existing contacts only", "Change the persona/titles"]. **Never launch a paid run without this.**
+Pick the titles from `available_titles` / suggestions that match my buyer persona; ignore off-persona suggestions.
+
+**Step B.5 — coverage guarantee.** Determine which leads have an **enrichable buyer-persona contact** by selecting your persona titles and reading the WITH-titles preview (Step C) — plus, where ambiguous, a quick `leadbay_research_lead_by_id` to see a lead's contact titles. KEEP leads with ≥1 enrichable buyer contact (the "WITH contacts" promise); drop leads whose only contacts are off-persona. If the lens genuinely can't supply enough buyer-ready leads, say so honestly rather than padding. State the funnel ("dropped 12 — no reachable buyer; 38 remain").
+
+**Step C — pick titles, RE-PREVIEW, then SPEND GATE.** Call `leadbay_enrich_titles({leadIds, lensId, titles:[...persona titles]})` (titles set, no launch flags yet) to get the **real** `enrichable_contacts` for those titles. THIS number — not the discovery 0 — is what you gate on. Then state the persona, the chosen titles, and "This enriches {enrichable_contacts} <persona> contacts across {n} leads (credits shown: {credits_remaining})." Confirm via your host's choice widget — "Enrich these {enrichable_contacts} <persona> contacts now?" → ["Yes, enrich", "No — draft from existing contacts only", "Change the persona/titles"]. **Never launch without this confirm** — but the gate is about user CONSENT to spend, not about the displayed credit number.
 
 > **Unattended (scheduled) runs:** when there is no interactive user to answer the gate — a scheduled weekly run — do NOT block forever and do NOT spend freely. Enrich only **within the pre-approved credit ceiling** carried in the run's instruction (the cap set at schedule time via `leadbay_schedule_weekly_arc`). If the persona enrichment would exceed that ceiling, SKIP enrichment and draft from already-available contacts. Never exceed the ceiling unattended.
 
-**Step D — launch + poll.** On yes (or within the unattended ceiling): `leadbay_enrich_titles({leadIds, lensId, titles:[...chosen], email:true, phone:true})` to launch, then poll `leadbay_bulk_enrich_status` until done (can take several minutes — keep polling; do not draft empty). Append `_(N credits remaining)_` at the very end of your reply.
+**Step D — launch + poll.** On yes (or within the unattended ceiling): `leadbay_enrich_titles({leadIds, lensId, titles:[...chosen], email:true, phone:true})` to launch, then poll `leadbay_bulk_enrich_status` until done (can take several minutes — keep polling; do not draft empty). Only a real `quota_exceeded` / paid-rejection here is a true credit wall — if that happens, say so and draft from existing contacts. Append `_(N credits remaining)_` at the very end of your reply.
 
-If enrichment is skipped, continue — draft from whatever contacts already exist.
+If enrichment is skipped (user declined, or a genuine launch-time quota wall), continue — draft from whatever contacts already exist.
 
 # PHASE 4 — RESEARCH (serialized)
 
@@ -312,6 +317,6 @@ Do not propose a next action. Do not call any more tools. Hand control back to t
 
 - DRAFT, never SEND. Compose into `message_compose_v1`; do not send and do not call `leadbay_report_outreach`. Sending is the user's manual step in Gmail.
 - Enrichment targets MY buyer persona (who buys what I sell), NEVER generic seniority.
-- NEVER launch paid enrichment without showing `credits_remaining` + `enrichable_contacts` and getting a yes — and on unattended runs, never exceed the pre-approved credit ceiling.
+- NEVER launch paid enrichment without naming the persona and getting a yes. But the gate is user CONSENT, not the displayed credit number: a discovery `enrichable_contacts:0` or `credits_remaining:0` is NOT a wall — pick persona titles, re-preview for the true count, and launch. Only a real `quota_exceeded` on the launch stops you. On unattended runs, never exceed the pre-approved credit ceiling.
 - Carry the captured `lensId` on every call. Serialize research at ≤3 parallel.
 - The deliverable is ready-to-send drafts for the buyer-covered cohort — not a research summary, not one sample draft. State the funnel honestly.
