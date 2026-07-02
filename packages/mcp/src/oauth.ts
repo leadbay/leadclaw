@@ -583,11 +583,18 @@ export function browserOpenCandidates(url: string): Array<{ cmd: string; args: s
  */
 export function windowsFallbackCandidates(url: string): Array<{ cmd: string; args: string[] }> {
   const sysRoot = process.env.SystemRoot || process.env.windir || "C:\\Windows";
+  // `-Command` parses everything after it as PowerShell SOURCE, not literal
+  // args — so a raw OAuth URL (`…?a=1&b=2`) would have its `&` read as PS's
+  // call/separator operator and the URL would be mangled or split. Wrap it in a
+  // single-quoted PS string literal (the verbatim form: `&`, spaces, `?`, `=`
+  // are all inert inside `'…'`), escaping any embedded `'` by doubling it per
+  // PS convention. windowsVerbatimArguments at spawn keeps these quotes intact.
+  const psLiteral = `'${url.replace(/'/g, "''")}'`;
   return [
     { cmd: `${sysRoot}\\System32\\rundll32.exe`, args: ["url.dll,FileProtocolHandler", url] },
     {
       cmd: `${sysRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
-      args: ["-NoProfile", "-NonInteractive", "-Command", "Start-Process", url],
+      args: ["-NoProfile", "-NonInteractive", "-Command", "Start-Process", psLiteral],
     },
   ];
 }

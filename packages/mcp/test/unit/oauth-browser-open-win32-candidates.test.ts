@@ -79,7 +79,16 @@ describe("windowsFallbackCandidates — shell-free second-chance launchers (#383
       expect(cands[1].args).toContain("Start-Process");
       expect(cands[1].args).toContain("-NoProfile");
       expect(cands[1].args).toContain("-NonInteractive");
-      expect(cands[1].args).toContain(AUTH_URL);
+      // The URL is passed to `-Command` as a SINGLE-QUOTED PowerShell string
+      // literal so its `&` (and `?`, `=`, spaces) can't be parsed as PS source.
+      // The raw, unquoted URL must NOT appear as an arg on its own.
+      expect(cands[1].args).toContain(`'${AUTH_URL}'`);
+      expect(cands[1].args).not.toContain(AUTH_URL);
+      // …and the quoted literal still carries the full multi-`&` URL intact.
+      const psArg = cands[1].args[cands[1].args.length - 1];
+      expect(psArg).toBe(`'${AUTH_URL}'`);
+      expect(psArg).toContain("&code_challenge=abc123");
+      expect(psArg).toContain("redirect_uri=http%3A%2F%2F127.0.0.1%3A51789%2Fcallback");
     } finally {
       if (savedRoot === undefined) delete process.env.SystemRoot;
       else process.env.SystemRoot = savedRoot;
@@ -103,5 +112,16 @@ describe("windowsFallbackCandidates — shell-free second-chance launchers (#383
       if (savedWindir === undefined) delete process.env.windir;
       else process.env.windir = savedWindir;
     }
+  });
+
+  it("escapes an embedded single quote in the PowerShell literal (PS doubling)", () => {
+    // Defensive: a normal authorize URL is percent-encoded and won't contain a
+    // literal `'`, but if one ever appears it must be doubled so it can't close
+    // the PS string early and inject source. rundll32 keeps the raw URL.
+    const trickyUrl = "https://x.test/authorize?state=a'b&c=1";
+    const cands = windowsFallbackCandidates(trickyUrl);
+    expect(cands[0].args).toContain(trickyUrl); // rundll32 unquoted
+    const psArg = cands[1].args[cands[1].args.length - 1];
+    expect(psArg).toBe("'https://x.test/authorize?state=a''b&c=1'");
   });
 });
