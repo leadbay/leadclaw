@@ -1765,11 +1765,16 @@ async function main(): Promise<void> {
       }
     }
     if (browserOpenInFlight) {
-      bootstrapDebug(`shutdown(code=${code}) browser-open still in flight — waiting up to 1.5s`);
+      // 3s (was 1.5s): on Windows openInBrowser now waits for each launcher's
+      // exit code and may walk cmd → rundll32 before one succeeds (#3839), so
+      // the dispatch can take longer than a single spawn. Best-effort during
+      // teardown; the sibling bootstrapInFlight race already waits 4s, and the
+      // surfaced sign-in link remains the fallback if we're still cut off.
+      bootstrapDebug(`shutdown(code=${code}) browser-open still in flight — waiting up to 3s`);
       try {
         await Promise.race([
           browserOpenInFlight,
-          new Promise((r) => setTimeout(r, 1500)),
+          new Promise((r) => setTimeout(r, 3000)),
         ]);
       } catch {
         // ignore — best-effort; the surfaced sign-in link is the fallback

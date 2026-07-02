@@ -559,6 +559,40 @@ export function browserOpenCandidates(url: string): Array<{ cmd: string; args: s
 }
 
 /**
+ * Windows-only SECOND-CHANCE launchers, tried by openInBrowser after every
+ * `cmd /c start` candidate above has failed (issue #3839).
+ *
+ * Why a separate list rather than more entries in browserOpenCandidates(): the
+ * `cmd start` candidates all end in a double-quoted `"<url>"` (the #3801
+ * fix, pinned by a regression test). These launchers take the URL as a RAW,
+ * unquoted single argument — mixing the two shapes in one list is confusing and
+ * would break that test's "every candidate is quoted" invariant. Keeping them
+ * apart also makes the intent explicit: cmd first (fast, familiar), these only
+ * when cmd silently no-ops.
+ *
+ *   1. rundll32 url.dll,FileProtocolHandler <url> — the same ShellExecute path
+ *      Explorer uses. No command interpreter, so no `&`-truncation and no
+ *      quoting dance; returns a non-zero exit when the protocol handler can't
+ *      be invoked, so openInBrowser's exit-wait DETECTS the failure. This is
+ *      the launcher that recovers #3839 when `cmd start` no-ops (no
+ *      default-browser association / a locked-down shell / AppLocker).
+ *   2. powershell Start-Process <url> — heavy (spins a PS runtime) and may be
+ *      blocked in locked-down orgs (constrained language mode / AppLocker), so
+ *      it's the last resort; where present it gives a reliable exit code.
+ *      -NoProfile/-NonInteractive keep it from sourcing a profile or prompting.
+ */
+export function windowsFallbackCandidates(url: string): Array<{ cmd: string; args: string[] }> {
+  const sysRoot = process.env.SystemRoot || process.env.windir || "C:\\Windows";
+  return [
+    { cmd: `${sysRoot}\\System32\\rundll32.exe`, args: ["url.dll,FileProtocolHandler", url] },
+    {
+      cmd: `${sysRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
+      args: ["-NoProfile", "-NonInteractive", "-Command", "Start-Process", url],
+    },
+  ];
+}
+
+/**
  * Build the env to spawn the browser launcher with. On Linux, Claude Desktop
  * spawns the .dxt server with an INCONSISTENT environment — DISPLAY and
  * WAYLAND_DISPLAY are sometimes stripped (confirmed from a real install: a
@@ -672,7 +706,13 @@ export async function openInBrowser(
   //
   // Try each candidate in order; only the LAST ENOENT propagates. This makes
   // the launch independent of the inherited PATH (see browserOpenCandidates).
-  const candidates = browserOpenCandidates(url);
+  // On Windows, append the shell-free second-chance launchers: the exit-wait
+  // below turns a silent `cmd start` no-op into a detected failure that falls
+  // through to rundll32 / PowerShell (issue #3839).
+  const candidates =
+    process.platform === "win32"
+      ? [...browserOpenCandidates(url), ...windowsFallbackCandidates(url)]
+      : browserOpenCandidates(url);
   const launchEnv = browserLaunchEnv(debug);
   debug?.(
     `openInBrowser: platform=${process.platform} ` +
@@ -685,17 +725,66 @@ export async function openInBrowser(
   for (const { cmd, args } of candidates) {
     try {
       await new Promise<void>((resolve, reject) => {
-        const spawnOpts: SpawnOptions = { stdio: "ignore", detached: true, env: launchEnv };
+        const isWin = process.platform === "win32";
+        // POSIX: detach + unref so the browser opener outlives us — `open` /
+        // `xdg-open` ARE the hand-off and return immediately, so resolving on
+        // `spawn` is correct (and load-bearing: #3805 deliberately moved OFF
+        // waiting for `close`, which a detached child often never emits, to
+        // stop the installer hanging in headless hosts). Windows: do NOT
+        // detach — we now observe the child's EXIT to detect a silent no-op
+        // (#3839), and a detached Win child in its own group only makes that
+        // harder and risks a console flash.
+        const spawnOpts: SpawnOptions = { stdio: "ignore", detached: !isWin, env: launchEnv };
         // On Windows the candidate args carry a pre-quoted "<url>" (see
         // browserOpenCandidates); verbatim mode stops Node's arg-quoter from
         // mangling those quotes, so cmd sees the whole URL as one token.
-        if (process.platform === "win32") spawnOpts.windowsVerbatimArguments = true;
+        if (isWin) spawnOpts.windowsVerbatimArguments = true;
         const child = spawn(cmd, args, spawnOpts);
         child.on("error", reject);
-        child.on("spawn", () => {
-          debug?.(`spawn OK: ${cmd} (pid=${child.pid})`);
+
+        if (!isWin) {
+          // mac/Linux: resolve the moment the opener is spawned, then detach.
+          child.on("spawn", () => {
+            debug?.(`spawn OK: ${cmd} (pid=${child.pid})`);
+            child.unref();
+            resolve();
+          });
+          return;
+        }
+
+        // Windows: `"spawn"` only means cmd/rundll32/powershell was CREATED —
+        // the real browser hand-off happens INSIDE it and can no-op / exit
+        // non-zero. So wait (bounded) for the exit code:
+        //   exit 0 (or null)     → launched OK → success
+        //   non-zero exit        → failed → fall through to the next candidate
+        //   no exit by the budget → still running → assume it dispatched + resolve
+        // `cmd start` gets a tighter budget (it normally returns instantly — a
+        // stall there is anomalous) so we reach rundll32 fast enough to stay
+        // inside shutdown()'s browserOpenInFlight wait.
+        const isCmd = /cmd(\.exe)?$/i.test(cmd);
+        const budgetMs = isCmd ? 800 : 1200;
+        let settled = false;
+        const finish = (fn: () => void) => {
+          if (settled) return;
+          settled = true;
+          fn();
+        };
+        const timer = setTimeout(() => {
+          debug?.(`exit-wait timeout (${budgetMs}ms): ${cmd} — assuming launched`);
           child.unref();
-          resolve();
+          finish(resolve);
+        }, budgetMs);
+        timer.unref?.();
+        child.on("spawn", () => debug?.(`spawn OK: ${cmd} (pid=${child.pid}) — awaiting exit`));
+        child.on("exit", (code) => {
+          clearTimeout(timer);
+          if (code === 0 || code === null) {
+            debug?.(`exit ${code}: ${cmd} — launched OK`);
+            finish(resolve);
+          } else {
+            debug?.(`exit ${code}: ${cmd} — treating as failed, next candidate`);
+            finish(() => reject(new Error(`${cmd} exited ${code}`)));
+          }
         });
       });
       return; // launched successfully

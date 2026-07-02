@@ -1,5 +1,12 @@
 # Changelog — @leadbay/mcp
 
+## 0.23.11 — 2026-07-02
+
+Windows `.dxt` sign-in now opens the browser reliably (product#3839).
+
+- **`openInBrowser` (Windows)** — the auto-open resolved the moment `cmd.exe` was *created*, before its internal `start` builtin actually handed the URL to the default browser. So a silent no-op (no default-browser protocol association, a locked-down shell / AppLocker, a corrupt `HKCR\http\shell\open`) went undetected: `browserOpenFailedAtBootstrap` stayed false and the user was told "a browser may have opened" when nothing did. On Windows we now wait (bounded — 800ms for `cmd start`, 1200ms otherwise) for the launcher's **exit code**, treat a non-zero exit as failure, and fall through to `rundll32 url.dll,FileProtocolHandler` (no command interpreter — the same ShellExecute path Explorer uses, with an honest exit code) and finally PowerShell `Start-Process`. When every launcher fails, the `AUTH_REQUIRED` envelope honestly says the browser couldn't be opened and shows the clickable sign-in link. The #3801 `&`-quoting `cmd start` candidate is unchanged and still tried first. macOS/Linux keep resolve-on-`spawn` (the #3805 headless-hang fix — those launchers are the hand-off).
+- **`bin.ts` shutdown** — the `browserOpenInFlight` teardown wait rose 1.5s → 3s so the multi-launcher Windows walk can finish dispatching before exit (the sibling bootstrap wait already allows 4s; the surfaced sign-in link is the fallback either way).
+
 ## 0.23.10 — 2026-07-01
 
 A freshly-created lens no longer reads as "empty" (product#3833).
