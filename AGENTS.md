@@ -10,8 +10,16 @@ shared library and `mcp` is the stdio server that exposes it.
 
 ## Review guidelines
 
-Codex reads this section for automated PR reviews. Flag the following as
-high-priority (P0/P1) issues:
+Codex reads this section for automated PR reviews.
+
+**Always post a written review, even when the PR passes.** Do not rely on
+the 👍 reaction alone. On every PR, leave a review overview comment
+(2–4 sentences) that names what you checked against the rules below and
+states why the PR passes — or what must change. Keep inline comments
+limited to genuine P0/P1 issues, but the overview summary is required on
+every review, including clean ones.
+
+Flag the following as high-priority (P0/P1) issues:
 
 - **Never hand-edit generated files.**
   `packages/core/src/tool-descriptions.generated.ts` and
